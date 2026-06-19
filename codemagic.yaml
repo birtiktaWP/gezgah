@@ -1,0 +1,99 @@
+# Codemagic CI/CD — Gezgah
+# Not: Flutter projesi repo kökünde değil, "app/" alt klasöründedir.
+# Bu yüzden tüm komutlar "app" dizinine girer ve artifact yolları "app/" ile başlar.
+# Dosya repo KÖKÜNDE durmalıdır (github.com/birtiktaWP/gezgah → /codemagic.yaml).
+
+definitions:
+  flutter_project: &flutter_project app
+
+workflows:
+  # ---------------------------------------------------------------------------
+  # ANDROID — kuruluma hazır. Release APK (debug imzalı) müşteri önizlemesi için
+  # doğrudan kurulabilir; ayrıca Play için AAB üretir.
+  # ---------------------------------------------------------------------------
+  android-release:
+    name: Gezgah Android
+    max_build_duration: 60
+    instance_type: linux_x2
+    environment:
+      flutter: stable
+      java: 17
+    scripts:
+      - name: Bağımlılıkları al
+        working_directory: *flutter_project
+        script: flutter pub get
+      - name: Statik analiz
+        working_directory: *flutter_project
+        script: flutter analyze
+      - name: APK derle (release)
+        working_directory: *flutter_project
+        script: flutter build apk --release
+      - name: AAB derle (release)
+        working_directory: *flutter_project
+        script: flutter build appbundle --release
+    artifacts:
+      - app/build/**/outputs/**/*.apk
+      - app/build/**/outputs/**/*.aab
+      - app/build/**/outputs/**/mapping.txt
+      - flutter_drive.log
+    publishing:
+      email:
+        recipients:
+          - degistir@ornek.com   # <-- kendi e-postanı yaz
+        notify:
+          success: true
+          failure: true
+
+  # ---------------------------------------------------------------------------
+  # iOS — imzasız önizleme derlemesi (derlemenin geçtiğini doğrular).
+  # App Store / TestFlight için kod imzalama gerekir; aşağıdaki nota bak.
+  # ---------------------------------------------------------------------------
+  ios-preview:
+    name: Gezgah iOS (imzasız)
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Bağımlılıkları al
+        working_directory: *flutter_project
+        script: flutter pub get
+      - name: iOS derle (imzasız)
+        working_directory: *flutter_project
+        script: flutter build ios --release --no-codesign
+    artifacts:
+      - app/build/ios/iphoneos/*.app
+    publishing:
+      email:
+        recipients:
+          - degistir@ornek.com   # <-- kendi e-postanı yaz
+        notify:
+          success: true
+          failure: true
+
+# ============================================================================
+# NOTLAR
+# ----------------------------------------------------------------------------
+# 1) Android release APK, Flutter şablonunun varsayılan ayarıyla debug anahtarıyla
+#    imzalanır → müşteri önizlemesi için doğrudan kurulabilir. Play Store'a AAB
+#    yüklemek için gerçek bir keystore (upload key) ve Codemagic'te
+#    "Android code signing" yapılandırması gerekir.
+#
+# 2) iOS'u TestFlight/App Store'a göndermek için Codemagic'te "iOS code signing"
+#    (App Store Connect API key + bundle id com.gezgah.gezgah) bağlanmalı; sonra
+#    "flutter build ipa" + app_store_connect publishing eklenir.
+#
+# 3) Google Maps API anahtarı kaynak içinde gömülü (AndroidManifest, AppDelegate,
+#    web/index.html) olduğundan ek environment değişkeni gerekmez. Anahtarı gizli
+#    tutmak istersen Codemagic "Environment variables" ile enjekte edip derleme
+#    sırasında dosyalara yazmak daha güvenli olur.
+#
+# 4) Otomatik tetikleme istersen ilgili workflow'a şunu ekle:
+#      triggering:
+#        events: [push]
+#        branch_patterns:
+#          - pattern: main
+#            include: true
+# ============================================================================
