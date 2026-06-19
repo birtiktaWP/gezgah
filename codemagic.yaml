@@ -17,20 +17,17 @@ workflows:
     integrations:
       app_store_connect: codemagic   # Codemagic Developer Portal'daki API key adı
     environment:
+      ios_signing:
+        distribution_type: app_store          # Distribution sertifikası + App Store profili (otomatik üretir)
+        bundle_identifier: com.gezgah.gezgah
       flutter: stable
       xcode: latest
       cocoapods: default
     scripts:
       - name: Flutter bağımlılıkları
         script: flutter pub get
-      - name: İmzalama dosyaları (yoksa Distribution sertifikası + App Store profili oluştur)
-        script: |
-          keychain initialize
-          app-store-connect fetch-signing-files "com.gezgah.gezgah" \
-            --type IOS_APP_STORE \
-            --create
-          keychain add-certificates
-          xcode-project use-profiles
+      - name: Kod imzalama profillerini uygula
+        script: xcode-project use-profiles
       - name: IPA derle (release, otomatik build no)
         script: |
           flutter build ipa --release \
