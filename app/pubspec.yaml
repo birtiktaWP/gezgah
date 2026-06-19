@@ -1,0 +1,41 @@
+name: gezgah
+description: "Gezgah - yakınındaki en iyi yerleri keşfet."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  dio: ^5.7.0
+  flutter_svg: ^2.0.10+1
+  geolocator: ^13.0.2
+  google_maps_flutter: ^2.9.0
+  cached_network_image: ^3.4.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/logo.svg
+    - assets/kedy.svg
+
+  fonts:
+    - family: gez_gah
+      fonts:
+        - asset: assets/fonts/gezgah_latin.ttf
+    - family: gez_gah_ext
+      fonts:
+        - asset: assets/fonts/gezgah_ext.ttf
+    - family: gez_gah_viet
+      fonts:
+        - asset: assets/fonts/gezgah_viet.ttf

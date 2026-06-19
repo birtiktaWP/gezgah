@@ -1,0 +1,667 @@
+import 'package:flutter/material.dart';
+import '../data/mock_data.dart';
+import '../theme/app_theme.dart';
+import '../widgets/common.dart';
+
+class ProfileScreen extends StatefulWidget {
+  final VoidCallback onGoHome;
+  final VoidCallback onOpenNotifications;
+  const ProfileScreen({
+    super.key,
+    required this.onGoHome,
+    required this.onOpenNotifications,
+  });
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  String _name = 'Ada Yılmaz';
+  String _email = 'ada.yilmaz@gmail.com';
+
+  static const String _avatar =
+      'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=70';
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 130),
+      children: [
+        _hero(),
+        const SizedBox(height: 18),
+        _stats(),
+        const SizedBox(height: 8),
+        _group('Profilim', [
+          _row(Icons.person_outline, 'Profil Bilgileri', 'Ad, e-posta, telefon',
+              onTap: _openProfileEdit),
+          _row(Icons.favorite_border, 'Favorilerim', 'Kaydettiğin mekanlar'),
+        ]),
+        _group('Sözleşmeler', [
+          for (final entry in MockData.documents.entries)
+            _row(_docIcon(entry.key), entry.key, _docSub(entry.key),
+                onTap: () => _openDoc(entry.key, entry.value)),
+        ]),
+        _group(null, [
+          _row(Icons.logout, 'Çıkış Yap', null, danger: true),
+        ]),
+        const Padding(
+          padding: EdgeInsets.only(top: 6),
+          child: Center(
+            child: Text('Gezgah · Sürüm 1.0.0',
+                style: TextStyle(fontSize: 12, color: AppColors.muted)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  IconData _docIcon(String name) {
+    switch (name) {
+      case 'Gizlilik Politikası':
+        return Icons.shield_outlined;
+      case 'KVKK Aydınlatma Metni':
+        return Icons.lock_outline;
+      case 'Çerez Politikası':
+        return Icons.cookie_outlined;
+      default:
+        return Icons.description_outlined;
+    }
+  }
+
+  String _docSub(String name) {
+    switch (name) {
+      case 'Kullanıcı Sözleşmesi':
+        return 'Hizmet kullanım koşulları';
+      case 'Gizlilik Politikası':
+        return 'Verilerinin korunması';
+      case 'KVKK Aydınlatma Metni':
+        return 'Kişisel veri politikası';
+      default:
+        return 'Çerez tercihleri';
+    }
+  }
+
+  Widget _hero() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(22, 22, 22, 30),
+      decoration: const BoxDecoration(
+        gradient: RadialGradient(
+          center: Alignment(0.7, -1.1),
+          radius: 1.2,
+          colors: [AppColors.primary2, AppColors.primary],
+          stops: [0.0, 0.55],
+        ),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Row(
+              children: [
+                GlassButton(
+                    icon: Icons.chevron_left, onTap: widget.onGoHome),
+                const Expanded(
+                  child: Center(
+                    child: Text('Hesabım',
+                        style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white)),
+                  ),
+                ),
+                GlassButton(
+                  icon: Icons.notifications_none,
+                  showDot: true,
+                  onTap: widget.onOpenNotifications,
+                ),
+                const SizedBox(width: 10),
+                GlassButton(icon: Icons.settings_outlined, onTap: _openSettings),
+              ],
+            ),
+            const SizedBox(height: 22),
+            _userCard(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _userCard() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        children: [
+          ClipOval(
+            child: SizedBox(
+                width: 54, height: 54, child: NetImage(_avatar)),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_name,
+                    style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white)),
+                const SizedBox(height: 2),
+                Text(_email,
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        color: Colors.white.withValues(alpha: 0.8))),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: _openProfileEdit,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.edit_outlined, size: 15, color: AppColors.primary),
+                  SizedBox(width: 5),
+                  Text('Düzenle',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _stats() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 22),
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: AppShadows.listTile,
+      ),
+      child: Row(
+        children: [
+          _stat('24', 'Favori'),
+          _statDivider(),
+          _stat('12', 'Değerlendirme'),
+          _statDivider(),
+          _stat('340', 'Puan'),
+        ],
+      ),
+    );
+  }
+
+  Widget _stat(String value, String label) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(value,
+              style: const TextStyle(
+                  fontSize: 20, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 2),
+          Text(label,
+              style: const TextStyle(fontSize: 11, color: AppColors.muted)),
+        ],
+      ),
+    );
+  }
+
+  Widget _statDivider() =>
+      Container(width: 1, height: 32, color: AppColors.line);
+
+  Widget _group(String? title, List<Widget> rows) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 18, 22, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (title != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Text(title,
+                  style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.ink)),
+            ),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: AppShadows.listTile,
+            ),
+            child: Column(children: rows),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(IconData icon, String title, String? sub,
+      {bool danger = false, VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                  color: danger
+                      ? const Color(0x1AE0533D)
+                      : AppColors.primarySoft,
+                  borderRadius: BorderRadius.circular(11)),
+              child: Icon(icon,
+                  size: 19,
+                  color: danger ? AppColors.closing : AppColors.primary),
+            ),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: danger ? AppColors.closing : AppColors.ink)),
+                  if (sub != null) ...[
+                    const SizedBox(height: 2),
+                    Text(sub,
+                        style: const TextStyle(
+                            fontSize: 12.5, color: AppColors.muted)),
+                  ],
+                ],
+              ),
+            ),
+            if (!danger)
+              const Icon(Icons.chevron_right,
+                  size: 20, color: AppColors.primary),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---- Paneller ----
+
+  void _openSettings() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _SettingsSheet(),
+    );
+  }
+
+  void _openDoc(String title, String body) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _DocSheet(title: title, body: body),
+    );
+  }
+
+  void _openProfileEdit() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ProfileEditSheet(
+        name: _name,
+        email: _email,
+        avatar: _avatar,
+        onSave: (n, e) => setState(() {
+          _name = n;
+          _email = e;
+        }),
+      ),
+    );
+  }
+}
+
+/// Ortak panel başlığı
+class _SheetScaffold extends StatelessWidget {
+  final String title;
+  final Widget child;
+  final bool backArrow;
+  const _SheetScaffold(
+      {required this.title, required this.child, this.backArrow = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.9,
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
+            child: Row(
+              children: [
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: Icon(backArrow ? Icons.chevron_left : Icons.close,
+                      color: AppColors.ink),
+                ),
+                Expanded(
+                  child: Text(title,
+                      style: const TextStyle(
+                          fontSize: 17, fontWeight: FontWeight.w800)),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: AppColors.line),
+          Expanded(child: child),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsSheet extends StatefulWidget {
+  const _SettingsSheet();
+
+  @override
+  State<_SettingsSheet> createState() => _SettingsSheetState();
+}
+
+class _SettingsSheetState extends State<_SettingsSheet> {
+  bool _notif = true;
+  bool _location = true;
+  bool _dark = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SheetScaffold(
+      title: 'Uygulama Ayarları',
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
+        children: [
+          const Text('Tercihler',
+              style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.ink)),
+          const SizedBox(height: 10),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: AppShadows.listTile,
+            ),
+            child: Column(
+              children: [
+                _switchRow(Icons.notifications_none, 'Bildirimler',
+                    'Kampanya ve etkinlik bildirimleri', _notif,
+                    (v) => setState(() => _notif = v)),
+                _switchRow(Icons.location_on_outlined, 'Konum İzni',
+                    'Yakınındaki mekanları göster', _location,
+                    (v) => setState(() => _location = v)),
+                _switchRow(Icons.dark_mode_outlined, 'Karanlık Mod',
+                    'Koyu tema kullan', _dark, (v) => setState(() => _dark = v)),
+                _navRow(Icons.language, 'Dil', 'Türkçe'),
+                _navRow(Icons.help_outline, 'Yardım & Destek',
+                    'Sıkça sorulan sorular'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _switchRow(IconData icon, String title, String sub, bool value,
+      ValueChanged<bool> onChanged) {
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          _iconBox(icon),
+          const SizedBox(width: 13),
+          Expanded(child: _texts(title, sub)),
+          Switch(
+            value: value,
+            activeThumbColor: Colors.white,
+            activeTrackColor: AppColors.primary,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _navRow(IconData icon, String title, String sub) {
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          _iconBox(icon),
+          const SizedBox(width: 13),
+          Expanded(child: _texts(title, sub)),
+          const Icon(Icons.chevron_right, size: 20, color: AppColors.primary),
+        ],
+      ),
+    );
+  }
+
+  Widget _iconBox(IconData icon) => Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+            color: AppColors.primarySoft,
+            borderRadius: BorderRadius.circular(11)),
+        child: Icon(icon, size: 19, color: AppColors.primary),
+      );
+
+  Widget _texts(String title, String sub) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title,
+              style:
+                  const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 2),
+          Text(sub,
+              style: const TextStyle(fontSize: 12.5, color: AppColors.muted)),
+        ],
+      );
+}
+
+class _DocSheet extends StatelessWidget {
+  final String title;
+  final String body;
+  const _DocSheet({required this.title, required this.body});
+
+  @override
+  Widget build(BuildContext context) {
+    return _SheetScaffold(
+      title: title,
+      backArrow: true,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
+        children: [
+          const Text('Son güncelleme: 1 Haziran 2026',
+              style: TextStyle(fontSize: 12.5, color: AppColors.muted)),
+          const SizedBox(height: 16),
+          Text(body,
+              style: const TextStyle(
+                  fontSize: 14, height: 1.7, color: AppColors.ink)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileEditSheet extends StatefulWidget {
+  final String name;
+  final String email;
+  final String avatar;
+  final void Function(String name, String email) onSave;
+  const _ProfileEditSheet({
+    required this.name,
+    required this.email,
+    required this.avatar,
+    required this.onSave,
+  });
+
+  @override
+  State<_ProfileEditSheet> createState() => _ProfileEditSheetState();
+}
+
+class _ProfileEditSheetState extends State<_ProfileEditSheet> {
+  late final TextEditingController _nameC =
+      TextEditingController(text: widget.name);
+  late final TextEditingController _emailC =
+      TextEditingController(text: widget.email);
+  late final TextEditingController _phoneC =
+      TextEditingController(text: '+90 555 000 00 00');
+
+  @override
+  void dispose() {
+    _nameC.dispose();
+    _emailC.dispose();
+    _phoneC.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SheetScaffold(
+      title: 'Profil Bilgileri',
+      backArrow: true,
+      child: ListView(
+        padding: EdgeInsets.fromLTRB(
+            22, 18, 22, 24 + MediaQuery.of(context).viewInsets.bottom),
+        children: [
+          Center(
+            child: Column(
+              children: [
+                Stack(
+                  children: [
+                    ClipOval(
+                      child: SizedBox(
+                          width: 88,
+                          height: 88,
+                          child: NetImage(widget.avatar)),
+                    ),
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                        child: const Icon(Icons.camera_alt,
+                            size: 15, color: Colors.white),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(widget.name,
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                const Text('Fotoğrafı değiştirmek için dokun',
+                    style: TextStyle(fontSize: 12.5, color: AppColors.muted)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          _label('Ad Soyad'),
+          _field(_nameC, Icons.person_outline),
+          const SizedBox(height: 16),
+          _label('E-posta'),
+          _field(_emailC, Icons.mail_outline),
+          const SizedBox(height: 16),
+          _label('Telefon'),
+          _field(_phoneC, Icons.phone_outlined),
+          const SizedBox(height: 28),
+          GestureDetector(
+            onTap: () {
+              widget.onSave(_nameC.text.trim(), _emailC.text.trim());
+              Navigator.pop(context);
+            },
+            child: Container(
+              height: 50,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Text('Değişiklikleri Kaydet',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _label(String t) => Padding(
+        padding: const EdgeInsets.only(bottom: 8, left: 2),
+        child: Text(t,
+            style:
+                const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+      );
+
+  Widget _field(TextEditingController c, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 19, color: AppColors.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextField(
+              controller: c,
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                isCollapsed: true,
+                contentPadding: EdgeInsets.symmetric(vertical: 15),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
