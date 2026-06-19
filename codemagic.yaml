@@ -1,0 +1,70 @@
+# Codemagic CI/CD — Gezgah
+# Flutter projesi repo KÖKÜNDEDİR (app/ alt klasörü yok).
+#
+# ÖNEMLİ: Aşağıdaki "app_store_connect: Gezgah App Store API" satırındaki ad,
+# Codemagic'te tanımladığın App Store Connect API key entegrasyonunun ADIyla
+# AYNI olmalı. (Codemagic → Teams/Settings → Integrations → App Store Connect
+# altındaki key adını yaz.)
+
+workflows:
+  # ---------------------------------------------------------------------------
+  # iOS → TestFlight (App Store distribution imzası, otomatik)
+  # ---------------------------------------------------------------------------
+  ios-testflight:
+    name: Gezgah iOS TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 90
+    integrations:
+      app_store_connect: Gezgah App Store API   # <-- KENDİ ENTEGRASYON ADINLA DEĞİŞTİR
+    environment:
+      ios_signing:
+        distribution_type: app_store            # App Store dağıtım profili (Development DEĞİL)
+        bundle_identifier: com.gezgah.gezgah
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Flutter bağımlılıkları
+        script: flutter pub get
+      - name: Kod imzalama profillerini uygula
+        script: xcode-project use-profiles
+      - name: IPA derle (release, otomatik build no)
+        script: |
+          flutter build ipa --release \
+            --build-name=1.0.0 \
+            --build-number=$BUILD_NUMBER \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - flutter_drive.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true              # TestFlight'a gönder
+        # beta_groups:                          # istersen otomatik beta grubu dağıtımı
+        #   - Internal Testers
+
+  # ---------------------------------------------------------------------------
+  # ANDROID → release APK + AAB (müşteri önizlemesi / Play)
+  # ---------------------------------------------------------------------------
+  android-release:
+    name: Gezgah Android
+    instance_type: linux_x2
+    max_build_duration: 60
+    environment:
+      flutter: stable
+      java: 17
+    scripts:
+      - name: Flutter bağımlılıkları
+        script: flutter pub get
+      - name: Statik analiz
+        script: flutter analyze
+      - name: APK + AAB derle
+        script: |
+          flutter build apk --release
+          flutter build appbundle --release
+    artifacts:
+      - build/**/outputs/**/*.apk
+      - build/**/outputs/**/*.aab
+      - build/**/outputs/**/mapping.txt
