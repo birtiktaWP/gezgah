@@ -22,6 +22,13 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
 
+# path_provider_android 2.3.x JNI tabanlı bindings'e geçti ve çözülen jni
+# sürümüyle uyumsuz (JString/JObject/reference derleme hataları). JNI'den önceki
+# (platform-channel) 2.2.x'e sabitleyerek jni/jni_flutter'ı ağaçtan çıkarıyoruz.
+# path_provider yalnızca cached_network_image üzerinden transitif gelir.
+dependency_overrides:
+  path_provider_android: '>=2.2.0 <2.3.0'
+
 flutter:
   uses-material-design: true
 
