@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#120c63" />
+  <title>Hesabım — Gezgah</title>
+  <link rel="stylesheet" href="assets/css/fonts.css" />
+  <link rel="stylesheet" href="assets/css/style.css" />
+</head>
+<body>
+  <div class="app">
+
+    <!-- HERO -->
+    <header class="hero profile-hero">
+      <div class="hero-top">
+        <a class="hero-back" href="index.html" aria-label="Geri">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </a>
+        <span class="hero-head-title">Hesabım</span>
+        <div class="hero-actions">
+          <button class="glass-btn" aria-label="Bildirimler">
+            <span class="badge-dot"></span>
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+          </button>
+          <button class="glass-btn" id="settingsOpen" aria-label="Uygulama Ayarları">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Kullanıcı kartı -->
+      <div class="pf-card">
+        <img class="pf-avatar" src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=70" alt="Profil fotoğrafı" />
+        <div class="pf-info">
+          <b>Ada Yılmaz</b>
+          <small>ada.yilmaz@gmail.com</small>
+        </div>
+        <button class="pf-edit" id="profileEditBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+          Düzenle
+        </button>
+      </div>
+    </header>
+
+    <!-- İSTATİSTİKLER -->
+    <div class="pf-stats">
+      <div class="pf-stat"><b>24</b><small>Favori</small></div>
+      <span class="pf-divider"></span>
+      <div class="pf-stat"><b>12</b><small>Değerlendirme</small></div>
+      <span class="pf-divider"></span>
+      <div class="pf-stat"><b>340</b><small>Puan</small></div>
+    </div>
+
+    <!-- PROFİLİM -->
+    <section class="acc-group">
+      <h2 class="acc-group-title">Profilim</h2>
+      <div class="acc-card">
+        <button class="acc-row" id="profileInfoBtn">
+          <span class="acc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg></span>
+          <span class="acc-txt"><b>Profil Bilgileri</b><small>Ad, e-posta, telefon</small></span>
+          <span class="acc-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+        </button>
+        <button class="acc-row">
+          <span class="acc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg></span>
+          <span class="acc-txt"><b>Favorilerim</b><small>Kaydettiğin mekanlar</small></span>
+          <span class="acc-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+        </button>
+      </div>
+    </section>
+
+    <!-- SÖZLEŞMELER -->
+    <section class="acc-group">
+      <h2 class="acc-group-title">Sözleşmeler</h2>
+      <div class="acc-card" id="agreementsCard">
+        <button class="acc-row">
+          <span class="acc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg></span>
+          <span class="acc-txt"><b>Kullanıcı Sözleşmesi</b><small>Hizmet kullanım koşulları</small></span>
+          <span class="acc-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+        </button>
+        <button class="acc-row">
+          <span class="acc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
+          <span class="acc-txt"><b>Gizlilik Politikası</b><small>Verilerinin korunması</small></span>
+          <span class="acc-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+        </button>
+        <button class="acc-row">
+          <span class="acc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+          <span class="acc-txt"><b>KVKK Aydınlatma Metni</b><small>Kişisel veri politikası</small></span>
+          <span class="acc-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+        </button>
+        <button class="acc-row">
+          <span class="acc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="8.5" cy="9.5" r="1"/><circle cx="15" cy="14" r="1"/><circle cx="9.5" cy="15" r="1"/></svg></span>
+          <span class="acc-txt"><b>Çerez Politikası</b><small>Çerez tercihleri</small></span>
+          <span class="acc-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ÇIKIŞ -->
+    <section class="acc-group">
+      <div class="acc-card">
+        <button class="acc-row acc-danger">
+          <span class="acc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>
+          <span class="acc-txt"><b>Çıkış Yap</b></span>
+        </button>
+      </div>
+      <p class="acc-version">Gezgah · Sürüm 1.0.0</p>
+    </section>
+
+    <!-- YÜZEN ALT NAVİGASYON -->
+    <nav class="tabbar">
+      <a class="tab" href="index.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>
+        Keşfet
+      </a>
+      <button class="tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Ara
+      </button>
+      <button class="tab tab-kedy">
+        <span class="kedy-circle"><svg viewBox="0 0 576 512" fill="currentColor"><path d="M519.9-29.8c4.6-2.7 10.2-3 15.1-.6 5.5 2.7 9.1 8.3 9.1 14.4l0 144c0 47.4-25.7 88.7-64 110.8L480 464c0 26.5-21.5 48-48 48-26.5 0-48-21.5-48-48l0-98.1-77.4 51.7c26 6 45.4 29.3 45.4 57.1 0 20.6-16.7 37.3-37.3 37.3l-170.7 0C99.8 511.9 64 476.1 64 432l0-256c0-26.5-21.5-48-48-48-8.8 0-16-7.2-16-16 0-8.8 7.2-16 16-16 44.2 0 80 35.8 80 80l0 116c39.5-71.1 111.8-121.4 196.5-130.5-2.9-10.7-4.5-21.9-4.5-33.5l0-144c0-6.1 3.5-11.7 9.1-14.4 5.5-2.7 12.1-1.9 16.9 1.9l75.6 60.5 52.8 0 75.6-60.5 1.9-1.3zM305.4 192.5C188.5 200 96 297.2 96 416l0 16c0 26.5 21.5 48 48 48l170.7 0c2.9 0 5.3-2.4 5.3-5.3 0-14.7-11.9-26.6-26.7-26.7L256 448c-8.8 0-16-7.1-16-16l0-40c0-22.1-17.9-40-40-40l-8 0c-8.8 0-16-7.2-16-16 0-8.8 7.2-16 16-16l8 0c39.8 0 72 32.2 72 72l0 10.1 119.1-79.4c4.9-3.3 11.2-3.6 16.4-.8 5.2 2.8 8.4 8.2 8.4 14.1l0 128c0 8.8 7.2 16 16 16 8.8 0 16-7.2 16-16l0-212c-10.2 2.6-21 4-32 4-47.2 0-88.4-25.5-110.6-63.5zM458 60.5c-2.8 2.3-6.4 3.5-10 3.5l-64 0c-3.6 0-7.2-1.2-10-3.5L320 17.3 320 128c0 53 43 96 96 96s96-43 96-96l0-110.7-54 43.2zM376 148a20 20 0 1 1 0-40 20 20 0 1 1 0 40zm80 0a20 20 0 1 1 0-40 20 20 0 1 1 0 40z"/></svg></span>
+        Kedy
+      </button>
+      <button class="tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Etkinlikler
+      </button>
+      <a class="tab active" href="profile.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg>
+        Hesabım
+      </a>
+    </nav>
+
+    <!-- UYGULAMA AYARLARI PANELİ -->
+    <div class="settings-overlay" id="settingsOverlay"></div>
+    <section class="settings-panel" id="settingsPanel" aria-hidden="true">
+      <header class="settings-head">
+        <span class="sh-title">Uygulama Ayarları</span>
+        <button class="settings-close" id="settingsClose" aria-label="Kapat">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </header>
+
+      <div class="settings-body">
+        <!-- Tercihler -->
+        <section class="acc-group">
+          <h2 class="acc-group-title">Tercihler</h2>
+          <div class="acc-card">
+            <div class="acc-row">
+              <span class="acc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span>
+              <span class="acc-txt"><b>Bildirimler</b><small>Kampanya ve etkinlik bildirimleri</small></span>
+              <button class="acc-switch on" role="switch" aria-checked="true" aria-label="Bildirimler"></button>
+            </div>
+            <div class="acc-row">
+              <span class="acc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span>
+              <span class="acc-txt"><b>Konum İzni</b><small>Yakınındaki mekanları göster</small></span>
+              <button class="acc-switch on" role="switch" aria-checked="true" aria-label="Konum İzni"></button>
+            </div>
+            <div class="acc-row">
+              <span class="acc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg></span>
+              <span class="acc-txt"><b>Karanlık Mod</b><small>Koyu tema kullan</small></span>
+              <button class="acc-switch" role="switch" aria-checked="false" aria-label="Karanlık Mod"></button>
+            </div>
+            <button class="acc-row">
+              <span class="acc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20z"/></svg></span>
+              <span class="acc-txt"><b>Dil</b><small>Türkçe</small></span>
+              <span class="acc-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+            </button>
+            <button class="acc-row">
+              <span class="acc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              <span class="acc-txt"><b>Yardım & Destek</b><small>Sıkça sorulan sorular</small></span>
+              <span class="acc-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+            </button>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- SÖZLEŞME / DOKÜMAN PANELİ -->
+    <div class="settings-overlay" id="docOverlay"></div>
+    <section class="settings-panel" id="docPanel" aria-hidden="true">
+      <header class="settings-head">
+        <button class="settings-close" id="docBack" aria-label="Geri">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <span class="sh-title" id="docTitle">Sözleşme</span>
+      </header>
+      <div class="settings-body">
+        <article class="doc-body" id="docContent"></article>
+      </div>
+    </section>
+
+    <!-- PROFİL BİLGİLERİ PANELİ -->
+    <div class="settings-overlay" id="profileOverlay"></div>
+    <section class="settings-panel" id="profilePanel" aria-hidden="true">
+      <header class="settings-head">
+        <button class="settings-close" id="profileBack" aria-label="Geri">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <span class="sh-title">Profil Bilgileri</span>
+      </header>
+      <div class="settings-body">
+        <form class="pf-form" id="profileForm">
+          <!-- Banner -->
+          <div class="pf-banner">
+            <div class="pf-avatar-edit">
+              <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=70" alt="Profil fotoğrafı" />
+              <button type="button" class="pf-photo-cam" aria-label="Fotoğrafı değiştir">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              </button>
+            </div>
+            <b class="pf-banner-name">Ada Yılmaz</b>
+            <span class="pf-banner-sub">Fotoğrafı değiştirmek için dokun</span>
+            <div class="pf-complete">
+              <div class="pf-complete-bar"><span style="width:80%"></span></div>
+              <small>Profilin %80 tamamlandı</small>
+            </div>
+          </div>
+
+          <h3 class="pf-section-title">Kişisel Bilgiler</h3>
+
+          <div class="pf-field">
+            <label for="pfName">Ad Soyad</label>
+            <div class="pf-control">
+              <span class="pf-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg></span>
+              <input class="pf-input" id="pfName" type="text" value="Ada Yılmaz" autocomplete="name" />
+            </div>
+          </div>
+
+          <div class="pf-row2">
+            <div class="pf-field">
+              <label for="pfBirth">Doğum Tarihi</label>
+              <div class="pf-control">
+                <span class="pf-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+                <input class="pf-input" id="pfBirth" type="date" value="1996-04-12" />
+              </div>
+            </div>
+            <div class="pf-field">
+              <label>Cinsiyet</label>
+              <div class="pf-select" data-default="Kadın">
+                <button type="button" class="pf-select-btn">
+                  <span class="pf-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg></span>
+                  <span class="pf-select-val">Kadın</span>
+                  <span class="pf-select-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+                </button>
+                <div class="pf-select-menu">
+                  <button type="button" class="pf-select-opt is-sel">Kadın<span class="opt-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></button>
+                  <button type="button" class="pf-select-opt">Erkek<span class="opt-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></button>
+                  <button type="button" class="pf-select-opt">Belirtmek istemiyorum<span class="opt-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <h3 class="pf-section-title">İletişim</h3>
+
+          <div class="pf-field">
+            <label for="pfEmail">E-posta</label>
+            <div class="pf-control with-tag">
+              <span class="pf-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg></span>
+              <input class="pf-input" id="pfEmail" type="email" value="ada.yilmaz@gmail.com" autocomplete="email" />
+              <span class="pf-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>Doğrulandı</span>
+            </div>
+          </div>
+
+          <div class="pf-field">
+            <label for="pfPhone">Telefon</label>
+            <div class="pf-control">
+              <span class="pf-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg></span>
+              <input class="pf-input" id="pfPhone" type="tel" value="+90 555 000 00 00" autocomplete="tel" />
+            </div>
+          </div>
+
+          <h3 class="pf-section-title">Konum</h3>
+
+          <div class="pf-field">
+            <label>Şehir</label>
+            <div class="pf-select" data-default="İstanbul">
+              <button type="button" class="pf-select-btn">
+                <span class="pf-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span>
+                <span class="pf-select-val">İstanbul</span>
+                <span class="pf-select-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+              </button>
+              <div class="pf-select-menu">
+                <button type="button" class="pf-select-opt is-sel">İstanbul<span class="opt-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></button>
+                <button type="button" class="pf-select-opt">Ankara<span class="opt-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></button>
+                <button type="button" class="pf-select-opt">İzmir<span class="opt-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></button>
+                <button type="button" class="pf-select-opt">Bursa<span class="opt-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></button>
+                <button type="button" class="pf-select-opt">Antalya<span class="opt-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="pf-save-bar">
+            <button type="submit" class="pf-save">Değişiklikleri Kaydet</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+  </div>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>

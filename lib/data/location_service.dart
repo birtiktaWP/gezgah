@@ -1,3 +1,4 @@
+import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
 /// Konum izni ve mesafe hesaplama yardımcıları.
@@ -63,5 +64,26 @@ class LocationService {
   static String format(double meters) {
     final km = meters / 1000;
     return '${km.toStringAsFixed(1)} km';
+  }
+
+  /// Koordinattan "İl, İlçe" (veya [districtFirst] ile "İlçe, İl") etiketini
+  /// üretir (reverse geocoding). Başarısız olursa `null` döner.
+  static Future<String?> cityDistrict(double lat, double lng,
+      {bool districtFirst = false}) async {
+    try {
+      final marks = await placemarkFromCoordinates(lat, lng);
+      if (marks.isEmpty) return null;
+      final p = marks.first;
+      final il = (p.administrativeArea ?? '').trim();
+      final ilce = (p.subAdministrativeArea ?? '').trim().isNotEmpty
+          ? p.subAdministrativeArea!.trim()
+          : (p.locality ?? '').trim();
+      final ordered = districtFirst ? [ilce, il] : [il, ilce];
+      final parts = ordered.where((s) => s.isNotEmpty).toList();
+      if (parts.isEmpty) return null;
+      return parts.join(', ');
+    } catch (_) {
+      return null;
+    }
   }
 }

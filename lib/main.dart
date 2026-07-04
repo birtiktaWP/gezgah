@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'data/user_service.dart';
 import 'screens/main_shell.dart';
 import 'theme/app_theme.dart';
 
@@ -9,6 +10,8 @@ void main() {
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
   ));
+  // Uygulamayı ilk açan her cihaz için anonim kimliği üret/yükle (yerel).
+  UserService.instance.currentId();
   runApp(const GezgahApp());
 }
 

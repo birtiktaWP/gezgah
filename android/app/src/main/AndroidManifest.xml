@@ -7,10 +7,11 @@
         android:label="gezgah"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
-        <!-- Google Maps API anahtarı (web mockup'taki anahtar) -->
+        <!-- Google Maps API anahtarı — build sırasında local.properties'ten
+             enjekte edilir (repoya girmez). Bkz. android/app/build.gradle.kts -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyC7nXVxoT-s2SltmE4z769tgeNvnuZjTBY"/>
+            android:value="${MAPS_API_KEY}"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

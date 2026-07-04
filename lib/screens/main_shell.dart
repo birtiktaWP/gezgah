@@ -20,6 +20,7 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _index = 0;
+  bool _kedyOpen = false;
 
   void _onTab(int i) {
     switch (i) {
@@ -27,11 +28,17 @@ class _MainShellState extends State<MainShell> {
         showSearchModal(context, onOpenDetail: _openDetail);
         break;
       case 2:
-        showKedyChat(context);
+        _openKedy();
         break;
       default:
         setState(() => _index = i);
     }
+  }
+
+  Future<void> _openKedy() async {
+    setState(() => _kedyOpen = true);
+    await showKedyChat(context);
+    if (mounted) setState(() => _kedyOpen = false);
   }
 
   void _openDetail() {
@@ -62,12 +69,13 @@ class _MainShellState extends State<MainShell> {
       body: Stack(
         children: [
           IndexedStack(index: _index, children: pages),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: SafeArea(
-              child: FloatingTabBar(activeIndex: _index, onTap: _onTab),
+          if (!_kedyOpen)
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: SafeArea(
+                child: FloatingTabBar(activeIndex: _index, onTap: _onTab),
+              ),
             ),
-          ),
         ],
       ),
     );
