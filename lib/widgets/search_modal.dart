@@ -435,7 +435,7 @@ class _SearchModalState extends State<_SearchModal> {
                     onChanged: _onQueryChanged,
                     onSubmitted: _commitHistory,
                     decoration: const InputDecoration(
-                      hintText: 'Restoran, kafe, marka veya mekan ara…',
+                      hintText: 'Mekan ve yemek ara…',
                       hintStyle: TextStyle(color: AppColors.muted),
                       border: InputBorder.none,
                       isCollapsed: true,

@@ -1,16 +1,29 @@
+import 'dart:convert';
+import 'dart:math';
+
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+import 'app_secrets.dart';
 import 'models.dart';
 
 /// Sunucu kökü (göreli görsel yollarını tamamlamak için).
 const String kApiHost = 'https://api.gezgah.com';
 
 /// Gezgah REST API istemcisi — tek (singleton) Dio örneği.
-/// FLUTTER_API_GUIDE.md'deki yapılandırmayı izler. Uygulama loginsiz
-/// olduğundan token/AuthInterceptor eklenmemiştir; "öne çıkan firmalar"
-/// endpoint'i public'tir.
+/// FLUTTER_API_GUIDE.md + GUVENLIK.md yapılandırmasını izler.
+///
+/// Güvenlik interceptor'ı her isteğe (yapılandırıldıysa) şunları ekler:
+///  - `X-App-Key` (AppSecrets.appKey)
+///  - `Authorization: Bearer <cihaz token>` (güvenli depodan)
+///  - HMAC imza başlıkları `X-Timestamp` / `X-Nonce` / `X-Signature`
 class Api {
   Api._();
   static final Api instance = Api._();
+
+  static const _storage = FlutterSecureStorage();
+  static const _deviceTokenKey = 'device_token';
 
   late final Dio dio = Dio(
     BaseOptions(
@@ -22,7 +35,71 @@ class Api {
       validateStatus: (status) => status != null && status < 500,
       headers: {'Accept': 'application/json'},
     ),
-  );
+  )..interceptors.add(_SecurityInterceptor());
+
+  // --- Cihaz token (güvenli depo) --------------------------------------------
+  Future<String?> get deviceToken => _storage.read(key: _deviceTokenKey);
+  Future<void> saveDeviceToken(String t) =>
+      _storage.write(key: _deviceTokenKey, value: t);
+  Future<void> clearDeviceToken() => _storage.delete(key: _deviceTokenKey);
+}
+
+/// Her isteğe güvenlik başlıklarını ekler (bkz. GUVENLIK.md §4).
+class _SecurityInterceptor extends Interceptor {
+  @override
+  Future<void> onRequest(
+      RequestOptions options, RequestInterceptorHandler handler) async {
+    // 1) Uygulama anahtarı (yapılandırıldıysa).
+    if (AppSecrets.hasAppKey) {
+      options.headers['X-App-Key'] = AppSecrets.appKey;
+    }
+
+    // 2) Cihaz token'ı → Bearer (varsa).
+    final token = await Api.instance.deviceToken;
+    if (token != null && token.isNotEmpty) {
+      options.headers['Authorization'] = 'Bearer $token';
+    }
+
+    // 3) HMAC istek imzası (signing_secret yapılandırıldıysa).
+    if (AppSecrets.hasSigning) {
+      final ts = (DateTime.now().millisecondsSinceEpoch ~/ 1000).toString();
+      final nonce = _nonce();
+      final path = _normalizePath(options.path);
+      final bodyStr = options.data == null
+          ? ''
+          : (options.data is String
+              ? options.data as String
+              : jsonEncode(options.data));
+      final bodyHash = sha256.convert(utf8.encode(bodyStr)).toString();
+      final base =
+          '${options.method.toUpperCase()}\n$path\n$ts\n$nonce\n$bodyHash';
+      final sig = Hmac(sha256, utf8.encode(AppSecrets.signingSecret))
+          .convert(utf8.encode(base))
+          .toString();
+      options.headers['X-Timestamp'] = ts;
+      options.headers['X-Nonce'] = nonce;
+      options.headers['X-Signature'] = sig;
+    }
+
+    handler.next(options);
+  }
+
+  /// Sorgu parametrelerini ve sondaki `/`'ı atarak imza tabanındaki PATH'i verir.
+  String _normalizePath(String p) {
+    var path = p;
+    final q = path.indexOf('?');
+    if (q >= 0) path = path.substring(0, q);
+    if (path.length > 1 && path.endsWith('/')) {
+      path = path.substring(0, path.length - 1);
+    }
+    return path;
+  }
+
+  String _nonce() {
+    final r = Random.secure();
+    final bytes = List<int>.generate(16, (_) => r.nextInt(256));
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
 }
 
 /// Mekan (öne çıkan firma) verisi için repository.
@@ -601,6 +678,143 @@ class HomeRepository {
     } catch (_) {
       return const [];
     }
+  }
+
+  /// Etkinlikler (`GET /etkinlikler`). Sayfalı; `upcoming=true` yalnızca
+  /// bugünden sonrasını getirir. Sonuç + sayfalama meta'sı döner.
+  Future<({List<Event> items, bool hasMore, int? nextPage, int total})>
+      etkinlikler({bool upcoming = true, int page = 1, int limit = 20}) async {
+    final res = await _dio.get('/etkinlikler', queryParameters: {
+      'status': 1,
+      if (upcoming) 'upcoming': 1,
+      'page': page,
+      'limit': limit,
+    });
+    final body = res.data as Map<String, dynamic>;
+    if (body['success'] != true) {
+      throw Exception(body['error']?['message'] ?? 'Etkinlikler alınamadı');
+    }
+    final data = body['data'];
+    final list = (data is List ? data : const [])
+        .whereType<Map<String, dynamic>>()
+        .map(_parseEvent)
+        .toList();
+    final meta = (body['meta'] as Map<String, dynamic>?) ?? const {};
+    final curPage = (meta['page'] as num?)?.toInt() ?? page;
+    final pages = (meta['pages'] as num?)?.toInt() ?? 1;
+    final hasMore = meta['has_more'] as bool? ?? (curPage < pages);
+    return (
+      items: list,
+      hasMore: hasMore,
+      nextPage: (meta['next_page'] as num?)?.toInt() ??
+          (hasMore ? curPage + 1 : null),
+      total: (meta['total'] as num?)?.toInt() ?? list.length,
+    );
+  }
+
+  /// Bildirimler (`GET /bildirimler`). Metin HTML'den arındırılır ve aynı
+  /// metin birden çok kez gelirse (log + post kayıtları) tek gösterilir.
+  Future<List<AppNotification>> bildirimler({int page = 1, int limit = 30}) async {
+    final res = await _dio.get(
+      '/bildirimler',
+      queryParameters: {'page': page, 'limit': limit},
+    );
+    final body = res.data as Map<String, dynamic>;
+    if (body['success'] != true) {
+      throw Exception(body['error']?['message'] ?? 'Bildirimler alınamadı');
+    }
+    final data = body['data'];
+    if (data is! List) return const [];
+
+    final seen = <String>{};
+    final out = <AppNotification>[];
+    for (final e in data.whereType<Map<String, dynamic>>()) {
+      final raw = (e['baslik'] as String?) ?? (e['mesaj'] as String?) ?? '';
+      final text = _stripHtml(raw);
+      if (text.isEmpty) continue;
+      if (!seen.add(text)) continue; // aynı metni tekrar gösterme
+      // Cihaz token'ı varsa sunucu `okundu` döner; yoksa (null) yeni sayılır.
+      final okundu = e['okundu'];
+      out.add(AppNotification(
+        id: (e['id'] as num?)?.toInt() ?? 0,
+        text: text,
+        date: DateTime.tryParse((e['tarih'] as String?)?.trim() ?? ''),
+        unread: okundu is bool ? !okundu : true,
+      ));
+    }
+    return out;
+  }
+
+  /// Cihazın tüm bildirimlerini okundu işaretler (`POST /bildirimler/okundu`).
+  /// Cihaz token'ı interceptor ile eklenir. Başarılıysa `true`; endpoint
+  /// yayında değilse / hata olursa `false` (UI yerel olarak yine işaretler).
+  Future<bool> tumunuOkundu() async {
+    try {
+      final res = await _dio.post('/bildirimler/okundu');
+      final body = res.data;
+      return body is Map && body['success'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// HTML etiketlerini kaldırır ve boşlukları sadeleştirir.
+  String _stripHtml(String s) => s
+      .replaceAll(RegExp(r'<[^>]*>'), '')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+
+  static const List<String> _trMonths = [
+    '', 'Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', //
+    'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara',
+  ];
+
+  /// ISO tarihten ("2025-10-14") gösterime hazır (gün, ayKısa) üretir.
+  (String, String) _eventDayMonth(String iso) {
+    if (iso.isEmpty) return ('', '');
+    final dt = DateTime.tryParse(iso);
+    if (dt == null) return ('', '');
+    final m = (dt.month >= 1 && dt.month <= 12) ? _trMonths[dt.month] : '';
+    return (dt.day.toString(), m);
+  }
+
+  /// `/etkinlikler` kaydını [Event]'e çevirir (alan adları esnek eşlenir).
+  Event _parseEvent(Map<String, dynamic> j) {
+    String? pick(List<String> keys) {
+      for (final k in keys) {
+        final v = j[k];
+        if (v is String && v.trim().isNotEmpty) return v.trim();
+        if (v is num) return v.toString();
+      }
+      return null;
+    }
+
+    final title = pick(['name', 'title', 'baslik', 'ad']) ?? 'Etkinlik';
+
+    String image = '';
+    final img = pick(['image', 'thumbnail', 'gorsel', 'cover', 'kapak']);
+    if (img != null) image = img.startsWith('http') ? img : '$kApiHost$img';
+
+    final dateStr = pick(['date', 'tarih', 'start_date', 'baslangic']) ?? '';
+    final (day, month) = _eventDayMonth(dateStr);
+
+    final time = pick(['time', 'saat']) ?? '';
+    final loc = pick(
+            ['location', 'konum', 'yer', 'mekan', 'venue', 'adres', 'bolge']) ??
+        '';
+    final place = [loc, time].where((s) => s.isNotEmpty).join(' · ');
+
+    final tag = pick(['kategori', 'category', 'type', 'tur']) ?? '';
+
+    return Event(
+      id: (j['id'] as num?)?.toInt() ?? 0,
+      title: title,
+      image: image,
+      place: place,
+      tag: tag,
+      day: day,
+      month: month,
+    );
   }
 
   /// Bir listeleme endpoint'ini dener; 404 / success:false / hata olursa null.

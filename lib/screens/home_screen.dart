@@ -313,7 +313,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const Icon(Icons.search, color: AppColors.primary),
             const SizedBox(width: 12),
             const Expanded(
-              child: Text('Restoran, kafe, mekan ara…',
+              child: Text('Mekan ve yemek ara…',
                   style: TextStyle(fontSize: 15, color: AppColors.muted)),
             ),
             Container(width: 1, height: 24, color: AppColors.line),

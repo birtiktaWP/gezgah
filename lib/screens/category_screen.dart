@@ -534,8 +534,14 @@ class _CategoryScreenState extends State<CategoryScreen> {
             GlassButton(
               icon: Icons.location_on_outlined,
               flat: true,
-              onTap: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const MapScreen())),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => MapScreen(
+                    initialCategoryId: _category?.id ?? widget.categoryId,
+                  ),
+                ),
+              ),
             ),
           ],
         ),

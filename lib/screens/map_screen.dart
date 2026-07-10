@@ -11,7 +11,9 @@ import '../widgets/common.dart';
 import 'detail_screen.dart';
 
 class MapScreen extends StatefulWidget {
-  const MapScreen({super.key});
+  /// Harita açıldığında önceden seçili olacak kategori id'si (opsiyonel).
+  final int? initialCategoryId;
+  const MapScreen({super.key, this.initialCategoryId});
 
   @override
   State<MapScreen> createState() => _MapScreenState();
@@ -71,6 +73,12 @@ class _MapScreenState extends State<MapScreen> {
         ..sort((a, b) => b.mekanSayisi.compareTo(a.mekanSayisi));
     } catch (_) {
       _cats = const [];
+    }
+    // Kategori sayfasından gelindiyse o kategoriyi seçili yap.
+    final wantId = widget.initialCategoryId;
+    if (wantId != null) {
+      final idx = _cats.indexWhere((c) => c.id == wantId);
+      if (idx != -1) _activeCat = idx + 1; // 0 = Tümü
     }
     await _loadPlaces();
     _updateLabel();

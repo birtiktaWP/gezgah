@@ -30,6 +30,11 @@ class _MainShellState extends State<MainShell> {
       case 2:
         _openKedy();
         break;
+      case 3:
+        // Etkinlikler artık ayrı bir sayfa olarak açılır.
+        Navigator.push(
+            context, MaterialPageRoute(builder: (_) => const EventsScreen()));
+        break;
       default:
         setState(() => _index = i);
     }
@@ -52,12 +57,14 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     final pages = <Widget>[
       HomeScreen(
-        onOpenSearch: () => showSearchModal(context, onOpenDetail: _openDetail),
+        // Ana sayfadaki arama kutusu, footer'daki "Arama" sekmesiyle aynı
+        // aksiyonu tetikler.
+        onOpenSearch: () => _onTab(1),
         onOpenNotifications: _openNotifications,
       ),
       const SizedBox.shrink(), // 1: Ara (modal)
       const SizedBox.shrink(), // 2: Kedy (modal)
-      const EventsScreen(),
+      const SizedBox.shrink(), // 3: Etkinlikler (ayrı sayfa olarak push edilir)
       ProfileScreen(
         onGoHome: () => setState(() => _index = 0),
         onOpenNotifications: _openNotifications,

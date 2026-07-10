@@ -11,6 +11,14 @@ class NetImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Boş/geçersiz URL (API'de image: null olabilir) → doğrudan placeholder.
+    if (url.trim().isEmpty) {
+      return Container(
+        color: const Color(0xFFEDEDF3),
+        child: const Icon(Icons.image_not_supported_outlined,
+            color: AppColors.muted),
+      );
+    }
     return CachedNetworkImage(
       imageUrl: url,
       fit: fit,

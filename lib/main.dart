@@ -1,22 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'data/device_service.dart';
 import 'data/user_service.dart';
 import 'screens/main_shell.dart';
+import 'screens/welcome_screen.dart';
 import 'theme/app_theme.dart';
 
-void main() {
+/// İlk açılış (Welcome) gösterildi mi?
+const _kWelcomeSeenKey = 'welcome_seen';
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
   ));
+
   // Uygulamayı ilk açan her cihaz için anonim kimliği üret/yükle (yerel).
   UserService.instance.currentId();
-  runApp(const GezgahApp());
+
+  final prefs = await SharedPreferences.getInstance();
+  final seenWelcome = prefs.getBool(_kWelcomeSeenKey) ?? false;
+
+  runApp(GezgahApp(seenWelcome: seenWelcome));
 }
 
 class GezgahApp extends StatelessWidget {
-  const GezgahApp({super.key});
+  final bool seenWelcome;
+  const GezgahApp({super.key, required this.seenWelcome});
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +36,46 @@ class GezgahApp extends StatelessWidget {
       title: 'Gezgah',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      home: const _PhoneFrame(child: MainShell()),
+      home: _PhoneFrame(child: _Root(seenWelcome: seenWelcome)),
+    );
+  }
+}
+
+/// İlk açılışta Welcome, sonrasında MainShell gösterir.
+class _Root extends StatefulWidget {
+  final bool seenWelcome;
+  const _Root({required this.seenWelcome});
+
+  @override
+  State<_Root> createState() => _RootState();
+}
+
+class _RootState extends State<_Root> {
+  late bool _showMain = widget.seenWelcome;
+
+  @override
+  void initState() {
+    super.initState();
+    // İlk açılış değilse cihaz kaydını arka planda tazele (last_seen).
+    if (widget.seenWelcome) {
+      DeviceService.instance.ensureRegistered();
+    }
+  }
+
+  Future<void> _finishWelcome() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kWelcomeSeenKey, true);
+    if (!mounted) return;
+    setState(() => _showMain = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 350),
+      child: _showMain
+          ? const MainShell()
+          : WelcomeScreen(key: const ValueKey('welcome'), onStart: _finishWelcome),
     );
   }
 }

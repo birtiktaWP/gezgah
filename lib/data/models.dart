@@ -91,6 +91,39 @@ class FeaturedEvent {
   });
 }
 
+/// Etkinlik (`GET /etkinlikler`). Alanlar repository'de host/tarih işlenerek
+/// doldurulur; `day`/`month` gösterime hazır (ör. "14" / "Haz").
+class Event {
+  final int id;
+  final String title;
+  final String image;
+  final String place; // konum/mekan (+ saat)
+  final String tag; // kategori/tür etiketi
+  final String day; // "14"
+  final String month; // "Haz"
+
+  const Event({
+    required this.id,
+    required this.title,
+    this.image = '',
+    this.place = '',
+    this.tag = '',
+    this.day = '',
+    this.month = '',
+  });
+
+  /// Mock [EventItem]'dan üretir (API hatasında yedek vitrin için).
+  factory Event.fromItem(EventItem e) => Event(
+        id: 0,
+        title: e.title,
+        image: e.image,
+        place: e.location,
+        tag: e.tag,
+        day: e.day,
+        month: e.month,
+      );
+}
+
 /// Filtre tanımı (`GET /filtreler`, FILTRELER.md).
 class Filter {
   final int id;
@@ -165,6 +198,22 @@ class NotificationItem {
     required this.icon,
     required this.iconColor,
     required this.iconBg,
+    this.unread = true,
+  });
+}
+
+/// Uygulama bildirimi (`GET /bildirimler`). Metin HTML'den arındırılır,
+/// tarih parse edilir; okundu durumu yerelde tutulur.
+class AppNotification {
+  final int id;
+  final String text;
+  final DateTime? date;
+  bool unread;
+
+  AppNotification({
+    required this.id,
+    required this.text,
+    this.date,
     this.unread = true,
   });
 }
