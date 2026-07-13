@@ -12,7 +12,8 @@ import 'common.dart';
 import 'place_cards.dart';
 
 /// Gelişmiş arama — tam ekran açılan modal.
-void showSearchModal(BuildContext context, {void Function()? onOpenDetail}) {
+void showSearchModal(BuildContext context,
+    {void Function(Place place)? onOpenDetail}) {
   Navigator.of(context).push(
     PageRouteBuilder(
       opaque: false,
@@ -32,7 +33,7 @@ void showSearchModal(BuildContext context, {void Function()? onOpenDetail}) {
 }
 
 class _SearchModal extends StatefulWidget {
-  final void Function()? onOpenDetail;
+  final void Function(Place place)? onOpenDetail;
   const _SearchModal({this.onOpenDetail});
 
   @override
@@ -249,7 +250,7 @@ class _SearchModalState extends State<_SearchModal> {
                             sponsored: true,
                             onTap: () {
                               Navigator.pop(context);
-                              widget.onOpenDetail?.call();
+                              widget.onOpenDetail?.call(sponsored[i]);
                             },
                           ),
                         );
@@ -317,7 +318,8 @@ class _SearchModalState extends State<_SearchModal> {
       onTap: () {
         _commitHistory(_query);
         Navigator.pop(context);
-        widget.onOpenDetail?.call();
+        widget.onOpenDetail
+            ?.call(p.toPlace(subtitle: loc.isNotEmpty ? loc : 'Restoran'));
       },
       child: Container(
         padding: const EdgeInsets.all(12),

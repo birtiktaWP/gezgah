@@ -152,9 +152,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // --- Navigasyon -------------------------------------------------------------
 
-  void _openDetail() {
+  void _openDetail(Place p) {
     Navigator.push(
-        context, MaterialPageRoute(builder: (_) => const DetailScreen()));
+        context, MaterialPageRoute(builder: (_) => DetailScreen(place: p)));
   }
 
   void _openMap() {
@@ -518,7 +518,7 @@ class _HomeScreenState extends State<HomeScreen> {
         metaIcon: Icons.location_on_outlined,
         metaText: p.subtitle, // il · ilçe (koordinat yoksa)
         trailing: p.distance, // koordinat varsa mesafe (sağda)
-        onTap: _openDetail,
+        onTap: () => _openDetail(p),
       );
 
   /// Öne çıkan etkinlik kartı — HTML'deki "Yaklaşan Etkinlikler" tasarımı:
@@ -805,7 +805,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   final p = places[i];
                   return PopCard(
                     place: p,
-                    onTap: _openDetail,
+                    onTap: () => _openDetail(p),
                     onFav: () => setState(() => p.favorite = !p.favorite),
                   );
                 },

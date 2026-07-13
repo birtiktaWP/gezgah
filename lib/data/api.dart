@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'app_secrets.dart';
+import 'device_service.dart';
 import 'models.dart';
 
 /// Sunucu kökü (göreli görsel yollarını tamamlamak için).
@@ -24,6 +25,7 @@ class Api {
 
   static const _storage = FlutterSecureStorage();
   static const _deviceTokenKey = 'device_token';
+  static const _uyeTokenKey = 'uye_token';
 
   late final Dio dio = Dio(
     BaseOptions(
@@ -42,6 +44,25 @@ class Api {
   Future<void> saveDeviceToken(String t) =>
       _storage.write(key: _deviceTokenKey, value: t);
   Future<void> clearDeviceToken() => _storage.delete(key: _deviceTokenKey);
+
+  // --- Üye token'ı (güvenli depo) --------------------------------------------
+  // `/uye/giris` yanıtından dönen `app_uyeler.token`. Her başarılı girişte
+  // yenilenir (UYE_LOGIN.md). Yalnızca `/uye/me` ve `/uye/cikis` gibi üyeye
+  // özel çağrılarda explicit gönderilir; genel Bearer olarak cihaz token'ı
+  // kullanılmaya devam eder (bildirim/cihaz mantığını bozmamak için).
+  Future<String?> get uyeToken => _storage.read(key: _uyeTokenKey);
+  Future<void> saveUyeToken(String t) =>
+      _storage.write(key: _uyeTokenKey, value: t);
+  Future<void> clearUyeToken() => _storage.delete(key: _uyeTokenKey);
+}
+
+/// Kimlik doğrulama (giriş/kayıt) hataları için kullanıcıya gösterilebilir
+/// mesaj taşıyan istisna.
+class AuthException implements Exception {
+  final String message;
+  AuthException(this.message);
+  @override
+  String toString() => message;
 }
 
 /// Her isteğe güvenlik başlıklarını ekler (bkz. GUVENLIK.md §4).
@@ -54,10 +75,23 @@ class _SecurityInterceptor extends Interceptor {
       options.headers['X-App-Key'] = AppSecrets.appKey;
     }
 
-    // 2) Cihaz token'ı → Bearer (varsa).
-    final token = await Api.instance.deviceToken;
-    if (token != null && token.isNotEmpty) {
-      options.headers['Authorization'] = 'Bearer $token';
+    // 2) Cihaz token'ı → Bearer.
+    //    Çağıran Authorization'ı açıkça verdiyse (ör. `/uye/cikis` veya
+    //    `/uye/me` üye token'ıyla) ona dokunma. Aksi halde cihaz token'ını kullan:
+    //    Kayıt endpoint'i (`/cihaz/kayit`) token gerektirmez; ayrıca token'ın
+    //    üretildiği yer olduğu için burada kaydı beklemek özyinelemeye yol
+    //    açar → muaf tut. Diğer tüm isteklerde cihaz kaydı tamamlanana kadar
+    //    bekle ki istekler token hazır olmadan gidip 401'e düşmesin. Bu,
+    //    ana sayfanın açılışta boş gelmesine neden olan yarış durumunu
+    //    (race condition) ortadan kaldırır (bkz. GUVENLIK.md §4).
+    if (!options.headers.containsKey('Authorization')) {
+      if (!_isDeviceRegisterPath(options.path)) {
+        await DeviceService.instance.ensureRegistered();
+      }
+      final token = await Api.instance.deviceToken;
+      if (token != null && token.isNotEmpty) {
+        options.headers['Authorization'] = 'Bearer $token';
+      }
     }
 
     // 3) HMAC istek imzası (signing_secret yapılandırıldıysa).
@@ -84,6 +118,10 @@ class _SecurityInterceptor extends Interceptor {
     handler.next(options);
   }
 
+  /// `/cihaz/kayit` cihaz token'ının üretildiği yerdir; token hazırlığını
+  /// burada beklemek özyinelemeye (deadlock) yol açar → bu yol muaftır.
+  bool _isDeviceRegisterPath(String path) => path.contains('/cihaz/kayit');
+
   /// Sorgu parametrelerini ve sondaki `/`'ı atarak imza tabanındaki PATH'i verir.
   String _normalizePath(String p) {
     var path = p;
@@ -99,6 +137,193 @@ class _SecurityInterceptor extends Interceptor {
     final r = Random.secure();
     final bytes = List<int>.generate(16, (_) => r.nextInt(256));
     return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
+}
+
+/// Üye giriş/çıkış/profil — `/uye/*` (UYE_LOGIN.md).
+///
+/// **Parolasızdır:** `/uye/giris` e-posta'ya göre upsert yapar; kayıt varsa
+/// login (200), yoksa oluşturur (201). Her başarılı girişte yeni bir üye
+/// token'ı döner ve saklanır. Genel Bearer olarak cihaz token'ı kullanılmaya
+/// devam eder; isteğe `device_token` eklenerek cihaz üye ile ilişkilendirilir.
+class UyeRepository {
+  UyeRepository._();
+  static final UyeRepository instance = UyeRepository._();
+
+  Dio get _dio => Api.instance.dio;
+
+  /// `POST /uye/kayit` — parolalı yeni hesap. Zorunlu: isim, soyisim, email,
+  /// telefon, parola (≥6). E-posta zaten kayıtlıysa 409 → [AuthException].
+  /// Cihaz token'ı Bearer olarak interceptor'dan eklenir; `device_token`
+  /// body'ye de eklenerek cihaz üye ile ilişkilendirilir.
+  Future<AppUser> kayit({
+    required String isim,
+    required String soyisim,
+    required String email,
+    required String telefon,
+    required String parola,
+    String ulkeKodu = '+90',
+    String? cinsiyet,
+    String? dogumGunu,
+    int? ilceId,
+  }) async {
+    final device = await Api.instance.deviceToken;
+    final res = await _guard(() => _dio.post('/uye/kayit', data: {
+          'isim': isim.trim(),
+          'soyisim': soyisim.trim(),
+          'email': email.trim(),
+          'telefon': telefon.trim(),
+          'parola': parola,
+          'ulke_kodu': ulkeKodu,
+          if (cinsiyet != null && cinsiyet.isNotEmpty) 'cinsiyet': cinsiyet,
+          if (dogumGunu != null && dogumGunu.isNotEmpty) 'dogum_gunu': dogumGunu,
+          'ilce_id': ?ilceId,
+          if (device != null && device.isNotEmpty) 'device_token': device,
+        }));
+    return _handleUye(res, fallback: 'Kayıt yapılamadı. Bilgileri kontrol et.');
+  }
+
+  /// `POST /uye/giris` — e-posta + parola ile giriş. Hatalıysa [AuthException]
+  /// ("E-posta veya parola hatalı."). Cihaz token'ı Bearer interceptor'dan gelir.
+  Future<AppUser> giris(String email, String parola) async {
+    final res = await _guard(() => _dio.post('/uye/giris', data: {
+          'email': email.trim(),
+          'parola': parola,
+        }));
+    return _handleUye(res, fallback: 'Giriş yapılamadı. Bilgileri kontrol et.');
+  }
+
+  /// `GET /ilceler` — üye formundaki ilçe seçimi (hepsi İstanbul). Hata/boşsa
+  /// boş liste döner (form ilçesiz de çalışır).
+  Future<List<Ilce>> ilceler() async {
+    try {
+      final res = await _dio.get('/ilceler');
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return const [];
+      final data = body['data'];
+      if (data is! List) return const [];
+      final list = data
+          .whereType<Map<String, dynamic>>()
+          .map(Ilce.fromJson)
+          .where((i) => i.id > 0 && i.ad.isNotEmpty)
+          .toList();
+      list.sort((a, b) => a.ad.toLowerCase().compareTo(b.ad.toLowerCase()));
+      return list;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// `POST /uye/cikis` — üye token'ını sunucuda geçersiz kılar (varsa), sonra
+  /// yerel üye token'ını temizler. Ağ hatasında da yerel temizlik yapılır.
+  Future<void> cikis() async {
+    final token = await Api.instance.uyeToken;
+    try {
+      await _dio.post(
+        '/uye/cikis',
+        options: (token != null && token.isNotEmpty)
+            ? Options(headers: {'Authorization': 'Bearer $token'})
+            : null,
+      );
+    } catch (_) {
+      // Sunucuya ulaşılamasa da yerel oturum kapatılacak.
+    }
+    await Api.instance.clearUyeToken();
+  }
+
+  /// `GET /uye/me` — üye token'ına göre güncel profil. Token yoksa/geçersizse
+  /// (401) `null` döner (oturum sessizce doğrulanabilir).
+  Future<AppUser?> me() async {
+    final token = await Api.instance.uyeToken;
+    if (token == null || token.isEmpty) return null;
+    try {
+      final res = await _dio.get(
+        '/uye/me',
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return null;
+      final data = body['data'];
+      final uye = data is Map ? data['uye'] : null;
+      return uye is Map<String, dynamic> ? AppUser.fromJson(uye) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// `POST /uye/sifre-degistir` — giriş yapmış üyenin parolasını değiştirir.
+  /// Mevcut parola doğrulanır; yeni parola ≥6 olmalı. Başarılıysa sunucu
+  /// token'ı yeniler → yeni token saklanır. Hatalıysa [AuthException].
+  Future<void> sifreDegistir(String eskiParola, String yeniParola) async {
+    final token = await Api.instance.uyeToken;
+    final res = await _guard(() => _dio.post(
+          '/uye/sifre-degistir',
+          data: {'eski_parola': eskiParola, 'yeni_parola': yeniParola},
+          options: (token != null && token.isNotEmpty)
+              ? Options(headers: {'Authorization': 'Bearer $token'})
+              : null,
+        ));
+    final body = res.data;
+    if (body is! Map || body['success'] != true) {
+      throw AuthException(_errorMessage(body) ?? 'Parola değiştirilemedi.');
+    }
+    final data = body['data'];
+    final newToken = data is Map ? data['token'] as String? : null;
+    if (newToken != null && newToken.isNotEmpty) {
+      await Api.instance.saveUyeToken(newToken);
+    }
+  }
+
+  /// Yanıttan üye + token çıkarır; token'ı saklar, [AppUser] döner.
+  Future<AppUser> _handleUye(Response res, {required String fallback}) async {
+    final body = res.data;
+    if (body is! Map || body['success'] != true) {
+      throw AuthException(_errorMessage(body) ?? fallback);
+    }
+    final data = body['data'];
+    if (data is! Map) throw AuthException(fallback);
+    final token = data['token'] as String?;
+    if (token != null && token.isNotEmpty) {
+      await Api.instance.saveUyeToken(token);
+    }
+    final uye = data['uye'];
+    if (uye is! Map<String, dynamic>) throw AuthException(fallback);
+    return AppUser.fromJson(uye);
+  }
+
+  /// Yanıt zarfındaki `error.message`'ı (varsa) döndürür.
+  String? _errorMessage(dynamic body) {
+    if (body is! Map) return null;
+    final err = body['error'];
+    if (err is! Map) return null;
+    final msg = err['message'];
+    return (msg is String && msg.trim().isNotEmpty) ? msg : null;
+  }
+
+  /// Ağ/beklenmedik hataları kullanıcıya gösterilebilir [AuthException]'a çevirir.
+  Future<Response> _guard(Future<Response> Function() run) async {
+    try {
+      return await run();
+    } on AuthException {
+      rethrow;
+    } on DioException catch (e) {
+      throw AuthException(_dioMessage(e));
+    } catch (_) {
+      throw AuthException('Beklenmeyen bir hata oluştu. Lütfen tekrar dene.');
+    }
+  }
+
+  String _dioMessage(DioException e) {
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+        return 'Bağlantı zaman aşımına uğradı. İnternetini kontrol et.';
+      case DioExceptionType.connectionError:
+        return 'Sunucuya bağlanılamadı. İnternetini kontrol et.';
+      default:
+        return 'Bağlantı hatası. Lütfen tekrar dene.';
+    }
   }
 }
 
@@ -170,6 +395,7 @@ class PlacesRepository {
     final coord = _parseCoord(json['kordinat']);
 
     return Place(
+      id: (json['id'] as num?)?.toInt() ?? 0,
       name: (json['name'] as String?)?.trim().isNotEmpty == true
           ? json['name'] as String
           : 'İsimsiz Mekan',
@@ -230,6 +456,7 @@ class ApiPlace {
 
   /// Uygulamadaki [Place] kartına dönüştürür.
   Place toPlace({String subtitle = '', String distance = ''}) => Place(
+        id: id,
         name: name,
         category: 'Restoran',
         subtitle: subtitle,
@@ -422,6 +649,7 @@ class HomeRepository {
   Place _restToPlace(Map<String, dynamic> j, {bool sponsored = false}) {
     final ap = _parsePlace(j);
     return Place(
+      id: ap.id,
       name: ap.name,
       category: 'Restoran',
       subtitle: 'Restoran',
@@ -491,7 +719,7 @@ class HomeRepository {
     return [for (final id in ids) if (byId[id] != null) byId[id]!];
   }
 
-  /// `GET /mekanlar/{id}` — tek mekan detayı → [ApiPlace].
+  /// `GET /mekanlar/{id}` — tek mekan detayı → [ApiPlace] (özet alanlar).
   Future<ApiPlace?> mekan(int id) async {
     try {
       final res = await _dio.get('/mekanlar/$id');
@@ -500,6 +728,23 @@ class HomeRepository {
       final data = body['data'];
       if (data is! Map<String, dynamic>) return null;
       return _parsePlace(data);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// `GET /mekanlar/{id}` — tam detay (MEKAN_DETAY.md): adres, çalışma
+  /// saatleri, özellikler, galeri ve QR menüsü dahil. Hata/404'te `null`.
+  /// (Not: bu çağrı sunucuda `tiklama` sayacını +1 arttırır.)
+  Future<PlaceDetail?> mekanDetay(int id) async {
+    if (id <= 0) return null;
+    try {
+      final res = await _dio.get('/mekanlar/$id');
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return null;
+      final data = body['data'];
+      if (data is! Map<String, dynamic>) return null;
+      return PlaceDetail.fromJson(data, host: kApiHost);
     } catch (_) {
       return null;
     }

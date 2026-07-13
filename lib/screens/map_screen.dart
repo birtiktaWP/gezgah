@@ -420,7 +420,10 @@ class _MapScreenState extends State<MapScreen> {
                           onTap: () => Navigator.push(
                               context,
                               MaterialPageRoute(
-                                  builder: (_) => const DetailScreen())),
+                                  builder: (_) => DetailScreen(
+                                      place: p.toPlace(
+                                          subtitle:
+                                              loc.isNotEmpty ? loc : 'Konum')))),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 16, vertical: 9),

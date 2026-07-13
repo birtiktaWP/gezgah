@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'data/auth_service.dart';
 import 'data/device_service.dart';
 import 'data/user_service.dart';
 import 'screens/main_shell.dart';
@@ -19,6 +20,18 @@ Future<void> main() async {
 
   // Uygulamayı ilk açan her cihaz için anonim kimliği üret/yükle (yerel).
   UserService.instance.currentId();
+
+  // Cihaz token'ını erkenden hazırla (üret + `POST /cihaz/kayit`). Böylece
+  // ana sayfa API çağrıları (Bearer token gerektiren) token hazır olduktan
+  // sonra gider. Bloklamıyoruz: güvenlik interceptor'ı aynı (dedup'lı)
+  // future'ı beklediği için istekler token hazır olana dek kendiliğinden
+  // bekler; bu sırada ana sayfa yükleniyor göstergelerini gösterir.
+  // (İlk açılış dahil her senaryoda tetiklenir — bkz. GUVENLIK.md §4.)
+  DeviceService.instance.ensureRegistered();
+
+  // Varsa üye oturumunu yerelden geri yükle (Hesabım'ı giriş ekranı yerine
+  // doğrudan gösterebilmek için ilk kareden önce hazır olsun).
+  await AuthService.instance.restore();
 
   final prefs = await SharedPreferences.getInstance();
   final seenWelcome = prefs.getBool(_kWelcomeSeenKey) ?? false;
@@ -53,14 +66,10 @@ class _Root extends StatefulWidget {
 class _RootState extends State<_Root> {
   late bool _showMain = widget.seenWelcome;
 
-  @override
-  void initState() {
-    super.initState();
-    // İlk açılış değilse cihaz kaydını arka planda tazele (last_seen).
-    if (widget.seenWelcome) {
-      DeviceService.instance.ensureRegistered();
-    }
-  }
+  // Not: Cihaz kaydı artık main()'de koşulsuz başlatılır (ilk açılış dahil).
+  // Eskiden burada yalnızca `seenWelcome` true iken çağrılıyordu; bu yüzden
+  // ilk açılışta kayıt hiç yapılmıyor, ana sayfa istekleri token'sız gidip
+  // 401 alıyor ve veriler gelmiyordu.
 
   Future<void> _finishWelcome() async {
     final prefs = await SharedPreferences.getInstance();

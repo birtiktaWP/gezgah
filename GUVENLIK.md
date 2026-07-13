@@ -132,6 +132,57 @@ class _SecurityInterceptor extends Interceptor {
   tek başına yeterli değildir — asıl güç **Play Integrity / App Check** ile gelir
   (bkz. bölüm 5).
 
+### 4.1 Cihaz token hazırlık kapısı (readiness gate) — **kritik**
+
+`require_token = true` iken `/cihaz/kayit` dışındaki **her** istek geçerli bir
+`Authorization: Bearer <cihaz_token>` gerektirir. Bu nedenle uygulamanın veri
+çeken ilk ekranı (ana sayfa) açılır açılmaz istek atmadan **önce** cihaz
+token'ının üretilmiş, saklanmış ve `POST /cihaz/kayit` ile sunucuya
+kaydedilmiş olması gerekir.
+
+> **Belirti:** Kayıt tamamlanmadan atılan istekler token'sız (ya da sunucunun
+> henüz tanımadığı bir token'la) gider ve **401** alır; sonuç olarak **ana
+> sayfa boş gelir**. Bu, "veri gelmiyor" şikâyetinin tipik nedenidir.
+
+İki kuralı birlikte uygulayın:
+
+1. **Kaydı erken başlat:** `main()` içinde, `runApp`'ten önce cihaz kaydını
+   (koşulsuz, ilk açılış dahil) tetikleyin. Bloklamak şart değildir.
+2. **Token gerektiren istekleri geciktir:** Interceptor, token ekleyen adımdan
+   önce kaydın tamamlanmasını `await` etsin. Eşzamanlı çağrılar tek bir kayıt
+   akışını paylaşsın (dedup). `/cihaz/kayit` yolu bu beklemeden **muaftır**
+   (aksi halde token'ı üreten istek kendini bekler → deadlock).
+
+```dart
+class DeviceService {
+  Future<String>? _inflight;
+  // Dedup'lı: ilk çağrı kaydı başlatır, sonrakiler aynı future'ı bekler.
+  Future<String> ensureRegistered() => _inflight ??= register();
+  Future<String> register() async { /* token üret + sakla + POST /cihaz/kayit */ }
+}
+
+class _SecurityInterceptor extends Interceptor {
+  @override
+  Future<void> onRequest(RequestOptions o, RequestInterceptorHandler h) async {
+    if (AppSecrets.hasAppKey) o.headers['X-App-Key'] = AppSecrets.appKey;
+
+    // Kayıt endpoint'i hariç, token hazır olana kadar bekle (yarışı önler).
+    if (!o.path.contains('/cihaz/kayit')) {
+      await DeviceService.instance.ensureRegistered();
+    }
+    final token = await Api.instance.deviceToken;
+    if (token != null && token.isNotEmpty) {
+      o.headers['Authorization'] = 'Bearer $token';
+    }
+    // ... (HMAC imza) ...
+    h.next(o);
+  }
+}
+```
+
+Böylece ana sayfanın `FutureBuilder`'ları kayıt + veri yüklenirken yükleniyor
+göstergesi gösterir; istekler token hazır olduktan sonra gider ve 401 yaşanmaz.
+
 ---
 
 ## 5. APK'nın çözülmesine karşı (asıl savunma)

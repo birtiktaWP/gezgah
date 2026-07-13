@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../data/auth_service.dart';
 import '../data/mock_data.dart';
+import '../data/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 
@@ -17,43 +19,93 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  String _name = 'Ada Yılmaz';
-  String _email = 'ada.yilmaz@gmail.com';
-
   static const String _avatar =
       'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=70';
 
+  AppUser? get _user => AuthService.instance.user.value;
+
+  /// Kartta gösterilecek ad (yoksa e-posta ön eki, o da yoksa "Üye").
+  String get _displayName {
+    final u = _user;
+    if (u == null) return 'Misafir';
+    if (u.fullName.isNotEmpty) return u.fullName;
+    if (u.email.isNotEmpty) return u.email.split('@').first;
+    return 'Üye';
+  }
+
+  String get _displayEmail => _user?.email ?? '';
+
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 130),
-      children: [
-        _hero(),
-        const SizedBox(height: 18),
-        _stats(),
-        const SizedBox(height: 8),
-        _group('Profilim', [
-          _row(Icons.person_outline, 'Profil Bilgileri', 'Ad, e-posta, telefon',
-              onTap: _openProfileEdit),
-          _row(Icons.favorite_border, 'Favorilerim', 'Kaydettiğin mekanlar'),
-        ]),
-        _group('Sözleşmeler', [
-          for (final entry in MockData.documents.entries)
-            _row(_docIcon(entry.key), entry.key, _docSub(entry.key),
-                onTap: () => _openDoc(entry.key, entry.value)),
-        ]),
-        _group(null, [
-          _row(Icons.logout, 'Çıkış Yap', null, danger: true),
-        ]),
-        const Padding(
-          padding: EdgeInsets.only(top: 6),
-          child: Center(
-            child: Text('Gezgah · Sürüm 1.0.0',
-                style: TextStyle(fontSize: 12, color: AppColors.muted)),
-          ),
-        ),
-      ],
+    // Oturum değişince (giriş/çıkış/profil düzenleme) kart otomatik güncellenir.
+    return ValueListenableBuilder<AppUser?>(
+      valueListenable: AuthService.instance.user,
+      builder: (context, _, __) {
+        return ListView(
+          padding: const EdgeInsets.only(bottom: 130),
+          children: [
+            _hero(),
+            const SizedBox(height: 18),
+            _stats(),
+            const SizedBox(height: 8),
+            _group('Profilim', [
+              _row(Icons.person_outline, 'Profil Bilgileri',
+                  'Ad, e-posta, telefon',
+                  onTap: _openProfileEdit),
+              _row(Icons.favorite_border, 'Favorilerim',
+                  'Kaydettiğin mekanlar'),
+              _row(Icons.lock_outline, 'Şifre Değiştir',
+                  'Hesap parolanı güncelle',
+                  onTap: _openPasswordChange),
+            ]),
+            _group('Sözleşmeler', [
+              for (final entry in MockData.documents.entries)
+                _row(_docIcon(entry.key), entry.key, _docSub(entry.key),
+                    onTap: () => _openDoc(entry.key, entry.value)),
+            ]),
+            _group(null, [
+              _row(Icons.logout, 'Çıkış Yap', null,
+                  danger: true, onTap: _confirmLogout),
+            ]),
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: Center(
+                child: Text('Gezgah · Sürüm 1.0.0',
+                    style: TextStyle(fontSize: 12, color: AppColors.muted)),
+              ),
+            ),
+          ],
+        );
+      },
     );
+  }
+
+  /// Onay iste, ardından oturumu kapat ve ana sayfaya dön (Hesabım giriş ister).
+  Future<void> _confirmLogout() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Çıkış Yap'),
+        content:
+            const Text('Hesabından çıkış yapmak istediğine emin misin?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Vazgeç'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Çıkış Yap',
+                style: TextStyle(
+                    color: AppColors.closing, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await AuthService.instance.logout();
+    if (!mounted) return;
+    widget.onGoHome();
   }
 
   IconData _docIcon(String name) {
@@ -147,16 +199,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_name,
+                Text(_displayName,
                     style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
                         color: Colors.white)),
-                const SizedBox(height: 2),
-                Text(_email,
-                    style: TextStyle(
-                        fontSize: 12.5,
-                        color: Colors.white.withValues(alpha: 0.8))),
+                if (_displayEmail.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(_displayEmail,
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          color: Colors.white.withValues(alpha: 0.8))),
+                ],
               ],
             ),
           ),
@@ -325,19 +379,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _openProfileEdit() {
+    final u = _user;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _ProfileEditSheet(
-        name: _name,
-        email: _email,
+        name: u?.fullName ?? '',
+        email: u?.email ?? '',
         avatar: _avatar,
-        onSave: (n, e) => setState(() {
-          _name = n;
-          _email = e;
-        }),
+        onSave: (n, e) {
+          // "Ad Soyad" metnini ad + soyad olarak ayır.
+          final parts =
+              n.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
+          final first = parts.isNotEmpty ? parts.first : '';
+          final last = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+          AuthService.instance
+              .updateProfile(isim: first, soyisim: last, email: e.trim());
+        },
       ),
+    );
+  }
+
+  void _openPasswordChange() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _PasswordChangeSheet(),
     );
   }
 }
@@ -659,6 +728,176 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
                 contentPadding: EdgeInsets.symmetric(vertical: 15),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Şifre değiştirme paneli — `/uye/sifre-degistir` (UYE_LOGIN.md).
+class _PasswordChangeSheet extends StatefulWidget {
+  const _PasswordChangeSheet();
+
+  @override
+  State<_PasswordChangeSheet> createState() => _PasswordChangeSheetState();
+}
+
+class _PasswordChangeSheetState extends State<_PasswordChangeSheet> {
+  final _eskiC = TextEditingController();
+  final _yeniC = TextEditingController();
+  bool _obscureEski = true;
+  bool _obscureYeni = true;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _eskiC.dispose();
+    _yeniC.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    FocusScope.of(context).unfocus();
+    final eski = _eskiC.text;
+    final yeni = _yeniC.text;
+    if (eski.isEmpty) {
+      setState(() => _error = 'Mevcut şifreni gir.');
+      return;
+    }
+    if (yeni.length < 6) {
+      setState(() => _error = 'Yeni şifre en az 6 karakter olmalı.');
+      return;
+    }
+    if (yeni == eski) {
+      setState(() => _error = 'Yeni şifre eskisinden farklı olmalı.');
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await AuthService.instance.sifreDegistir(eski, yeni);
+      if (!mounted) return;
+      Navigator.pop(context);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Şifren güncellendi.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SheetScaffold(
+      title: 'Şifre Değiştir',
+      child: ListView(
+        padding: EdgeInsets.fromLTRB(
+            22, 18, 22, 24 + MediaQuery.of(context).viewInsets.bottom),
+        children: [
+          _passField('Mevcut şifre', _eskiC, _obscureEski,
+              () => setState(() => _obscureEski = !_obscureEski)),
+          const SizedBox(height: 14),
+          _passField('Yeni şifre (en az 6 karakter)', _yeniC, _obscureYeni,
+              () => setState(() => _obscureYeni = !_obscureYeni)),
+          if (_error != null) ...[
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0x14E0533D),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0x33E0533D)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline,
+                      size: 18, color: AppColors.closing),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(_error!,
+                        style: const TextStyle(
+                            fontSize: 12.5,
+                            color: AppColors.closing,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 24),
+          SizedBox(
+            height: 50,
+            child: ElevatedButton(
+              onPressed: _busy ? null : _save,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor:
+                    AppColors.primary.withValues(alpha: 0.6),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
+              child: _busy
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.5, color: Colors.white),
+                    )
+                  : const Text('Şifreyi Güncelle',
+                      style: TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.w700)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _passField(String hint, TextEditingController controller,
+      bool obscure, VoidCallback onToggle) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.lock_outline, size: 19, color: AppColors.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              obscureText: obscure,
+              decoration: InputDecoration(
+                hintText: hint,
+                hintStyle: const TextStyle(color: AppColors.muted),
+                border: InputBorder.none,
+                isCollapsed: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 15),
+              ),
+            ),
+          ),
+          IconButton(
+            icon: Icon(
+                obscure
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+                size: 20,
+                color: AppColors.muted),
+            onPressed: onToggle,
           ),
         ],
       ),

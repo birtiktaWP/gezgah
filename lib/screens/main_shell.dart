@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../data/auth_service.dart';
+import '../data/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/kedy_chat.dart';
 import '../widgets/notifications_modal.dart';
@@ -7,6 +9,7 @@ import '../widgets/tabbar.dart';
 import 'detail_screen.dart';
 import 'events_screen.dart';
 import 'home_screen.dart';
+import 'login_screen.dart';
 import 'profile_screen.dart';
 
 /// Uygulama iskeleti: sayfa içeriği + yüzen tab bar.
@@ -22,6 +25,26 @@ class _MainShellState extends State<MainShell> {
   int _index = 0;
   bool _kedyOpen = false;
 
+  @override
+  void initState() {
+    super.initState();
+    // Oturum kapanırsa Hesabım sekmesinde kalınmasın.
+    AuthService.instance.user.addListener(_onAuthChanged);
+  }
+
+  @override
+  void dispose() {
+    AuthService.instance.user.removeListener(_onAuthChanged);
+    super.dispose();
+  }
+
+  void _onAuthChanged() {
+    if (!mounted) return;
+    if (!AuthService.instance.isLoggedIn && _index == 4) {
+      setState(() => _index = 0);
+    }
+  }
+
   void _onTab(int i) {
     switch (i) {
       case 1:
@@ -35,8 +58,25 @@ class _MainShellState extends State<MainShell> {
         Navigator.push(
             context, MaterialPageRoute(builder: (_) => const EventsScreen()));
         break;
+      case 4:
+        _openAccount();
+        break;
       default:
         setState(() => _index = i);
+    }
+  }
+
+  /// Hesabım: giriş yapılmışsa sekmeye geç; değilse önce login ekranını aç,
+  /// giriş başarılıysa Hesabım sekmesini göster.
+  Future<void> _openAccount() async {
+    if (AuthService.instance.isLoggedIn) {
+      setState(() => _index = 4);
+      return;
+    }
+    final ok = await openLogin(context);
+    if (!mounted) return;
+    if (ok == true && AuthService.instance.isLoggedIn) {
+      setState(() => _index = 4);
     }
   }
 
@@ -46,9 +86,9 @@ class _MainShellState extends State<MainShell> {
     if (mounted) setState(() => _kedyOpen = false);
   }
 
-  void _openDetail() {
+  void _openDetail(Place p) {
     Navigator.push(
-        context, MaterialPageRoute(builder: (_) => const DetailScreen()));
+        context, MaterialPageRoute(builder: (_) => DetailScreen(place: p)));
   }
 
   void _openNotifications() => showNotifications(context);

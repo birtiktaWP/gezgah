@@ -395,9 +395,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
 
   String get _title => _category?.name ?? widget.title;
 
-  void _openDetail() {
+  void _openDetail(Place p) {
     Navigator.push(
-        context, MaterialPageRoute(builder: (_) => const DetailScreen()));
+        context, MaterialPageRoute(builder: (_) => DetailScreen(place: p)));
   }
 
   void _onTab(int i) {
@@ -452,7 +452,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                     padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
                     child: ListTileCard(
                       place: _visiblePinned!,
-                      onTap: _openDetail,
+                      onTap: () => _openDetail(_visiblePinned!),
                       onFav: () => setState(
                           () => _pinned!.favorite = !_pinned!.favorite),
                     ),
@@ -463,7 +463,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                     padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
                     child: ListTileCard(
                       place: p,
-                      onTap: _openDetail,
+                      onTap: () => _openDetail(p),
                       onFav: () => setState(() => p.favorite = !p.favorite),
                     ),
                   );

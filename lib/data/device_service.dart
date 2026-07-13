@@ -17,7 +17,18 @@ class DeviceService {
   DeviceService._();
   static final DeviceService instance = DeviceService._();
 
-  bool _registeredThisSession = false;
+  /// Oturum başına tek kayıt akışı. Eşzamanlı çağrılar aynı future'ı paylaşır
+  /// (dedup), böylece açılışta yalnızca bir `POST /cihaz/kayit` gider.
+  Future<String>? _inflight;
+
+  /// Cihaz token'ı hazır (üretilmiş, saklanmış ve kayıt denenmiş) olana kadar
+  /// beklenebilecek future'ı döndürür. İlk çağrı kaydı başlatır; sonraki
+  /// eşzamanlı çağrılar aynı future'ı bekler.
+  ///
+  /// Güvenlik interceptor'ı, token gerektiren her istekten önce bunu `await`
+  /// ederek isteklerin token hazır olmadan (401'e düşecek şekilde) gitmesini
+  /// engeller (bkz. GUVENLIK.md §4).
+  Future<String> ensureRegistered() => _inflight ??= register();
 
   /// Cihaz token'ını hazırlar ve sunucuya (varsa) kaydeder. Token döner.
   Future<String> register() async {
@@ -46,14 +57,7 @@ class DeviceService {
     } catch (_) {
       // Endpoint yok / ağ hatası → yerel token yeterli.
     }
-    _registeredThisSession = true;
     return token;
-  }
-
-  /// Uygulama açılışında bir kez, arka planda çağrılır (hata yutulur).
-  void ensureRegistered() {
-    if (_registeredThisSession) return;
-    register().catchError((_) => '');
   }
 
   /// 64 hex karakterlik rastgele token (CIHAZ_TOKEN.md formatı).

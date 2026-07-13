@@ -87,9 +87,10 @@ class _EventsScreenState extends State<EventsScreen> {
     }
   }
 
-  void _openDetail() {
+  // Aramadan bir mekan seçilince detayını açar (etkinlik listesi için değil).
+  void _openDetail(Place p) {
     Navigator.push(
-        context, MaterialPageRoute(builder: (_) => const DetailScreen()));
+        context, MaterialPageRoute(builder: (_) => DetailScreen(place: p)));
   }
 
   void _onTab(int i) {
@@ -292,9 +293,8 @@ class _EventsScreenState extends State<EventsScreen> {
   Widget _eventRow(Event e) {
     final dm = [e.day, e.month].where((s) => s.isNotEmpty).join(' ');
     final subtitle = [dm, e.place].where((s) => s.isNotEmpty).join(' · ');
-    return GestureDetector(
-      onTap: _openDetail,
-      child: Container(
+    // Etkinlikler mekan değildir; kartın mekan detayına yönlendirmesi kaldırıldı.
+    return Container(
         height: 110,
         decoration: BoxDecoration(
           color: Colors.white,
@@ -357,7 +357,6 @@ class _EventsScreenState extends State<EventsScreen> {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 }
