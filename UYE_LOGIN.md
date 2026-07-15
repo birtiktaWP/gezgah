@@ -56,6 +56,7 @@ Diğerleri opsiyoneldir. Parola en az **6** karakter olmalı.
 | POST | `/uye/kayit` | Yeni hesap oluşturur (parola ile). Email varsa `409` |
 | POST | `/uye/giris` | E-posta + parola ile giriş |
 | GET | `/uye/me` | Üye token'ına göre profil |
+| POST | `/uye/guncelle` | Profil bilgilerini günceller (kısmi, giriş yapmış üye) |
 | POST | `/uye/sifre-degistir` | Mevcut parolayı değiştirir (giriş yapmış üye) |
 | POST | `/uye/cikis` | Token'ı geçersiz kılar |
 
@@ -130,6 +131,52 @@ curl "https://api.gezgah.com/rest/uye/me" -H "Authorization: Bearer <uye_token>"
 ```
 
 Yanıt (200): `data.uye` profil objesi. Token geçersizse `401`.
+
+### `POST /uye/guncelle`
+
+İstek başlığı: `Authorization: Bearer <uye_token>` (giriş yapmış üye)
+
+Profil bilgilerini **kısmi** günceller: yalnızca gövdede gönderilen alanlar
+değişir, gönderilmeyenler olduğu gibi kalır. Güncellenebilir alanlar:
+`isim, soyisim, email, telefon, ulke_kodu, cinsiyet, dogum_gunu, ilce_id`.
+
+- **Şehir** güncellenmez (her zaman 34). **Parola** buradan değişmez
+  (bkz. `/uye/sifre-degistir`).
+- `email`: format kontrol edilir; başka bir hesapta kullanılıyorsa `409`.
+- `telefon`: yalnızca rakama indirgenir (7-15 hane).
+- `cinsiyet`, `dogum_gunu`, `ilce_id`: boş string (`""`) veya `null`
+  gönderilirse ilgili alan **temizlenir** (null yapılır).
+- Diğer doğrulamalar `/uye/kayit` ile aynıdır.
+
+```json
+{
+  "isim": "Cansu",
+  "telefon": "0555 999 88 77",
+  "cinsiyet": "kadin",
+  "dogum_gunu": "1995-04-20",
+  "ilce_id": 6
+}
+```
+
+Yanıt (**200**): güncellenmiş `{ uye }` objesi (token değişmez).
+
+```json
+{
+  "success": true,
+  "data": {
+    "uye": {
+      "id": 4, "isim": "Cansu", "soyisim": "Yıldız", "email": "can@example.com",
+      "telefon": "05559998877", "ulke_kodu": "+90", "cinsiyet": "kadin",
+      "dogum_gunu": "1995-04-20", "sehir": 34, "ilce_id": 6, "ilce": "Bahçelievler",
+      "status": 1, "son_giris_at": "…", "created_at": "…"
+    }
+  },
+  "error": null
+}
+```
+
+Hatalar: `401` (token geçersiz), `409` (e-posta başka hesapta), `422`
+(geçersiz alan değeri veya hiç alan gönderilmedi).
 
 ### `POST /uye/sifre-degistir`
 

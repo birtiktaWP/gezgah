@@ -91,6 +91,17 @@ class FeaturedEvent {
     this.time = '',
     this.image = '',
   });
+
+  factory FeaturedEvent.fromJson(Map<String, dynamic> j) => FeaturedEvent(
+        id: (j['id'] as num?)?.toInt() ?? 0,
+        name: (j['name'] as String?)?.trim() ?? '',
+        date: (j['date'] as String?)?.trim() ?? '',
+        time: (j['time'] as String?)?.trim() ?? '',
+        image: (j['image'] as String?)?.trim() ?? '',
+      );
+
+  Map<String, dynamic> toJson() =>
+      {'id': id, 'name': name, 'date': date, 'time': time, 'image': image};
 }
 
 /// Etkinlik (`GET /etkinlikler`). Alanlar repository'de host/tarih işlenerek
@@ -159,12 +170,16 @@ class Category {
   final String name;
   final String slug;
   final int mekanSayisi;
+  final int parent; // 0 = üst düzey kategori; >0 ise bir kategorinin alt öğesi
   const Category({
     required this.id,
     required this.name,
     this.slug = '',
     this.mekanSayisi = 0,
+    this.parent = 0,
   });
+
+  bool get isTopLevel => parent == 0;
 
   factory Category.fromJson(Map<String, dynamic> j) => Category(
         id: (j['id'] as num?)?.toInt() ?? 0,
@@ -173,7 +188,16 @@ class Category {
             : 'Kategori',
         slug: j['slug'] as String? ?? '',
         mekanSayisi: (j['mekan_sayisi'] as num?)?.toInt() ?? 0,
+        parent: (j['parent'] as num?)?.toInt() ?? 0,
       );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'slug': slug,
+        'mekan_sayisi': mekanSayisi,
+        'parent': parent,
+      };
 }
 
 class QuickCategory {

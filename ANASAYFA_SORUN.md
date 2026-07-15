@@ -1,5 +1,12 @@
 # Ana Sayfa Veri Sorunu — Devir Notu
 
+> **✅ ÇÖZÜLDÜ (2026-07):** Sunucuda `cihaz_tokenlari` tablosu artık mevcut;
+> `POST /cihaz/kayit` **201** dönüyor ve dönen token ile korumalı endpoint'ler
+> **200** veriyor (canlı doğrulandı). Ayrıca istemci tarafına **401 otomatik
+> onarımı** eklendi (bkz. `GUVENLIK.md §4.2`): cihazda bu dönemden kalma bayat
+> bir token olsa bile ilk istekte otomatik yenilenir; uygulamayı silmeye gerek
+> yoktur. Aşağıdaki notlar tarihsel kayıt olarak bırakılmıştır.
+
 ## İstemcide yaptıklarım (Flutter) — tamam
 - **Cihaz token hazırlık kapısı**: `/cihaz/kayit` hariç her istek, cihaz token'ı
   hazır olana kadar bekliyor (`lib/data/api.dart` → `_SecurityInterceptor`).

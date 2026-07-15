@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../data/api.dart';
+import '../data/auth_service.dart';
+import '../data/favorites_service.dart';
 import '../data/home_config.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/confetti.dart';
 import '../widgets/kedy_chat.dart';
 import '../widgets/tabbar.dart';
+import 'login_screen.dart';
 import 'menu_screen.dart';
 
 /// Mekan detay ekranı (`GET /mekanlar/{id}`, MEKAN_DETAY.md).
@@ -27,12 +31,19 @@ class _DetailScreenState extends State<DetailScreen> {
   final ScrollController _scroll = ScrollController();
   final PageController _gallery = PageController();
 
-  late bool _liked = widget.place.favorite;
   bool _showTabbar = false;
   int _photo = 0;
 
   bool _loading = true;
   PlaceDetail? _detail;
+
+  // Aynı kategoriden benzer mekanlar (en altta ray). Detay yüklendikten sonra
+  // ayrıca çekilir; boşken bölüm gizli kalır.
+  List<Place> _similar = const [];
+
+  // Üst düzey (parent == 0) kategori id'leri (`/kategoriler`). Başlık üstünde
+  // yalnızca bu kümedeki kategoriler gösterilir.
+  Set<int> _topIds = const {};
 
   static const List<(String, String)> _days = [
     ('pazartesi', 'Pazartesi'),
@@ -47,6 +58,7 @@ class _DetailScreenState extends State<DetailScreen> {
   @override
   void initState() {
     super.initState();
+    // Footer menü başta gizli; ana görsel biraz kaydırılınca alttan belirir.
     _scroll.addListener(() {
       final show = _scroll.offset > 60;
       if (show != _showTabbar) setState(() => _showTabbar = show);
@@ -62,12 +74,59 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   Future<void> _fetch() async {
-    final d = await HomeRepository.instance.mekanDetay(widget.place.id);
+    // Detay + kategori parent eşlemesini birlikte çek (parent eşlemesi cache'li
+    // olduğu için başlık üstü kategoriler ilk çizimde doğru süzülür).
+    final results = await Future.wait([
+      HomeRepository.instance.mekanDetay(widget.place.id),
+      HomeRepository.instance.ustDuzeyKategoriIdleri(),
+    ]);
     if (!mounted) return;
+    final d = results[0] as PlaceDetail?;
     setState(() {
       _detail = d;
+      _topIds = results[1] as Set<int>;
       _loading = false;
     });
+    _fetchSimilar(d);
+  }
+
+  /// Favoriye ekler/çıkarır. Giriş yoksa önce login açar (FAVORILER.md).
+  Future<void> _toggleFav() async {
+    final messenger = ScaffoldMessenger.of(context);
+    if (!AuthService.instance.isLoggedIn) {
+      final ok = await openLogin(context);
+      if (ok != true || !AuthService.instance.isLoggedIn) return;
+      await FavoritesService.instance.load();
+    }
+    final willAdd = !FavoritesService.instance.isFavorite(widget.place.id);
+    try {
+      await FavoritesService.instance.toggle(widget.place.id);
+      if (willAdd && mounted) celebrateFavorite(context);
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+            content: Text(e.toString()),
+            duration: const Duration(seconds: 2)),
+      );
+    }
+  }
+
+  /// Başlık üstünde gösterilecek kategoriler: yalnızca üst düzey (parent == 0)
+  /// olanlar. Üst düzey kümesi alınamazsa (boş) tüm kategoriler gösterilir.
+  List<Category> _visibleCategories(PlaceDetail d) {
+    if (_topIds.isEmpty) return d.kategoriler;
+    return d.kategoriler.where((c) => _topIds.contains(c.id)).toList();
+  }
+
+  /// Mekanın ilk kategorisinden benzer mekanları çeker (mevcut mekan hariç).
+  Future<void> _fetchSimilar(PlaceDetail? d) async {
+    final catId =
+        (d != null && d.kategoriler.isNotEmpty) ? d.kategoriler.first.id : 0;
+    if (catId <= 0) return;
+    final list = await HomeRepository.instance
+        .benzerMekanlar(catId, excludeId: widget.place.id, limit: 10);
+    if (!mounted) return;
+    setState(() => _similar = list);
   }
 
   // --- Türetilmiş veriler -----------------------------------------------------
@@ -220,6 +279,11 @@ class _DetailScreenState extends State<DetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+    // Footer bar'ın kapladığı alan: dış yükseklik (bar 67 + dairenin yarısı 26
+    // = 93) + shell alt boşluğu (8) + güvenli alan + nefes payı. Böylece son
+    // içerik satırı (ör. E-posta) her zaman görünür bar'ın arkasında kalmaz.
+    final tabbarSpace = 93.0 + 8 + bottomInset + 18;
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: Stack(
@@ -237,19 +301,22 @@ class _DetailScreenState extends State<DetailScreen> {
                     borderRadius:
                         BorderRadius.vertical(top: Radius.circular(24)),
                   ),
-                  padding: const EdgeInsets.fromLTRB(22, 22, 22, 40),
+                  padding: EdgeInsets.fromLTRB(22, 22, 22, tabbarSpace),
                   child: _body(),
                 ),
               ),
             ],
           ),
           _topButtons(),
+          // Footer başta gizli (ekran dışında); kaydırınca alttan kayarak
+          // gelir ve ana sayfadaki footer ile aynı konumda (bottom:0 + SafeArea)
+          // durur.
           AnimatedPositioned(
             duration: const Duration(milliseconds: 350),
             curve: Curves.easeOut,
             left: 0,
             right: 0,
-            bottom: _showTabbar ? 0 : -120,
+            bottom: _showTabbar ? 0 : -(160 + bottomInset),
             child: SafeArea(child: _detailTabbar()),
           ),
         ],
@@ -260,7 +327,7 @@ class _DetailScreenState extends State<DetailScreen> {
   Widget _hero() {
     final images = _images;
     return SizedBox(
-      height: 270,
+      height: 350,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -278,7 +345,7 @@ class _DetailScreenState extends State<DetailScreen> {
               itemCount: images.length,
               onPageChanged: (i) => setState(() => _photo = i),
               itemBuilder: (_, i) => GestureDetector(
-                onTap: _openGallery,
+                onTap: _openGalleryGrid,
                 child: NetImage(images[i]),
               ),
             ),
@@ -322,13 +389,16 @@ class _DetailScreenState extends State<DetailScreen> {
           children: [
             _roundBtn(Icons.chevron_left, AppColors.primary,
                 () => Navigator.pop(context)),
-            _roundBtn(
-              _liked ? Icons.favorite : Icons.favorite_border,
-              _liked ? AppColors.heart : const Color(0xFFC8C8D4),
-              () => setState(() {
-                _liked = !_liked;
-                widget.place.favorite = _liked;
-              }),
+            ValueListenableBuilder<Set<int>>(
+              valueListenable: FavoritesService.instance.ids,
+              builder: (_, ids, __) {
+                final fav = ids.contains(widget.place.id);
+                return _roundBtn(
+                  fav ? Icons.favorite : Icons.favorite_border,
+                  fav ? AppColors.heart : const Color(0xFFC8C8D4),
+                  _toggleFav,
+                );
+              },
             ),
           ],
         ),
@@ -357,9 +427,12 @@ class _DetailScreenState extends State<DetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        (d != null && d.kategoriler.isNotEmpty)
-            ? _categoryBadges(d)
-            : _badge(Icons.storefront_outlined, _typeLabel),
+        () {
+          final cats = d != null ? _visibleCategories(d) : const <Category>[];
+          return cats.isNotEmpty
+              ? _categoryBadges(cats)
+              : _badge(Icons.storefront_outlined, _typeLabel);
+        }(),
         const SizedBox(height: 12),
         Text(_name,
             style: const TextStyle(
@@ -423,6 +496,8 @@ class _DetailScreenState extends State<DetailScreen> {
       _divider(),
       _sectionH('Bilgiler'),
       ..._infoRows(d),
+      const SizedBox(height: 16),
+      _reviewButton(),
       if (d.filtreler.isNotEmpty) ...[
         _divider(),
         _sectionH('Olanaklar'),
@@ -435,7 +510,95 @@ class _DetailScreenState extends State<DetailScreen> {
             style: const TextStyle(
                 fontSize: 14, height: 1.65, color: AppColors.muted)),
       ],
+      _divider(),
+      _sectionH('Hakkımızda'),
+      const Text(
+        'Gezgah, şehrin en iyi mekanlarını keşfetmeni sağlayan yerel bir rehberdir. '
+        'Restoranlardan kafelere, plajlardan mesire alanlarına kadar özenle seçilmiş '
+        'mekanları; güncel bilgileri, fotoğrafları ve kullanıcı deneyimleriyle bir '
+        'araya getiriyoruz. Amacımız, gitmek istediğin yeri kolayca bulman ve keyifli '
+        'bir deneyim yaşaman.',
+        style: TextStyle(fontSize: 14, height: 1.65, color: AppColors.muted),
+      ),
+      if (_similar.isNotEmpty) ...[
+        _divider(),
+        _sectionH('Benzer Mekanlar'),
+        _similarRail(),
+      ],
     ];
+  }
+
+  /// Benzer mekanlar rayı — Etkinlikler rayıyla aynı yatay kart şablonu.
+  Widget _similarRail() {
+    return SizedBox(
+      height: 196,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.zero,
+        itemCount: _similar.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 14),
+        itemBuilder: (_, i) => _similarCard(_similar[i]),
+      ),
+    );
+  }
+
+  Widget _similarCard(Place p) {
+    final location = p.distance.isNotEmpty ? p.distance : p.subtitle;
+    return SizedBox(
+      width: 190,
+      child: GestureDetector(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => DetailScreen(place: p)),
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.line),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                  height: 116, width: double.infinity, child: NetImage(p.image)),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 11, 12, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(p.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primary)),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on_outlined,
+                            size: 13, color: AppColors.primary),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                              location.isNotEmpty ? location : 'Mekan',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 12, color: AppColors.muted)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _errorNote() {
@@ -507,12 +670,12 @@ class _DetailScreenState extends State<DetailScreen> {
 
   /// Başlık üstündeki kategori rozetleri (`kategoriler`). Birden fazlaysa hepsi
   /// gösterilir; kategori ikonu id'ye göre (HomeConfig) belirlenir.
-  Widget _categoryBadges(PlaceDetail d) {
+  Widget _categoryBadges(List<Category> cats) {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
-        for (final c in d.kategoriler) _badge(HomeConfig.iconFor(c.id), c.name),
+        for (final c in cats) _badge(HomeConfig.iconFor(c.id), c.name),
       ],
     );
   }
@@ -764,39 +927,68 @@ class _DetailScreenState extends State<DetailScreen> {
     );
   }
 
-  List<Widget> _infoRows(PlaceDetail d) {
-    final rows = <Widget>[];
+  List<Widget>
+      _infoRows(PlaceDetail d) {
+    final specs = <
+        ({IconData icon, String title, String value, VoidCallback? onTap})>[];
     if (d.calismaSaatleri.isNotEmpty) {
-      rows.add(_infoRow(Icons.schedule, 'Çalışma Saatleri', _hoursSummary(d),
-          onTap: () => _openHoursSheet(d)));
+      specs.add((
+        icon: Icons.schedule,
+        title: 'Çalışma Saatleri',
+        value: _hoursSummary(d),
+        onTap: () => _openHoursSheet(d)
+      ));
     }
     if (d.adres.isNotEmpty) {
-      rows.add(_infoRow(Icons.location_on_outlined, 'Adres', d.adres,
-          onTap: () => _copy(d.adres, 'Adres')));
+      specs.add((
+        icon: Icons.location_on_outlined,
+        title: 'Adres',
+        value: d.adres,
+        onTap: () => _copy(d.adres, 'Adres')
+      ));
     }
     if (d.telefon.isNotEmpty) {
-      rows.add(_infoRow(Icons.phone_outlined, 'İletişim', d.telefon,
-          onTap: () => _copy(d.telefon, 'Numara')));
+      specs.add((
+        icon: Icons.phone_outlined,
+        title: 'İletişim',
+        value: d.telefon,
+        onTap: () => _copy(d.telefon, 'Numara')
+      ));
     }
     if (d.email.isNotEmpty) {
-      rows.add(_infoRow(Icons.mail_outline, 'E-posta', d.email,
-          onTap: () => _copy(d.email, 'E-posta')));
+      specs.add((
+        icon: Icons.mail_outline,
+        title: 'E-posta',
+        value: d.email,
+        onTap: () => _copy(d.email, 'E-posta')
+      ));
     }
-    if (rows.isEmpty) {
-      rows.add(_infoRow(Icons.info_outline, 'Bilgi',
-          'Bu mekan için ek bilgi girilmemiş.'));
+    if (specs.isEmpty) {
+      specs.add((
+        icon: Icons.info_outline,
+        title: 'Bilgi',
+        value: 'Bu mekan için ek bilgi girilmemiş.',
+        onTap: null
+      ));
     }
-    return rows;
+    // Son satırda alt çizgi olmasın.
+    return [
+      for (var i = 0; i < specs.length; i++)
+        _infoRow(specs[i].icon, specs[i].title, specs[i].value,
+            onTap: specs[i].onTap, showBorder: i != specs.length - 1),
+    ];
   }
 
   Widget _infoRow(IconData icon, String title, String value,
-      {VoidCallback? onTap}) {
+      {VoidCallback? onTap, bool showBorder = true}) {
     return InkWell(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 13),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: AppColors.line)),
+        decoration: BoxDecoration(
+          border: showBorder
+              ? const Border(bottom: BorderSide(color: AppColors.line))
+              : null,
         ),
         child: Row(
           children: [
@@ -845,6 +1037,104 @@ class _DetailScreenState extends State<DetailScreen> {
       SnackBar(
           content: Text('$label kopyalandı'),
           duration: const Duration(seconds: 2)),
+    );
+  }
+
+  /// "Değerlendirme Yap" — Bilgiler'in altındaki tam genişlikte buton.
+  Widget _reviewButton() {
+    return GestureDetector(
+      onTap: _openReviewSheet,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 15),
+        decoration: BoxDecoration(
+          color: AppColors.primary,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.star_border_rounded, size: 20, color: Colors.white),
+            SizedBox(width: 8),
+            Text('Değerlendirme Yap',
+                style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Alttan açılan değerlendirme modalı (yıldız + yorum). Gönderilirse fake
+  /// başarı modalı gösterilir.
+  Future<void> _openReviewSheet() async {
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (_) => _ReviewSheet(placeName: _name),
+    );
+    if (ok == true && mounted) _showReviewSuccess();
+  }
+
+  /// Değerlendirme gönderildiğinde gösterilen (fake) başarı modalı.
+  void _showReviewSuccess() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: const BoxDecoration(
+                    color: Color(0xFFF0FBF4), shape: BoxShape.circle),
+                child: const Icon(Icons.check_rounded,
+                    size: 34, color: AppColors.open),
+              ),
+              const SizedBox(height: 16),
+              const Text('Teşekkürler!',
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primary)),
+              const SizedBox(height: 8),
+              const Text('Değerlendirmen başarıyla alındı.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13.5, color: AppColors.muted)),
+              const SizedBox(height: 20),
+              GestureDetector(
+                onTap: () => Navigator.pop(ctx),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Center(
+                    child: Text('Tamam',
+                        style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -1031,19 +1321,18 @@ class _DetailScreenState extends State<DetailScreen> {
     );
   }
 
-  /// Görsele dokununca fancybox tarzı tam ekran görüntüleyici (yakınlaştır +
-  /// kaydır) açar.
-  void _openGallery() {
+  /// Hero görseline dokununca: tek fotoğraf varsa doğrudan tam ekran
+  /// görüntüleyici (fancybox), birden fazla varsa önce mozaik foto ızgarası
+  /// açılır; ızgaradaki fotoğrafa dokununca görüntüleyici açılır.
+  void _openGalleryGrid() {
     final images = _images;
     if (images.isEmpty) return;
-    Navigator.of(context).push(PageRouteBuilder(
-      opaque: false,
-      barrierColor: Colors.black,
-      transitionDuration: const Duration(milliseconds: 220),
-      pageBuilder: (_, __, ___) =>
-          _GalleryViewer(images: images, initialIndex: _photo),
-      transitionsBuilder: (_, anim, __, child) =>
-          FadeTransition(opacity: anim, child: child),
+    if (images.length == 1) {
+      openGalleryViewer(context, images, 0);
+      return;
+    }
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => _GalleryGridScreen(title: _name, images: images),
     ));
   }
 
@@ -1065,14 +1354,26 @@ class _DetailScreenState extends State<DetailScreen> {
     return FloatingTabBarShell(
       onKedyTap: () => showKedyChat(context),
       items: [
-        TabItemData(Icons.event_available_outlined, 'Rezerve', false, () {}),
-        TabItemData(Icons.phone_outlined, 'Telefon', false, () {}),
+        TabItemData(Icons.event_available_outlined, 'Rezerve', false, () {},
+            svg: _svgReserve),
+        TabItemData(Icons.phone_outlined, 'Telefon', false, () {},
+            svg: _svgPhone),
         null,
-        TabItemData(Icons.calendar_today_outlined, 'Etkinlik', false, () {}),
-        TabItemData(Icons.qr_code_2, 'QR', false, _openMenu),
+        TabItemData(Icons.calendar_today_outlined, 'Etkinlik', false, () {},
+            svg: FloatingTabBar.svgEvent),
+        TabItemData(Icons.qr_code_2, 'Menü', false, _openMenu, svg: _svgQr),
       ],
     );
   }
+
+  // Detay footer ikonları (Font Awesome). "Etkinlik" ana sayfayla aynı ikonu
+  // (FloatingTabBar.svgEvent) kullanır.
+  static const String _svgReserve =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M336 0c8.8 0 16 7.2 16 16l0 48 32 0c35.3 0 64 28.7 64 64l0 288c0 35.3-28.7 64-64 64L64 480c-35.3 0-64-28.7-64-64L0 128C0 92.7 28.7 64 64 64l32 0 0-48c0-8.8 7.2-16 16-16s16 7.2 16 16l0 48 192 0 0-48c0-8.8 7.2-16 16-16zM64 96c-17.7 0-32 14.3-32 32l0 288c0 17.7 14.3 32 32 32l320 0c17.7 0 32-14.3 32-32l0-288c0-17.7-14.3-32-32-32L64 96zm243.1 86.6c5.2-7.1 15.2-8.7 22.3-3.5s8.7 15.2 3.5 22.3l-128 176c-2.8 3.8-7 6.2-11.7 6.5s-9.3-1.3-12.6-4.6l-64-64c-6.2-6.2-6.2-16.4 0-22.6s16.4-6.2 22.6 0l50.7 50.7 117-160.8z"/></svg>';
+  static const String _svgPhone =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M144.4 42.7c-3.4-8-12.2-12.3-20.6-10.1l-6.7 1.8C63.9 49 22.1 99.1 34.2 157.4 67.6 318 194.1 444.4 354.7 477.9 412.9 490 463.1 448.2 477.6 394.9l1.8-6.7c2.3-8.4-2-17.2-10.1-20.6l-93.3-38.9c-7.1-2.9-15.2-.9-20.1 5l-36.6 44.7c-4.7 5.7-12.6 7.5-19.2 4.3-75-35.6-135-97.6-168.1-174-2.8-6.6-1-14.2 4.6-18.7l41.6-34.1c5.9-4.8 8-13 5-20.1L144.4 42.7zm-29-40.9c23.9-6.5 49 5.7 58.5 28.6l38.9 93.3c8.4 20.1 2.6 43.4-14.3 57.2l-32.1 26.3c29 60.5 77.1 110.2 136.3 141.3l28.5-34.9c13.8-16.9 37-22.7 57.2-14.3l93.3 38.9c22.9 9.5 35.1 34.6 28.6 58.5l-1.8 6.7C490.8 468.3 427.2 525.6 348.2 509.2 175.1 473.2 38.9 337 2.9 163.9-13.6 84.8 43.7 21.3 108.7 3.6l6.7-1.8z"/></svg>';
+  static const String _svgQr =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M0 64C0 28.7 28.7 0 64 0l80 0c8.8 0 16 7.2 16 16s-7.2 16-16 16L64 32C46.3 32 32 46.3 32 64l0 80c0 8.8-7.2 16-16 16S0 152.8 0 144L0 64zm512 0l0 80c0 8.8-7.2 16-16 16s-16-7.2-16-16l0-80c0-17.7-14.3-32-32-32l-80 0c-8.8 0-16-7.2-16-16s7.2-16 16-16l80 0c35.3 0 64 28.7 64 64zM64 512c-35.3 0-64-28.7-64-64l0-80c0-8.8 7.2-16 16-16s16 7.2 16 16l0 80c0 17.7 14.3 32 32 32l80 0c8.8 0 16 7.2 16 16s-7.2 16-16 16l-80 0zm448-64c0 35.3-28.7 64-64 64l-80 0c-8.8 0-16-7.2-16-16s7.2-16 16-16l80 0c17.7 0 32-14.3 32-32l0-80c0-8.8 7.2-16 16-16s16 7.2 16 16l0 80zM144 128c-8.8 0-16 7.2-16 16l0 48c0 8.8 7.2 16 16 16l48 0c8.8 0 16-7.2 16-16l0-48c0-8.8-7.2-16-16-16l-48 0zM96 144c0-26.5 21.5-48 48-48l48 0c26.5 0 48 21.5 48 48l0 48c0 26.5-21.5 48-48 48l-48 0c-26.5 0-48-21.5-48-48l0-48zm272-16l-48 0c-8.8 0-16 7.2-16 16l0 48c0 8.8 7.2 16 16 16l48 0c8.8 0 16-7.2 16-16l0-48c0-8.8-7.2-16-16-16zM320 96l48 0c26.5 0 48 21.5 48 48l0 48c0 26.5-21.5 48-48 48l-48 0c-26.5 0-48-21.5-48-48l0-48c0-26.5 21.5-48 48-48zM144 304c-8.8 0-16 7.2-16 16l0 48c0 8.8 7.2 16 16 16l48 0c8.8 0 16-7.2 16-16l0-48c0-8.8-7.2-16-16-16l-48 0zM96 320c0-26.5 21.5-48 48-48l48 0c26.5 0 48 21.5 48 48l0 48c0 26.5-21.5 48-48 48l-48 0c-26.5 0-48-21.5-48-48l0-48zm232-16a24 24 0 1 1 -48 0 24 24 0 1 1 48 0zM304 408a24 24 0 1 1 0-48 24 24 0 1 1 0 48zM408 304a24 24 0 1 1 -48 0 24 24 0 1 1 48 0zM384 408a24 24 0 1 1 0-48 24 24 0 1 1 0 48z"/></svg>';
 }
 
 /// Tam ekran görsel görüntüleyici (fancybox tarzı): kaydırılabilir galeri,
@@ -1156,6 +1457,286 @@ class _GalleryViewerState extends State<_GalleryViewer> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Fancybox tarzı tam ekran görüntüleyiciyi [index]'ten açar (galeri + zoom).
+void openGalleryViewer(BuildContext context, List<String> images, int index) {
+  if (images.isEmpty) return;
+  Navigator.of(context).push(PageRouteBuilder(
+    opaque: false,
+    barrierColor: Colors.black,
+    transitionDuration: const Duration(milliseconds: 220),
+    pageBuilder: (_, __, ___) =>
+        _GalleryViewer(images: images, initialIndex: index),
+    transitionsBuilder: (_, anim, __, child) =>
+        FadeTransition(opacity: anim, child: child),
+  ));
+}
+
+/// Mekan fotoğraflarını mozaik ızgarada gösteren sayfa. Bir fotoğrafa
+/// dokununca ilgili indeksten [openGalleryViewer] (fancybox) açılır.
+class _GalleryGridScreen extends StatelessWidget {
+  final String title;
+  final List<String> images;
+  const _GalleryGridScreen({required this.title, required this.images});
+
+  static const double _gap = 8;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _header(context),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(14, 6, 14, 28),
+                children: _mosaic(context),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _header(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 12, 6),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back, color: AppColors.primary),
+            onPressed: () => Navigator.pop(context),
+          ),
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary),
+            ),
+          ),
+          Text('${images.length} fotoğraf',
+              style: const TextStyle(fontSize: 12.5, color: AppColors.muted)),
+        ],
+      ),
+    );
+  }
+
+  /// Görselleri 3'erli mozaik bloklarına böler; blok sırasına göre uzun taraf
+  /// sağ/sol arasında değişir. Kalan 1-2 görsel tam/iki-eşit satırla yerleşir.
+  List<Widget> _mosaic(BuildContext context) {
+    final rows = <Widget>[];
+    var i = 0;
+    var unit = 0;
+    while (i < images.length) {
+      final left = images.length - i;
+      if (left >= 3) {
+        rows.add(_trio(context, i, tallLeft: unit.isEven));
+        i += 3;
+        unit++;
+      } else if (left == 2) {
+        rows.add(_pair(context, i));
+        i += 2;
+      } else {
+        rows.add(_single(context, i));
+        i += 1;
+      }
+      rows.add(const SizedBox(height: _gap));
+    }
+    return rows;
+  }
+
+  Widget _tile(BuildContext context, int index, {double? height}) {
+    return GestureDetector(
+      onTap: () => openGalleryViewer(context, images, index),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          height: height,
+          width: double.infinity,
+          child: NetImage(images[index]),
+        ),
+      ),
+    );
+  }
+
+  /// Üç görsellik mozaik satırı: bir tarafta tam yükseklikte tek görsel,
+  /// diğer tarafta üst üste iki görsel.
+  Widget _trio(BuildContext context, int i, {required bool tallLeft}) {
+    const h = 250.0;
+    final tall = Expanded(
+      flex: 6,
+      child: _tile(context, tallLeft ? i : i + 2, height: h),
+    );
+    final stack = Expanded(
+      flex: 5,
+      child: SizedBox(
+        height: h,
+        child: Column(
+          children: [
+            Expanded(child: _tile(context, tallLeft ? i + 1 : i)),
+            const SizedBox(height: _gap),
+            Expanded(child: _tile(context, tallLeft ? i + 2 : i + 1)),
+          ],
+        ),
+      ),
+    );
+    return SizedBox(
+      height: h,
+      child: Row(
+        children: tallLeft
+            ? [tall, const SizedBox(width: _gap), stack]
+            : [stack, const SizedBox(width: _gap), tall],
+      ),
+    );
+  }
+
+  Widget _pair(BuildContext context, int i) {
+    return SizedBox(
+      height: 170,
+      child: Row(
+        children: [
+          Expanded(child: _tile(context, i, height: 170)),
+          const SizedBox(width: _gap),
+          Expanded(child: _tile(context, i + 1, height: 170)),
+        ],
+      ),
+    );
+  }
+
+  Widget _single(BuildContext context, int i) => _tile(context, i, height: 210);
+}
+
+/// Alttan açılan değerlendirme modalı: yıldız puanı + yorum alanı + Gönder.
+/// Gönderilince `Navigator.pop(context, true)` ile kapanır (fake akış).
+class _ReviewSheet extends StatefulWidget {
+  final String placeName;
+  const _ReviewSheet({required this.placeName});
+
+  @override
+  State<_ReviewSheet> createState() => _ReviewSheetState();
+}
+
+class _ReviewSheetState extends State<_ReviewSheet> {
+  int _rating = 0;
+  final TextEditingController _comment = TextEditingController();
+
+  @override
+  void dispose() {
+    _comment.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final keyboard = MediaQuery.of(context).viewInsets.bottom;
+    final canSend = _rating > 0;
+    return Padding(
+      padding: EdgeInsets.only(bottom: keyboard),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 12, 22, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: AppColors.line,
+                      borderRadius: BorderRadius.circular(999)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('Değerlendirme Yap',
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primary)),
+              const SizedBox(height: 4),
+              Text(widget.placeName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13, color: AppColors.muted)),
+              const SizedBox(height: 18),
+              Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (var i = 1; i <= 5; i++)
+                      GestureDetector(
+                        onTap: () => setState(() => _rating = i),
+                        behavior: HitTestBehavior.opaque,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Icon(
+                            i <= _rating
+                                ? Icons.star_rounded
+                                : Icons.star_border_rounded,
+                            size: 40,
+                            color: i <= _rating
+                                ? AppColors.star
+                                : const Color(0xFFCBCCD8),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              TextField(
+                controller: _comment,
+                maxLines: 4,
+                style: const TextStyle(fontSize: 14, color: AppColors.primary),
+                decoration: InputDecoration(
+                  hintText: 'Deneyimini paylaş (opsiyonel)',
+                  hintStyle: const TextStyle(color: AppColors.muted),
+                  filled: true,
+                  fillColor: const Color(0xFFF4F5F9),
+                  contentPadding: const EdgeInsets.all(14),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              GestureDetector(
+                onTap: canSend ? () => Navigator.pop(context, true) : null,
+                child: Opacity(
+                  opacity: canSend ? 1 : 0.5,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Center(
+                      child: Text('Gönder',
+                          style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white)),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

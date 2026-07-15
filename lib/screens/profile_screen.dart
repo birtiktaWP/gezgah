@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:pdfrx/pdfrx.dart';
 import '../data/auth_service.dart';
-import '../data/mock_data.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
+import 'favorites_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final VoidCallback onGoHome;
@@ -19,10 +20,28 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  static const String _avatar =
-      'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=70';
+  // Sözleşme PDF'leri (assets/legal). (başlık, asset yolu)
+  static const List<(String, String)> _legalDocs = [
+    ('Kullanıcı Sözleşmesi', 'assets/legal/kullanici-sozlesmesi.pdf'),
+    ('Gizlilik Politikası', 'assets/legal/gizlilik-politikasi.pdf'),
+    ('KVKK Aydınlatma Metni', 'assets/legal/kvkk.pdf'),
+    ('Açık Rıza Metni', 'assets/legal/acik-riza-metni.pdf'),
+  ];
 
   AppUser? get _user => AuthService.instance.user.value;
+
+  /// Ad/soyaddan baş harf(ler) — avatar yerine kullanılır.
+  String get _initials {
+    final parts = _displayName
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return 'Ü';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return (parts.first.substring(0, 1) + parts[1].substring(0, 1))
+        .toUpperCase();
+  }
 
   /// Kartta gösterilecek ad (yoksa e-posta ön eki, o da yoksa "Üye").
   String get _displayName {
@@ -53,15 +72,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   'Ad, e-posta, telefon',
                   onTap: _openProfileEdit),
               _row(Icons.favorite_border, 'Favorilerim',
-                  'Kaydettiğin mekanlar'),
+                  'Kaydettiğin mekanlar',
+                  onTap: _openFavorites),
               _row(Icons.lock_outline, 'Şifre Değiştir',
                   'Hesap parolanı güncelle',
                   onTap: _openPasswordChange),
             ]),
             _group('Sözleşmeler', [
-              for (final entry in MockData.documents.entries)
-                _row(_docIcon(entry.key), entry.key, _docSub(entry.key),
-                    onTap: () => _openDoc(entry.key, entry.value)),
+              for (final d in _legalDocs)
+                _row(_docIcon(d.$1), d.$1, _docSub(d.$1),
+                    onTap: () => _openDoc(d.$1, d.$2)),
             ]),
             _group(null, [
               _row(Icons.logout, 'Çıkış Yap', null,
@@ -114,8 +134,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return Icons.shield_outlined;
       case 'KVKK Aydınlatma Metni':
         return Icons.lock_outline;
-      case 'Çerez Politikası':
-        return Icons.cookie_outlined;
+      case 'Açık Rıza Metni':
+        return Icons.how_to_reg_outlined;
       default:
         return Icons.description_outlined;
     }
@@ -129,8 +149,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return 'Verilerinin korunması';
       case 'KVKK Aydınlatma Metni':
         return 'Kişisel veri politikası';
+      case 'Açık Rıza Metni':
+        return 'Onay ve izin beyanları';
       default:
-        return 'Çerez tercihleri';
+        return '';
     }
   }
 
@@ -190,9 +212,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       child: Row(
         children: [
-          ClipOval(
-            child: SizedBox(
-                width: 54, height: 54, child: NetImage(_avatar)),
+          Container(
+            width: 54,
+            height: 54,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withValues(alpha: 0.2),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.4)),
+            ),
+            child: Text(_initials,
+                style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white)),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -369,35 +402,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _openDoc(String title, String body) {
+  void _openDoc(String title, String asset) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _DocSheet(title: title, body: body),
+      builder: (_) => _PdfSheet(title: title, asset: asset),
     );
   }
 
   void _openProfileEdit() {
     final u = _user;
+    if (u == null) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _ProfileEditSheet(
-        name: u?.fullName ?? '',
-        email: u?.email ?? '',
-        avatar: _avatar,
-        onSave: (n, e) {
-          // "Ad Soyad" metnini ad + soyad olarak ayır.
-          final parts =
-              n.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
-          final first = parts.isNotEmpty ? parts.first : '';
-          final last = parts.length > 1 ? parts.sublist(1).join(' ') : '';
-          AuthService.instance
-              .updateProfile(isim: first, soyisim: last, email: e.trim());
-        },
-      ),
+      builder: (_) => _ProfileEditSheet(user: u),
+    );
+  }
+
+  void _openFavorites() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const FavoritesScreen()),
     );
   }
 
@@ -562,61 +590,129 @@ class _SettingsSheetState extends State<_SettingsSheet> {
       );
 }
 
-class _DocSheet extends StatelessWidget {
+/// Sözleşme PDF'ini modal içinde gösterir (assets/legal).
+class _PdfSheet extends StatelessWidget {
   final String title;
-  final String body;
-  const _DocSheet({required this.title, required this.body});
+  final String asset;
+  const _PdfSheet({required this.title, required this.asset});
 
   @override
   Widget build(BuildContext context) {
     return _SheetScaffold(
       title: title,
       backArrow: true,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
-        children: [
-          const Text('Son güncelleme: 1 Haziran 2026',
-              style: TextStyle(fontSize: 12.5, color: AppColors.muted)),
-          const SizedBox(height: 16),
-          Text(body,
-              style: const TextStyle(
-                  fontSize: 14, height: 1.7, color: AppColors.ink)),
-        ],
+      child: ColoredBox(
+        color: const Color(0xFFEDEDF3),
+        child: PdfViewer.asset(
+          asset,
+          params: const PdfViewerParams(
+            margin: 8,
+            backgroundColor: Color(0xFFEDEDF3),
+          ),
+        ),
       ),
     );
   }
 }
 
+/// Profil düzenleme paneli — `/uye/guncelle` (UYE_LOGIN.md). Avatar yoktur;
+/// ad, soyad, e-posta, telefon, cinsiyet, doğum günü ve ilçe güncellenebilir.
 class _ProfileEditSheet extends StatefulWidget {
-  final String name;
-  final String email;
-  final String avatar;
-  final void Function(String name, String email) onSave;
-  const _ProfileEditSheet({
-    required this.name,
-    required this.email,
-    required this.avatar,
-    required this.onSave,
-  });
+  final AppUser user;
+  const _ProfileEditSheet({required this.user});
 
   @override
   State<_ProfileEditSheet> createState() => _ProfileEditSheetState();
 }
 
 class _ProfileEditSheetState extends State<_ProfileEditSheet> {
-  late final TextEditingController _nameC =
-      TextEditingController(text: widget.name);
+  late final TextEditingController _isimC =
+      TextEditingController(text: widget.user.isim);
+  late final TextEditingController _soyisimC =
+      TextEditingController(text: widget.user.soyisim);
   late final TextEditingController _emailC =
-      TextEditingController(text: widget.email);
-  late final TextEditingController _phoneC =
-      TextEditingController(text: '+90 555 000 00 00');
+      TextEditingController(text: widget.user.email);
+  late final TextEditingController _telefonC =
+      TextEditingController(text: widget.user.telefon);
+
+  late String _cinsiyet = widget.user.cinsiyet; // '' | erkek | kadin | diger
+  late String _dogumGunu = widget.user.dogumGunu; // '' | YYYY-MM-DD
+  late int? _ilceId = widget.user.ilceId;
+
+  List<Ilce> _ilceler = const [];
+  bool _ilcelerLoading = true;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadIlceler();
+  }
+
+  Future<void> _loadIlceler() async {
+    final list = await AuthService.instance.ilceler();
+    if (!mounted) return;
+    setState(() {
+      _ilceler = list;
+      _ilcelerLoading = false;
+    });
+  }
 
   @override
   void dispose() {
-    _nameC.dispose();
+    _isimC.dispose();
+    _soyisimC.dispose();
     _emailC.dispose();
-    _phoneC.dispose();
+    _telefonC.dispose();
     super.dispose();
+  }
+
+  Future<void> _save() async {
+    FocusScope.of(context).unfocus();
+    final isim = _isimC.text.trim();
+    final soyisim = _soyisimC.text.trim();
+    final email = _emailC.text.trim();
+    final telefon = _telefonC.text.trim();
+    if (isim.isEmpty || soyisim.isEmpty) {
+      setState(() => _error = 'Ad ve soyad zorunlu.');
+      return;
+    }
+    if (!email.contains('@') || !email.contains('.')) {
+      setState(() => _error = 'Geçerli bir e-posta gir.');
+      return;
+    }
+    if (telefon.replaceAll(RegExp(r'\D'), '').length < 7) {
+      setState(() => _error = 'Geçerli bir telefon gir.');
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await AuthService.instance.guncelleProfil(
+        isim: isim,
+        soyisim: soyisim,
+        email: email,
+        telefon: telefon,
+        cinsiyet: _cinsiyet,
+        dogumGunu: _dogumGunu,
+        ilceId: _ilceId,
+      );
+      if (!mounted) return;
+      Navigator.pop(context);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Profilin güncellendi.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
@@ -628,71 +724,80 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
         padding: EdgeInsets.fromLTRB(
             22, 18, 22, 24 + MediaQuery.of(context).viewInsets.bottom),
         children: [
-          Center(
-            child: Column(
-              children: [
-                Stack(
-                  children: [
-                    ClipOval(
-                      child: SizedBox(
-                          width: 88,
-                          height: 88,
-                          child: NetImage(widget.avatar)),
-                    ),
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        width: 30,
-                        height: 30,
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                        child: const Icon(Icons.camera_alt,
-                            size: 15, color: Colors.white),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(widget.name,
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 4),
-                const Text('Fotoğrafı değiştirmek için dokun',
-                    style: TextStyle(fontSize: 12.5, color: AppColors.muted)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          _label('Ad Soyad'),
-          _field(_nameC, Icons.person_outline),
+          _label('Ad'),
+          _field(_isimC, Icons.person_outline,
+              hint: 'Adın', textCap: TextCapitalization.words),
+          const SizedBox(height: 16),
+          _label('Soyad'),
+          _field(_soyisimC, Icons.badge_outlined,
+              hint: 'Soyadın', textCap: TextCapitalization.words),
           const SizedBox(height: 16),
           _label('E-posta'),
-          _field(_emailC, Icons.mail_outline),
+          _field(_emailC, Icons.mail_outline,
+              hint: 'ornek@eposta.com',
+              keyboard: TextInputType.emailAddress),
           const SizedBox(height: 16),
           _label('Telefon'),
-          _field(_phoneC, Icons.phone_outlined),
-          const SizedBox(height: 28),
-          GestureDetector(
-            onTap: () {
-              widget.onSave(_nameC.text.trim(), _emailC.text.trim());
-              Navigator.pop(context);
-            },
-            child: Container(
-              height: 50,
-              alignment: Alignment.center,
+          _field(_telefonC, Icons.phone_outlined,
+              hint: '05xx xxx xx xx', keyboard: TextInputType.phone),
+          const SizedBox(height: 16),
+          _label('Cinsiyet'),
+          _genderSelector(),
+          const SizedBox(height: 16),
+          _label('Doğum Günü'),
+          _dateField(),
+          const SizedBox(height: 16),
+          _label('İlçe'),
+          _ilceField(),
+          if (_error != null) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(14),
+                color: const Color(0x14E0533D),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0x33E0533D)),
               ),
-              child: const Text('Değişiklikleri Kaydet',
-                  style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white)),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline,
+                      size: 18, color: AppColors.closing),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(_error!,
+                        style: const TextStyle(
+                            fontSize: 12.5,
+                            color: AppColors.closing,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 26),
+          SizedBox(
+            height: 50,
+            child: ElevatedButton(
+              onPressed: _busy ? null : _save,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor:
+                    AppColors.primary.withValues(alpha: 0.6),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
+              child: _busy
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.5, color: Colors.white),
+                    )
+                  : const Text('Değişiklikleri Kaydet',
+                      style: TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.w700)),
             ),
           ),
         ],
@@ -707,7 +812,10 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
                 const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
       );
 
-  Widget _field(TextEditingController c, IconData icon) {
+  Widget _field(TextEditingController c, IconData icon,
+      {String? hint,
+      TextInputType? keyboard,
+      TextCapitalization textCap = TextCapitalization.none}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
@@ -722,16 +830,180 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
           Expanded(
             child: TextField(
               controller: c,
-              decoration: const InputDecoration(
+              keyboardType: keyboard,
+              textCapitalization: textCap,
+              decoration: InputDecoration(
+                hintText: hint,
+                hintStyle: const TextStyle(color: AppColors.muted),
                 border: InputBorder.none,
                 isCollapsed: true,
-                contentPadding: EdgeInsets.symmetric(vertical: 15),
+                contentPadding: const EdgeInsets.symmetric(vertical: 15),
               ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _shell({required Widget child}) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        height: 50,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.line),
+        ),
+        child: child,
+      );
+
+  Widget _genderSelector() {
+    return Row(
+      children: [
+        _genderChip('kadin', 'Kadın'),
+        const SizedBox(width: 10),
+        _genderChip('erkek', 'Erkek'),
+        const SizedBox(width: 10),
+        _genderChip('diger', 'Diğer'),
+      ],
+    );
+  }
+
+  Widget _genderChip(String val, String label) {
+    final sel = _cinsiyet == val;
+    return Expanded(
+      child: GestureDetector(
+        // Seçiliye tekrar dokununca temizlenir (boş = belirtilmemiş).
+        onTap: () => setState(() => _cinsiyet = sel ? '' : val),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 13),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: sel ? AppColors.primary : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: sel ? AppColors.primary : AppColors.line),
+          ),
+          child: Text(label,
+              style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: sel ? Colors.white : AppColors.ink)),
+        ),
+      ),
+    );
+  }
+
+  Widget _dateField() {
+    final has = _dogumGunu.isNotEmpty;
+    return _shell(
+      child: Row(
+        children: [
+          const Icon(Icons.cake_outlined, size: 19, color: AppColors.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: GestureDetector(
+              onTap: _pickDate,
+              behavior: HitTestBehavior.opaque,
+              child: Text(has ? _formatTr(_dogumGunu) : 'Tarih seç',
+                  style: TextStyle(
+                      fontSize: 14,
+                      color: has ? AppColors.ink : AppColors.muted)),
+            ),
+          ),
+          if (has)
+            GestureDetector(
+              onTap: () => setState(() => _dogumGunu = ''),
+              child: const Icon(Icons.close, size: 18, color: AppColors.muted),
+            )
+          else
+            const Icon(Icons.chevron_right, size: 20, color: AppColors.primary),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickDate() async {
+    FocusScope.of(context).unfocus();
+    var init = DateTime(2000, 1, 1);
+    final parsed = DateTime.tryParse(_dogumGunu);
+    if (parsed != null) init = parsed;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: init,
+      firstDate: DateTime(1920),
+      lastDate: DateTime.now(),
+      helpText: 'Doğum Günü',
+    );
+    if (picked != null) {
+      final m = picked.month.toString().padLeft(2, '0');
+      final d = picked.day.toString().padLeft(2, '0');
+      setState(() => _dogumGunu = '${picked.year}-$m-$d');
+    }
+  }
+
+  /// "YYYY-MM-DD" → "GG.AA.YYYY".
+  String _formatTr(String iso) {
+    final p = iso.split('-');
+    if (p.length != 3) return iso;
+    return '${p[2]}.${p[1]}.${p[0]}';
+  }
+
+  Widget _ilceField() {
+    if (_ilcelerLoading) {
+      return _shell(
+        child: Row(
+          children: const [
+            Icon(Icons.location_city_outlined,
+                size: 19, color: AppColors.primary),
+            SizedBox(width: 12),
+            Text('İlçeler yükleniyor…',
+                style: TextStyle(fontSize: 14, color: AppColors.muted)),
+            Spacer(),
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: AppColors.primary),
+            ),
+          ],
+        ),
+      );
+    }
+    return _shell(
+      child: Row(
+        children: [
+          const Icon(Icons.location_city_outlined,
+              size: 19, color: AppColors.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<int?>(
+                isExpanded: true,
+                value: _validIlceValue(),
+                icon: const Icon(Icons.keyboard_arrow_down,
+                    color: AppColors.primary),
+                hint: const Text('İlçe seç',
+                    style: TextStyle(fontSize: 14, color: AppColors.muted)),
+                style: const TextStyle(fontSize: 14, color: AppColors.ink),
+                items: [
+                  const DropdownMenuItem<int?>(
+                      value: null, child: Text('Belirtilmemiş')),
+                  for (final il in _ilceler)
+                    DropdownMenuItem<int?>(value: il.id, child: Text(il.ad)),
+                ],
+                onChanged: (v) => setState(() => _ilceId = v),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Mevcut ilçe id listede yoksa dropdown'ı null'a düşür (assertion'ı önler).
+  int? _validIlceValue() {
+    if (_ilceId == null) return null;
+    return _ilceler.any((i) => i.id == _ilceId) ? _ilceId : null;
   }
 }
 

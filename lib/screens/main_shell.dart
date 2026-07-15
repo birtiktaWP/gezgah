@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import '../data/auth_service.dart';
 import '../data/models.dart';
@@ -111,18 +113,48 @@ class _MainShellState extends State<MainShell> {
       ),
     ];
 
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: Stack(
         children: [
           IndexedStack(index: _index, children: pages),
-          if (!_kedyOpen)
+          if (!_kedyOpen) ...[
+            // iOS tarzı buzlu cam: tab bar bölgesinden geçen içerik bulanıklaşır,
+            // üst kenarda yumuşak geçiş için maskelenir (tam gözükmez).
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 140 + bottomInset,
+              child: IgnorePointer(
+                child: ShaderMask(
+                  shaderCallback: (r) => const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, Colors.black],
+                    stops: [0.0, 0.55],
+                  ).createShader(r),
+                  blendMode: BlendMode.dstIn,
+                  child: ClipRect(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                      child: Container(
+                        color: Colors.white.withValues(alpha: 0.3),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
             Align(
               alignment: Alignment.bottomCenter,
               child: SafeArea(
                 child: FloatingTabBar(activeIndex: _index, onTap: _onTab),
               ),
             ),
+          ],
         ],
       ),
     );

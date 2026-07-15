@@ -77,7 +77,19 @@ class _MapScreenState extends State<MapScreen> {
     // Kategori sayfasından gelindiyse o kategoriyi seçili yap.
     final wantId = widget.initialCategoryId;
     if (wantId != null) {
-      final idx = _cats.indexWhere((c) => c.id == wantId);
+      var idx = _cats.indexWhere((c) => c.id == wantId);
+      // Listede yoksa (alt kategori / mekan sayısı 0), tam listeden bulup öne
+      // ekle ki sekme her zaman mevcut ve seçili gelsin.
+      if (idx == -1) {
+        try {
+          final all = await HomeRepository.instance.kategoriler();
+          final found = all.where((c) => c.id == wantId).toList();
+          if (found.isNotEmpty) {
+            _cats = [found.first, ..._cats];
+            idx = 0;
+          }
+        } catch (_) {}
+      }
       if (idx != -1) _activeCat = idx + 1; // 0 = Tümü
     }
     await _loadPlaces();

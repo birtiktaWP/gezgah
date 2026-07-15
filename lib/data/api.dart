@@ -85,12 +85,22 @@ class _SecurityInterceptor extends Interceptor {
     //    ana sayfanın açılışta boş gelmesine neden olan yarış durumunu
     //    (race condition) ortadan kaldırır (bkz. GUVENLIK.md §4).
     if (!options.headers.containsKey('Authorization')) {
+      // `ensureRegistered()` kaydı bekletir VE nihai (sunucu onaylı) token'ı
+      // döndürür. Bu değeri doğrudan kullanıyoruz; depodan yeniden okumuyoruz.
+      // Böylece register() token'ı henüz depoya yazarken interceptor'ın eski
+      // değeri okuması (yarış durumu) imkânsız hale gelir (bkz. GUVENLIK.md §4).
+      String? token;
       if (!_isDeviceRegisterPath(options.path)) {
-        await DeviceService.instance.ensureRegistered();
+        token = await DeviceService.instance.ensureRegistered();
+      } else {
+        token = await Api.instance.deviceToken;
       }
-      final token = await Api.instance.deviceToken;
       if (token != null && token.isNotEmpty) {
         options.headers['Authorization'] = 'Bearer $token';
+        // Bu isteğin cihaz token'ıyla yetkilendirildiğini işaretle; 401
+        // otomatik yenileme yalnızca bu isteklerde çalışır (üye token'lı
+        // `/uye/me` gibi çağrılar hariç).
+        options.extra['__device_auth__'] = true;
       }
     }
 
@@ -116,6 +126,46 @@ class _SecurityInterceptor extends Interceptor {
     }
 
     handler.next(options);
+  }
+
+  /// Yanıt token geçersizliği (401) gösteriyorsa: cihaz token'ını temizle,
+  /// yeniden kaydol ve isteği **bir kez** tekrarla. Cihazda eski/bayat bir
+  /// token kalmışsa (ör. sunucu DB'si sıfırlandıysa) ana sayfa sessizce boş
+  /// kalmak yerine kendi kendini onarır (bkz. GUVENLIK.md §4.2).
+  @override
+  Future<void> onResponse(
+      Response response, ResponseInterceptorHandler handler) async {
+    final opts = response.requestOptions;
+    final alreadyRetried = opts.extra['__auth_retried__'] == true;
+    final usedDeviceAuth = opts.extra['__device_auth__'] == true;
+    if (_isAuthFailure(response) &&
+        usedDeviceAuth &&
+        !_isDeviceRegisterPath(opts.path) &&
+        !alreadyRetried) {
+      try {
+        final token = await DeviceService.instance.forceReregister();
+        opts.extra['__auth_retried__'] = true;
+        if (token.isNotEmpty) {
+          opts.headers['Authorization'] = 'Bearer $token';
+        }
+        final retried = await Api.instance.dio.fetch(opts);
+        return handler.resolve(retried);
+      } catch (_) {
+        // Yeniden kayıt/tekrar başarısızsa orijinal yanıtı geçir.
+      }
+    }
+    handler.next(response);
+  }
+
+  /// Yanıt "geçerli token gerekli" (401 / success:false) durumunu gösteriyor mu?
+  bool _isAuthFailure(Response response) {
+    if (response.statusCode == 401) return true;
+    final data = response.data;
+    if (data is Map && data['success'] == false) {
+      final msg = (data['error'] is Map ? data['error']['message'] : null);
+      if (msg is String && msg.toLowerCase().contains('token')) return true;
+    }
+    return false;
   }
 
   /// `/cihaz/kayit` cihaz token'ının üretildiği yerdir; token hazırlığını
@@ -249,6 +299,50 @@ class UyeRepository {
     } catch (_) {
       return null;
     }
+  }
+
+  /// `POST /uye/guncelle` — giriş yapmış üyenin profilini günceller (kısmi).
+  /// Form tüm alanları yönettiği için hepsi gönderilir; boş `cinsiyet`/
+  /// `dogum_gunu`/`ilce_id` sunucuda ilgili alanı temizler (null). E-posta
+  /// başka hesapta ise 409 → [AuthException]. Token değişmez.
+  Future<AppUser> guncelle({
+    required String isim,
+    required String soyisim,
+    required String email,
+    required String telefon,
+    String? ulkeKodu,
+    String? cinsiyet,
+    String? dogumGunu,
+    int? ilceId,
+  }) async {
+    final token = await Api.instance.uyeToken;
+    final res = await _guard(() => _dio.post(
+          '/uye/guncelle',
+          data: {
+            'isim': isim.trim(),
+            'soyisim': soyisim.trim(),
+            'email': email.trim(),
+            'telefon': telefon.trim(),
+            if (ulkeKodu != null && ulkeKodu.isNotEmpty) 'ulke_kodu': ulkeKodu,
+            // Boş gönderim → sunucu ilgili alanı temizler (null yapar).
+            'cinsiyet': cinsiyet ?? '',
+            'dogum_gunu': dogumGunu ?? '',
+            'ilce_id': ilceId,
+          },
+          options: (token != null && token.isNotEmpty)
+              ? Options(headers: {'Authorization': 'Bearer $token'})
+              : null,
+        ));
+    final body = res.data;
+    if (body is! Map || body['success'] != true) {
+      throw AuthException(_errorMessage(body) ?? 'Profil güncellenemedi.');
+    }
+    final data = body['data'];
+    final uye = data is Map ? data['uye'] : null;
+    if (uye is! Map<String, dynamic>) {
+      throw AuthException('Profil güncellenemedi.');
+    }
+    return AppUser.fromJson(uye);
   }
 
   /// `POST /uye/sifre-degistir` — giriş yapmış üyenin parolasını değiştirir.
@@ -467,6 +561,32 @@ class ApiPlace {
         lat: lat ?? 41.0082,
         lng: lng ?? 28.9784,
         tags: const ['restoran'],
+      );
+
+  /// Yerel önbellek (disk) için serileştirme.
+  Map<String, dynamic> toCacheJson() => {
+        'id': id,
+        'name': name,
+        'image': image,
+        'lat': lat,
+        'lng': lng,
+        'sehir': sehir,
+        'ilce': ilce,
+        'category_ids': categoryIds,
+      };
+
+  factory ApiPlace.fromCache(Map<String, dynamic> j) => ApiPlace(
+        id: (j['id'] as num?)?.toInt() ?? 0,
+        name: (j['name'] as String?) ?? '',
+        image: (j['image'] as String?) ?? '',
+        lat: (j['lat'] as num?)?.toDouble(),
+        lng: (j['lng'] as num?)?.toDouble(),
+        sehir: (j['sehir'] as String?) ?? '',
+        ilce: (j['ilce'] as String?) ?? '',
+        categoryIds: (j['category_ids'] as List?)
+                ?.map((e) => (e as num).toInt())
+                .toList() ??
+            const [],
       );
 }
 
@@ -712,6 +832,18 @@ class HomeRepository {
     }
   }
 
+  /// Üst düzey (parent == 0) kategori id'leri. `/kategoriler` yalnızca üst
+  /// düzey kategorileri döndürdüğü için bu küme, "parent 0" evrenini temsil
+  /// eder. Hata durumunda boş küme döner (çağıran tarafta tümü gösterilir).
+  Future<Set<int>> ustDuzeyKategoriIdleri() async {
+    try {
+      final all = await kategoriler();
+      return {for (final c in all) if (c.isTopLevel) c.id};
+    } catch (_) {
+      return const {};
+    }
+  }
+
   /// Verilen id'lere ait kategorileri, [ids] sırasını koruyarak döner.
   Future<List<Category>> kategorilerByIds(List<int> ids) async {
     final all = await kategoriler();
@@ -754,6 +886,34 @@ class HomeRepository {
   Future<List<ApiPlace>> sponsorluRestoranlar(List<int> ids) async {
     final results = await Future.wait(ids.map(mekan));
     return results.whereType<ApiPlace>().toList();
+  }
+
+  /// Aynı kategoriden **benzer mekanlar** (detay sayfası "Benzer Mekanlar"
+  /// rayı). Mevcut mekan ([excludeId]) hariç en çok [limit] mekan döner.
+  ///
+  /// Yeni bir endpoint gerekmez: mekanın kategorisi mevcut
+  /// `/kategoriler/{id}/mekanlar` (veya tam detay) ucuyla listelenir. Sabit
+  /// (pinned) restoran varsa öne alınır; id'ler tekilleştirilir.
+  Future<List<Place>> benzerMekanlar(int categoryId,
+      {int excludeId = 0, int limit = 10}) async {
+    if (categoryId <= 0) return const [];
+    try {
+      final detail = await kategoriDetay(categoryId, page: 1, limit: limit + 6);
+      final seen = <int>{};
+      final out = <Place>[];
+      for (final p in [
+        if (detail.pinned != null) detail.pinned!,
+        ...detail.places,
+      ]) {
+        if (p.id <= 0 || p.id == excludeId) continue;
+        if (!seen.add(p.id)) continue;
+        out.add(p);
+        if (out.length >= limit) break;
+      }
+      return out;
+    } catch (_) {
+      return const [];
+    }
   }
 
   /// Bir "*-page-settings/{key}" alanındaki `restaurant_ids` dizisini çeker.
@@ -1135,5 +1295,122 @@ class HomeRepository {
     final lng = double.tryParse(parts[1].trim());
     if (lat == null || lng == null) return null;
     return (lat, lng);
+  }
+}
+
+/// Üye mekan favorileri — `/uye/favoriler` (FAVORILER.md).
+///
+/// Tüm uçlar **üye token'ı** ister (üye girişi gerekir). Cihaz token'ı yeterli
+/// değildir. Ekleme/çıkarma idempotenttir; listeleme sayfalıdır ("daha fazla
+/// yükle").
+class FavRepository {
+  FavRepository._();
+  static final FavRepository instance = FavRepository._();
+
+  Dio get _dio => Api.instance.dio;
+
+  Future<Options?> _auth() async {
+    final token = await Api.instance.uyeToken;
+    if (token == null || token.isEmpty) {
+      throw AuthException('Favoriler için giriş yapmalısın.');
+    }
+    return Options(headers: {'Authorization': 'Bearer $token'});
+  }
+
+  /// `POST /uye/favoriler` — favoriye ekler (idempotent). Başarılıysa true.
+  Future<bool> ekle(int postId) async {
+    final res = await _dio.post('/uye/favoriler',
+        data: {'post_id': postId}, options: await _auth());
+    final body = res.data;
+    return body is Map && body['success'] == true;
+  }
+
+  /// `DELETE /uye/favoriler` — favoriden çıkarır (idempotent). Başarılıysa true.
+  Future<bool> cikar(int postId) async {
+    final res = await _dio.delete('/uye/favoriler',
+        data: {'post_id': postId}, options: await _auth());
+    final body = res.data;
+    return body is Map && body['success'] == true;
+  }
+
+  /// `GET /uye/favoriler?page=&limit=` — favori mekanları (en yeni önce).
+  /// Sayfalama meta'sıyla birlikte döner.
+  Future<({List<Place> items, bool hasMore, int? nextPage})> favoriler({
+    int page = 1,
+    int limit = 20,
+  }) async {
+    final res = await _dio.get('/uye/favoriler',
+        queryParameters: {'page': page, 'limit': limit}, options: await _auth());
+    final body = res.data;
+    if (body is! Map || body['success'] != true) {
+      return (items: const <Place>[], hasMore: false, nextPage: null);
+    }
+    final data = body['data'];
+    final items = (data is List)
+        ? data.whereType<Map<String, dynamic>>().map(_favToPlace).toList()
+        : <Place>[];
+    final meta = (body['meta'] as Map?) ?? const {};
+    final hasMore = meta['has_more'] == true;
+    final nextPage = (meta['next_page'] as num?)?.toInt();
+    return (items: items, hasMore: hasMore, nextPage: nextPage);
+  }
+
+  /// Tüm favori mekan id'lerini (sayfalayarak) toplar. Uygulama genelinde
+  /// kalp durumlarını göstermek için kullanılır. Aşırı büyümeyi önlemek için
+  /// en fazla [maxPages] sayfa okunur.
+  Future<Set<int>> tumFavoriIdleri({int maxPages = 25, int limit = 50}) async {
+    final ids = <int>{};
+    var page = 1;
+    for (var i = 0; i < maxPages; i++) {
+      final r = await favoriler(page: page, limit: limit);
+      for (final p in r.items) {
+        if (p.id > 0) ids.add(p.id);
+      }
+      if (!r.hasMore || r.nextPage == null) break;
+      page = r.nextPage!;
+    }
+    return ids;
+  }
+
+  /// Favori listesi kaydını [Place]'e çevirir (kategori mekan özetiyle aynı).
+  Place _favToPlace(Map<String, dynamic> j) {
+    final img = (j['image'] ?? j['thumbnail']);
+    var image = '';
+    if (img is String && img.isNotEmpty) {
+      image = img.startsWith('http') ? img : '$kApiHost$img';
+    }
+    final sehir = (j['sehir'] ?? '').toString().trim();
+    final ilce = (j['ilce'] ?? '').toString().trim();
+    final loc = [sehir, ilce].where((s) => s.isNotEmpty).join(' · ');
+
+    double lat = double.nan, lng = double.nan;
+    final raw = j['kordinat'];
+    if (raw is String && raw.contains(',')) {
+      final parts = raw.split(',');
+      lat = double.tryParse(parts[0].trim()) ?? double.nan;
+      lng = double.tryParse(parts[1].trim()) ?? double.nan;
+    }
+
+    return Place(
+      id: (j['id'] as num?)?.toInt() ?? 0,
+      name: (j['name'] as String?)?.trim().isNotEmpty == true
+          ? j['name'] as String
+          : 'İsimsiz Mekan',
+      category: 'Restoran',
+      subtitle: loc,
+      rating: 0,
+      distance: loc,
+      price: '',
+      image: image,
+      lat: lat,
+      lng: lng,
+      tags: const ['restoran'],
+      favorite: true,
+      filterIds: (j['filtre_ids'] as List<dynamic>?)
+              ?.whereType<num>()
+              .map((e) => e.toInt())
+              .toList() ??
+          const [],
+    );
   }
 }

@@ -183,6 +183,70 @@ class _SecurityInterceptor extends Interceptor {
 Böylece ana sayfanın `FutureBuilder`'ları kayıt + veri yüklenirken yükleniyor
 göstergesi gösterir; istekler token hazır olduktan sonra gider ve 401 yaşanmaz.
 
+### 4.2 Bayat token için 401 otomatik onarımı (self-heal) — **kritik**
+
+Hazırlık kapısı (§4.1) yalnızca token'ın **hazır** olmasını garanti eder; o
+token'ın sunucuca hâlâ **geçerli** olduğunu garanti etmez. Cihazda geçersiz bir
+token kalabilir:
+
+- Sunucunun `cihaz_tokenlari` tablosu **yokken** (`POST /cihaz/kayit` → 500)
+  üretilip saklanmış ama **hiç kaydedilememiş** yerel token (bu projede yaşanan
+  kök neden — bkz. `ANASAYFA_SORUN.md`).
+- Sunucu DB'sinin sıfırlanması / token'ın silinmesi.
+
+**Doğrulandı (canlı API):** Sunucu, veri endpoint'lerinde yalnızca
+`/cihaz/kayit` ile **kaydedilmiş** token'ları kabul eder; kaydedilmemiş (rastgele
+ama geçerli formatlı) bir token'a **401** döner. Yani bayat token = kalıcı boş
+ana sayfa. Bu yüzden interceptor, 401'i sessizce yutmak yerine **kendini
+onarmalıdır**:
+
+1. Yanıt token geçersizliği gösteriyorsa (`401` veya `success:false` +
+   mesajında "token") **ve** istek cihaz token'ıyla yetkilendirilmişse (üye
+   token'lı `/uye/*` çağrıları hariç) **ve** daha önce denenmemişse:
+2. `forceReregister()` çağır: bayat token'ı sil, kayıt future'ını sıfırla,
+   **yeni** bir token üretip `POST /cihaz/kayit` ile kaydettir (eşzamanlı 401'ler
+   tek yenilemeyi paylaşsın — dedup).
+3. Yeni token'la isteği **bir kez** tekrarla (`dio.fetch(opts)`); tekrar
+   işaretini `extra`'ya koy ki döngü oluşmasın.
+
+```dart
+class DeviceService {
+  Future<String>? _refreshing;
+  Future<String> forceReregister() {
+    return _refreshing ??= () async {
+      try {
+        await Api.instance.clearDeviceToken();
+        _inflight = null;
+        return await ensureRegistered();
+      } finally {
+        _refreshing = null;
+      }
+    }();
+  }
+}
+
+class _SecurityInterceptor extends Interceptor {
+  @override
+  Future<void> onResponse(Response res, ResponseInterceptorHandler h) async {
+    final o = res.requestOptions;
+    final devAuth = o.extra['__device_auth__'] == true;      // cihaz token'ı mı kullandı
+    final retried = o.extra['__auth_retried__'] == true;     // zaten denendi mi
+    if (_isAuthFailure(res) && devAuth &&
+        !o.path.contains('/cihaz/kayit') && !retried) {
+      final token = await DeviceService.instance.forceReregister();
+      o.extra['__auth_retried__'] = true;
+      if (token.isNotEmpty) o.headers['Authorization'] = 'Bearer $token';
+      return h.resolve(await Api.instance.dio.fetch(o)); // bir kez tekrar
+    }
+    h.next(res);
+  }
+}
+```
+
+> **Sonuç:** İlk açılışta hazırlık kapısı 401'i önler; buna rağmen elde geçersiz
+> bir token kalırsa 4.2 onu ilk istekte otomatik yeniler ve ana sayfa **kendini
+> doldurur**. Kullanıcının uygulamayı silip yeniden kurmasına gerek kalmaz.
+
 ---
 
 ## 5. APK'nın çözülmesine karşı (asıl savunma)

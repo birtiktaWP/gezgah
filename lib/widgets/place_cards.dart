@@ -2,19 +2,18 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
 import 'common.dart';
+import 'fav_heart.dart';
 
 /// Yatay rail'deki kompakt popüler mekan kartı (.pop)
 class PopCard extends StatelessWidget {
   final Place place;
   final VoidCallback? onTap;
-  final VoidCallback? onFav;
   final bool sponsored;
 
   const PopCard({
     super.key,
     required this.place,
     this.onTap,
-    this.onFav,
     this.sponsored = false,
   });
 
@@ -49,7 +48,7 @@ class PopCard extends StatelessWidget {
                     Positioned(
                       top: 9,
                       right: 9,
-                      child: FavButton(active: place.favorite, onTap: onFav),
+                      child: FavHeart(postId: place.id),
                     ),
                   Positioned(
                     left: 10,
@@ -123,9 +122,8 @@ class _Tag extends StatelessWidget {
 class GridTile2 extends StatelessWidget {
   final Place place;
   final VoidCallback? onTap;
-  final VoidCallback? onFav;
 
-  const GridTile2({super.key, required this.place, this.onTap, this.onFav});
+  const GridTile2({super.key, required this.place, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -155,8 +153,7 @@ class GridTile2 extends StatelessWidget {
                   Positioned(
                     top: 8,
                     right: 8,
-                    child: FavButton(
-                        active: place.favorite, onTap: onFav, size: 28),
+                    child: FavHeart(postId: place.id, size: 28),
                   ),
                 ],
               ),
@@ -226,9 +223,8 @@ class GridTile2 extends StatelessWidget {
 class ListTileCard extends StatelessWidget {
   final Place place;
   final VoidCallback? onTap;
-  final VoidCallback? onFav;
 
-  const ListTileCard({super.key, required this.place, this.onTap, this.onFav});
+  const ListTileCard({super.key, required this.place, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -278,18 +274,7 @@ class ListTileCard extends StatelessWidget {
                                   fontWeight: FontWeight.w800,
                                   letterSpacing: -0.2)),
                         ),
-                        GestureDetector(
-                          onTap: onFav,
-                          child: Icon(
-                            place.favorite
-                                ? Icons.favorite
-                                : Icons.favorite_border,
-                            size: 20,
-                            color: place.favorite
-                                ? AppColors.heart
-                                : const Color(0xFFC8C8D4),
-                          ),
-                        ),
+                        FavHeart(postId: place.id, circle: false, size: 20),
                       ],
                     ),
                     const SizedBox(height: 6),

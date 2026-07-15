@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../data/api.dart';
 import '../data/home_config.dart';
+import '../data/home_store.dart';
 import '../data/location_service.dart';
 import '../data/mock_data.dart';
 import '../data/models.dart';
@@ -44,23 +45,50 @@ class _HomeScreenState extends State<HomeScreen> {
   late final Future<List<Place>> _newestFuture;
   late final Future<List<FeaturedEvent>> _eventsFuture;
 
+  // Disk önbelleğinden hazır (anında gösterilecek) başlangıç verileri.
+  late final List<Category> _catInit;
+  late final List<Place> _spoInit;
+  late final List<Place> _nearInit;
+  late final List<Place> _newInit;
+  late final List<FeaturedEvent> _evtInit;
+
   @override
   void initState() {
     super.initState();
     _loc = LocationService.resolve();
     _resolveLocationLabel();
-    // Kategori alanı: API'deki tüm kategoriler (mekanı olanlar), en çok
-    // mekana sahip olandan başlayarak.
-    _categoriesFuture = HomeRepository.instance.kategoriler().then((all) {
-      final list = all.where((c) => c.mekanSayisi > 0).toList()
-        ..sort((a, b) => b.mekanSayisi.compareTo(a.mekanSayisi));
-      return list;
-    });
+
+    // Veriler HomeStore üzerinden gelir: disk cache anında (initialData),
+    // ağ isteği yalnızca bu soğuk başlangıçta yapılır (bkz. HomeStore).
+    final store = HomeStore.instance;
+    _catInit = _prepCategories(store.cachedCategories);
+    _spoInit = _cachedPlaces(store.cachedSponsored);
+    _nearInit = _cachedPlaces(store.cachedNearby.take(10).toList());
+    _newInit = _cachedPlaces(store.cachedNewest);
+    _evtInit = store.cachedEvents;
+
+    // Kategori alanı: mekanı olanlar, en çok mekana sahip olandan başlayarak.
+    _categoriesFuture = store.categories().then(_prepCategories);
     _sponsoredFuture = _loadSponsored();
     _nearbyFuture = _loadNearby();
     _newestFuture = _loadNewest();
-    _eventsFuture = HomeRepository.instance.sponsorluEtkinlikler();
+    _eventsFuture = store.etkinlikler();
   }
+
+  /// Kategori listesini filtreler/sıralar (mekanı olanlar, azalan mekan sayısı).
+  List<Category> _prepCategories(List<Category> all) {
+    final list = all.where((c) => c.mekanSayisi > 0).toList()
+      ..sort((a, b) => b.mekanSayisi.compareTo(a.mekanSayisi));
+    return list;
+  }
+
+  /// Önbellekteki ApiPlace'leri (mesafesiz) Place kartlarına çevirir —
+  /// initialData için; gerçek mesafe konum çözülünce future ile gelir.
+  List<Place> _cachedPlaces(List<ApiPlace> items) => items
+      .map((a) => a.toPlace(
+            subtitle: a.cityDistrict.isNotEmpty ? a.cityDistrict : 'Restoran',
+          ))
+      .toList();
 
   /// Gerçek konumdan "İl, İlçe" etiketini çözer ve hero'ya yazar.
   Future<void> _resolveLocationLabel() async {
@@ -106,8 +134,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<List<Place>> _loadSponsored() async {
     final loc = await _loc;
     try {
-      final items = await HomeRepository.instance
-          .sponsorluRestoranlar(HomeConfig.sponsorluRestoranlar);
+      final items = await HomeStore.instance.sponsorlu();
       return _toPlaces(items, loc);
     } catch (_) {
       return const [];
@@ -119,7 +146,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final loc = await _loc;
     List<ApiPlace> pool;
     try {
-      pool = await HomeRepository.instance.yakindakiler();
+      pool = await HomeStore.instance.yakindakiler();
     } catch (_) {
       return MockData.nearby;
     }
@@ -143,7 +170,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<List<Place>> _loadNewest() async {
     final loc = await _loc;
     try {
-      final items = await HomeRepository.instance.yeniEklenenler(limit: 10);
+      final items = await HomeStore.instance.yeniEklenenler();
       return _toPlaces(items, loc);
     } catch (_) {
       return const [];
@@ -188,10 +215,11 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 22),
           child: Marquee(items: MockData.promos),
         ),
-        const SizedBox(height: 22),
-        _placeRail('Yakındakiler', _nearbyFuture, fallback: MockData.nearby),
+        const SizedBox(height: 8),
+        _placeRail('Yakındakiler', _nearbyFuture,
+            initial: _nearInit, fallback: MockData.nearby),
         const SizedBox(height: 18),
-        _placeRail('Yeni Eklenenler', _newestFuture),
+        _placeRail('Yeni Eklenenler', _newestFuture, initial: _newInit),
         const SizedBox(height: 26),
         _featuredEventsSection(), // Öne Çıkan Etkinlikler (sponsorlu kart tasarımı)
         const SizedBox(height: 50),
@@ -219,7 +247,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const GezgahWordmark(),
+                const GezgahWordmark(size: 36), // varsayılan 30 → +%20
                 Row(
                   children: [
                     GlassButton(
@@ -281,26 +309,34 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _heroWithSearch() {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 46),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          _hero(),
-          Positioned(
-            left: 22,
-            right: 22,
-            bottom: -34,
-            child: _searchBox(),
-          ),
-        ],
-      ),
+    // Arama kutusunu Stack sınırları İÇİNDE tutuyoruz. Eskiden kutu
+    // `bottom: -34` ile Stack'in dışına taşıyordu; taşan alan Flutter'da
+    // dokunma almadığı için ilk dokunuşlar boşa gidiyordu. Artık hero'nun
+    // altına 46px yer ayırıp kutuyu `bottom: 12` ile içeride konumlandırıyoruz;
+    // görünüm birebir aynı, kutunun tamamı tıklanabilir.
+    return Stack(
+      children: [
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _hero(),
+            const SizedBox(height: 46),
+          ],
+        ),
+        Positioned(
+          left: 22,
+          right: 22,
+          bottom: 12,
+          child: _searchBox(),
+        ),
+      ],
     );
   }
 
   Widget _searchBox() {
     return GestureDetector(
       onTap: widget.onOpenSearch,
+      behavior: HitTestBehavior.opaque,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
         decoration: BoxDecoration(
@@ -365,19 +401,22 @@ class _HomeScreenState extends State<HomeScreen> {
       height: 86,
       child: FutureBuilder<List<Category>>(
         future: _categoriesFuture,
+        initialData: _catInit,
         builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2.5, color: AppColors.primary),
-              ),
-            );
-          }
           final cats = snap.data ?? const <Category>[];
-          if (cats.isEmpty) return const SizedBox.shrink();
+          if (cats.isEmpty) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2.5, color: AppColors.primary),
+                ),
+              );
+            }
+            return const SizedBox.shrink();
+          }
           return ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 22),
@@ -426,25 +465,26 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 22),
-          child: SectionHead('Sponsorlu Restoranlar', onAll: () {}),
+          child: SectionHead('Sponsorlu Restoranlar'),
         ),
         SizedBox(
           height: 150,
           child: FutureBuilder<List<Place>>(
             future: _sponsoredFuture,
+            initialData: _spoInit,
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(
-                  child: SizedBox(
-                    width: 26,
-                    height: 26,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2.5, color: AppColors.primary),
-                  ),
-                );
-              }
               final places = snapshot.data ?? const <Place>[];
               if (places.isEmpty) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: SizedBox(
+                      width: 26,
+                      height: 26,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.5, color: AppColors.primary),
+                    ),
+                  );
+                }
                 return const Center(
                   child: Text('Şu an sponsorlu restoran yok',
                       style: TextStyle(fontSize: 13, color: AppColors.muted)),
@@ -471,25 +511,26 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 22),
-          child: SectionHead('Öne Çıkan Etkinlikler', onAll: () {}),
+          child: SectionHead('Öne Çıkan Etkinlikler'),
         ),
         SizedBox(
           height: 150,
           child: FutureBuilder<List<FeaturedEvent>>(
             future: _eventsFuture,
+            initialData: _evtInit,
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(
-                  child: SizedBox(
-                    width: 26,
-                    height: 26,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2.5, color: AppColors.primary),
-                  ),
-                );
-              }
               final events = snapshot.data ?? const <FeaturedEvent>[];
               if (events.isEmpty) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: SizedBox(
+                      width: 26,
+                      height: 26,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.5, color: AppColors.primary),
+                    ),
+                  );
+                }
                 return const Center(
                   child: Text('Şu an öne çıkan etkinlik yok',
                       style: TextStyle(fontSize: 13, color: AppColors.muted)),
@@ -548,19 +589,19 @@ class _HomeScreenState extends State<HomeScreen> {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      Color(0xD1080526),
-                      Color(0x59080526),
-                      Color(0x1A080526),
+                      Color(0xA6080526),
+                      Color(0x40080526),
+                      Color(0x14080526),
                     ],
                     stops: [0.12, 0.6, 1.0],
                   ),
                 ),
               ),
-              // Tarih rozeti (sol üst)
+              // Tarih rozeti (sağ üst)
               if (day.isNotEmpty)
                 Positioned(
                   top: 14,
-                  left: 14,
+                  right: 14,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 6),
@@ -675,7 +716,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   gradient: LinearGradient(
                     begin: Alignment.centerLeft,
                     end: Alignment.centerRight,
-                    colors: [Color(0xD1080526), Color(0x1A080526)],
+                    colors: [Color(0xA6080526), Color(0x14080526)],
                   ),
                 ),
               ),
@@ -765,32 +806,34 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _placeRail(
     String title,
     Future<List<Place>> future, {
+    List<Place> initial = const [],
     List<Place> fallback = const [],
   }) {
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 22),
-          child: SectionHead(title, onAll: () {}),
+          child: SectionHead(title),
         ),
         SizedBox(
           height: 186,
           child: FutureBuilder<List<Place>>(
             future: future,
+            initialData: initial,
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(
-                  child: SizedBox(
-                    width: 26,
-                    height: 26,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2.5, color: AppColors.primary),
-                  ),
-                );
-              }
               final data = snapshot.data;
               final places = (data == null || data.isEmpty) ? fallback : data;
               if (places.isEmpty) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: SizedBox(
+                      width: 26,
+                      height: 26,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.5, color: AppColors.primary),
+                    ),
+                  );
+                }
                 return const Center(
                   child: Text('Şu an gösterilecek mekan yok',
                       style: TextStyle(fontSize: 13, color: AppColors.muted)),
@@ -806,7 +849,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   return PopCard(
                     place: p,
                     onTap: () => _openDetail(p),
-                    onFav: () => setState(() => p.favorite = !p.favorite),
                   );
                 },
               );

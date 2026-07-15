@@ -75,6 +75,30 @@ class AuthService {
     return u;
   }
 
+  /// Giriş yapmış üyenin profilini sunucuda günceller (`/uye/guncelle`) ve
+  /// yereldeki oturumu (profil) yeniler. Başarısızsa [AuthException].
+  Future<AppUser> guncelleProfil({
+    required String isim,
+    required String soyisim,
+    required String email,
+    required String telefon,
+    String? cinsiyet,
+    String? dogumGunu,
+    int? ilceId,
+  }) async {
+    final u = await UyeRepository.instance.guncelle(
+      isim: isim,
+      soyisim: soyisim,
+      email: email,
+      telefon: telefon,
+      cinsiyet: cinsiyet,
+      dogumGunu: dogumGunu,
+      ilceId: ilceId,
+    );
+    await _persist(u);
+    return u;
+  }
+
   /// Giriş yapmış üyenin parolasını değiştirir (`/uye/sifre-degistir`).
   /// Başarılıysa üye token'ı yenilenir. Başarısızsa [AuthException].
   Future<void> sifreDegistir(String eskiParola, String yeniParola) =>

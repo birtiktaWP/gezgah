@@ -1,7 +1,7 @@
 name: gezgah
 description: "Gezgah - yakınındaki en iyi yerleri keşfet."
 publish_to: 'none'
-version: 1.0.0+2
+version: 1.0.0+3
 
 environment:
   sdk: ^3.11.4
@@ -22,6 +22,7 @@ dependencies:
   crypto: ^3.0.6
   device_info_plus: ^11.1.0
   package_info_plus: ^8.1.0
+  pdfrx: ^2.4.7
 
 dev_dependencies:
   flutter_test:
@@ -53,6 +54,7 @@ flutter:
   assets:
     - assets/logo.svg
     - assets/kedy.svg
+    - assets/legal/
 
   fonts:
     - family: gez_gah

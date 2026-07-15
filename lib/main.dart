@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'data/auth_service.dart';
 import 'data/device_service.dart';
+import 'data/favorites_service.dart';
+import 'data/home_store.dart';
 import 'data/user_service.dart';
 import 'screens/main_shell.dart';
 import 'screens/welcome_screen.dart';
@@ -18,6 +20,13 @@ Future<void> main() async {
     statusBarIconBrightness: Brightness.light,
   ));
 
+  // Üstteki durum çubuğunu (iOS saat/pil/sinyal — "siyah çubuk") gizle.
+  // Yalnızca alt sistem çubuğu görünür kalır; içerik tepeye kadar uzanır.
+  SystemChrome.setEnabledSystemUIMode(
+    SystemUiMode.manual,
+    overlays: [SystemUiOverlay.bottom],
+  );
+
   // Uygulamayı ilk açan her cihaz için anonim kimliği üret/yükle (yerel).
   UserService.instance.currentId();
 
@@ -32,6 +41,14 @@ Future<void> main() async {
   // Varsa üye oturumunu yerelden geri yükle (Hesabım'ı giriş ekranı yerine
   // doğrudan gösterebilmek için ilk kareden önce hazır olsun).
   await AuthService.instance.restore();
+
+  // Üye girişliyse favori mekan id'lerini önceden yükle (kalpler uygulama
+  // genelinde doğru gösterilsin). Sonraki giriş/çıkışları servis kendi dinler.
+  FavoritesService.instance.load();
+
+  // Ana sayfa disk önbelleğini belleğe al → ana sayfa açılışta anında (cache
+  // ile) gösterilir; ağ isteği yalnızca bu soğuk başlangıçta yapılır.
+  await HomeStore.instance.preload();
 
   final prefs = await SharedPreferences.getInstance();
   final seenWelcome = prefs.getBool(_kWelcomeSeenKey) ?? false;

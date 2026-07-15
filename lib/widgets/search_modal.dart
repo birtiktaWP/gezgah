@@ -211,6 +211,7 @@ class _SearchModalState extends State<_SearchModal> {
                       spacing: 8,
                       runSpacing: 8,
                       children: _history
+                          .take(3) // yalnızca son 3 arama
                           .map((s) => _chip(s, Icons.history,
                               onRemove: () => _removeHistory(s)))
                           .toList(),
@@ -554,8 +555,6 @@ class _SearchModalState extends State<_SearchModal> {
     (Icons.umbrella, 'Yağmurlu güne uygun'),
     (Icons.favorite_border, 'İlk buluşma için'),
     (Icons.attach_money, 'Bütçe dostu lezzetler'),
-    (Icons.landscape_outlined, 'Manzaralı kahvaltı'),
-    (Icons.pets, 'Evcil hayvan dostu'),
   ];
 
   Widget _kedyGrid() {

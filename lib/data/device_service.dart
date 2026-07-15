@@ -30,6 +30,27 @@ class DeviceService {
   /// engeller (bkz. GUVENLIK.md §4).
   Future<String> ensureRegistered() => _inflight ??= register();
 
+  /// Saklı token geçersiz sayıldığında (sunucu 401 döndürdüğünde) çağrılır:
+  /// bayat token'ı siler, kayıt future'ını sıfırlar ve **yeni** bir token
+  /// üretip kaydettirir. Eşzamanlı çağrılar aynı yenileme future'ını paylaşır
+  /// (dedup) — böylece birden çok 401 tek bir yeniden kayıt tetikler.
+  /// Nihai (yeni) token'ı döndürür (bkz. GUVENLIK.md §4.2).
+  Future<String> forceReregister() {
+    final refreshing = _refreshing;
+    if (refreshing != null) return refreshing;
+    return _refreshing = () async {
+      try {
+        await Api.instance.clearDeviceToken();
+        _inflight = null;
+        return await ensureRegistered();
+      } finally {
+        _refreshing = null;
+      }
+    }();
+  }
+
+  Future<String>? _refreshing;
+
   /// Cihaz token'ını hazırlar ve sunucuya (varsa) kaydeder. Token döner.
   Future<String> register() async {
     final existing = await Api.instance.deviceToken;
