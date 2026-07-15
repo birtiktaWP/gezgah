@@ -16,8 +16,11 @@ workflows:
     max_build_duration: 90
     integrations:
       app_store_connect: codemagic   # Codemagic Developer Portal'daki API key adı
+    cache:
+      cache_paths:
+        - ~/programs/flutter   # Flutter SDK'yı build'ler arası önbelleğe al (tekrar indirmeyi önler)
     environment:
-      flutter: stable
+      flutter: 3.44.4          # Yerel sürümle eşit; 'stable' indirme zaman aşımını önler
       xcode: latest
       cocoapods: default
       vars:
@@ -47,7 +50,7 @@ workflows:
       - name: IPA derle (release, otomatik build no)
         script: |
           flutter build ipa --release \
-            --build-name=1.0.0 \
+            --build-name=1.0.1 \
             --build-number=$BUILD_NUMBER \
             --export-options-plist=/Users/builder/export_options.plist
     artifacts:
@@ -68,8 +71,11 @@ workflows:
     name: Gezgah Android
     instance_type: linux_x2
     max_build_duration: 60
+    cache:
+      cache_paths:
+        - ~/programs/flutter   # Flutter SDK'yı build'ler arası önbelleğe al (tekrar indirmeyi önler)
     environment:
-      flutter: stable
+      flutter: 3.44.4          # Yerel sürümle eşit; 'stable' indirme zaman aşımını önler
       java: 17
     scripts:
       - name: Flutter bağımlılıkları
