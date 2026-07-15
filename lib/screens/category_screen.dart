@@ -6,11 +6,10 @@ import '../data/home_config.dart';
 import '../data/location_service.dart';
 import '../data/mock_data.dart';
 import '../data/models.dart';
+import '../navigation/main_nav.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
-import '../widgets/kedy_chat.dart';
 import '../widgets/place_cards.dart';
-import '../widgets/search_modal.dart';
 import '../widgets/tabbar.dart';
 import 'detail_screen.dart';
 import 'map_screen.dart';
@@ -386,23 +385,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
         context, MaterialPageRoute(builder: (_) => DetailScreen(place: p)));
   }
 
-  void _onTab(int i) {
-    switch (i) {
-      case 0:
-        Navigator.popUntil(context, (r) => r.isFirst);
-        break;
-      case 1:
-        showSearchModal(context, onOpenDetail: _openDetail);
-        break;
-      case 2:
-        showKedyChat(context);
-        break;
-      case 4:
-        Navigator.popUntil(context, (r) => r.isFirst);
-        break;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -481,7 +463,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
           Align(
             alignment: Alignment.bottomCenter,
             child: SafeArea(
-              child: FloatingTabBar(activeIndex: 0, onTap: _onTab),
+              child: FloatingTabBar(
+                  activeIndex: -1, onTap: MainNav.instance.select),
             ),
           ),
         ],

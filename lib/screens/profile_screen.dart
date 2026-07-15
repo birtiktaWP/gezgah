@@ -1,6 +1,9 @@
+import 'package:dlibphonenumber/dlibphonenumber.dart' as libphone;
 import 'package:flutter/material.dart';
-import 'package:pdfrx/pdfrx.dart';
+import 'package:intl_phone_number_input/intl_phone_number_input.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../data/auth_service.dart';
+import '../data/legal_texts.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
@@ -20,12 +23,13 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  // Sözleşme PDF'leri (assets/legal). (başlık, asset yolu)
-  static const List<(String, String)> _legalDocs = [
-    ('Kullanıcı Sözleşmesi', 'assets/legal/kullanici-sozlesmesi.pdf'),
-    ('Gizlilik Politikası', 'assets/legal/gizlilik-politikasi.pdf'),
-    ('KVKK Aydınlatma Metni', 'assets/legal/kvkk.pdf'),
-    ('Açık Rıza Metni', 'assets/legal/acik-riza-metni.pdf'),
+  // Sözleşme başlıkları — içerik uygulama içinde metin olarak gösterilir
+  // (bkz. data/legal_texts.dart).
+  static const List<String> _legalDocs = [
+    'Kullanıcı Sözleşmesi',
+    'Gizlilik Politikası',
+    'KVKK Aydınlatma Metni',
+    'Açık Rıza Metni',
   ];
 
   AppUser? get _user => AuthService.instance.user.value;
@@ -79,9 +83,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onTap: _openPasswordChange),
             ]),
             _group('Sözleşmeler', [
-              for (final d in _legalDocs)
-                _row(_docIcon(d.$1), d.$1, _docSub(d.$1),
-                    onTap: () => _openDoc(d.$1, d.$2)),
+              for (final title in _legalDocs)
+                _row(_docIcon(title), title, _docSub(title),
+                    onTap: () => _openDoc(title)),
             ]),
             _group(null, [
               _row(Icons.logout, 'Çıkış Yap', null,
@@ -402,12 +406,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _openDoc(String title, String asset) {
+  void _openDoc(String title) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _PdfSheet(title: title, asset: asset),
+      builder: (_) => _LegalSheet(title: title),
     );
   }
 
@@ -492,7 +496,6 @@ class _SettingsSheet extends StatefulWidget {
 class _SettingsSheetState extends State<_SettingsSheet> {
   bool _notif = true;
   bool _location = true;
-  bool _dark = false;
 
   @override
   Widget build(BuildContext context) {
@@ -521,17 +524,140 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                 _switchRow(Icons.location_on_outlined, 'Konum İzni',
                     'Yakınındaki mekanları göster', _location,
                     (v) => setState(() => _location = v)),
-                _switchRow(Icons.dark_mode_outlined, 'Karanlık Mod',
-                    'Koyu tema kullan', _dark, (v) => setState(() => _dark = v)),
-                _navRow(Icons.language, 'Dil', 'Türkçe'),
-                _navRow(Icons.help_outline, 'Yardım & Destek',
-                    'Sıkça sorulan sorular'),
+                _navRow(Icons.language, 'Dil', 'Türkçe',
+                    onTap: _showLanguageSheet),
+                _navRow(Icons.chat_outlined, 'WhatsApp Destek',
+                    'Bize WhatsApp\u2019tan yaz', onTap: _openWhatsApp),
               ],
+            ),
+          ),
+          const SizedBox(height: 26),
+          SizedBox(
+            height: 50,
+            child: OutlinedButton.icon(
+              onPressed: _confirmDeleteAccount,
+              icon: const Icon(Icons.delete_outline, size: 20),
+              label: const Text('Hesabımı Sil',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.closing,
+                side: const BorderSide(color: AppColors.closing),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  /// WhatsApp destek hattına mesaj penceresi açar (0552 701 77 73).
+  Future<void> _openWhatsApp() async {
+    final uri = Uri.parse('https://wa.me/905527017773');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  /// Dil değiştirme alt sayfası — görsel amaçlı, henüz işlevsel değil.
+  void _showLanguageSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 18, 20, 6),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Dil',
+                    style: TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w700)),
+              ),
+            ),
+            for (final lang in const [
+              ('Türkçe', true),
+              ('English', false),
+              ('Deutsch', false),
+              ('Русский', false),
+            ])
+              ListTile(
+                title: Text(lang.$1),
+                trailing: lang.$2
+                    ? const Icon(Icons.check, color: AppColors.primary)
+                    : null,
+                onTap: () => Navigator.pop(ctx),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Hesap silme talebi — onay sonrası "talebiniz alınmıştır" modalı gösterir
+  /// ve ardından otomatik olarak oturumu kapatır.
+  Future<void> _confirmDeleteAccount() async {
+    final navigator = Navigator.of(context);
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: const BoxDecoration(
+                color: Color(0xFFEAF8EF),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.check_circle,
+                  size: 40, color: AppColors.open),
+            ),
+            const SizedBox(height: 16),
+            const Text('Talebiniz alınmıştır',
+                textAlign: TextAlign.center,
+                style:
+                    TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            const Text(
+                'Hesap silme talebin alındı. İşlem tamamlandığında '
+                'bilgilendirileceksin.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13.5, color: AppColors.muted)),
+          ],
+        ),
+        actions: [
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Tamam',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          ),
+        ],
+      ),
+    );
+    // Onaydan sonra oturumu kapat ve ayarlar sayfasını kapat. MainShell
+    // oturum kapanınca otomatik olarak ana sayfaya döner.
+    await AuthService.instance.logout();
+    navigator.pop();
   }
 
   Widget _switchRow(IconData icon, String title, String sub, bool value,
@@ -554,16 +680,19 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     );
   }
 
-  Widget _navRow(IconData icon, String title, String sub) {
-    return Padding(
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        children: [
-          _iconBox(icon),
-          const SizedBox(width: 13),
-          Expanded(child: _texts(title, sub)),
-          const Icon(Icons.chevron_right, size: 20, color: AppColors.primary),
-        ],
+  Widget _navRow(IconData icon, String title, String sub, {VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            _iconBox(icon),
+            const SizedBox(width: 13),
+            Expanded(child: _texts(title, sub)),
+            const Icon(Icons.chevron_right, size: 20, color: AppColors.primary),
+          ],
+        ),
       ),
     );
   }
@@ -590,28 +719,83 @@ class _SettingsSheetState extends State<_SettingsSheet> {
       );
 }
 
-/// Sözleşme PDF'ini modal içinde gösterir (assets/legal).
-class _PdfSheet extends StatelessWidget {
+/// Sözleşme metnini modal içinde metin olarak gösterir (bkz. legal_texts.dart).
+class _LegalSheet extends StatelessWidget {
   final String title;
-  final String asset;
-  const _PdfSheet({required this.title, required this.asset});
+  const _LegalSheet({required this.title});
 
   @override
   Widget build(BuildContext context) {
+    final sections = kLegalTexts[title];
     return _SheetScaffold(
       title: title,
       backArrow: true,
-      child: ColoredBox(
-        color: const Color(0xFFEDEDF3),
-        child: PdfViewer.asset(
-          asset,
-          params: const PdfViewerParams(
-            margin: 8,
-            backgroundColor: Color(0xFFEDEDF3),
-          ),
+      child: sections == null
+          ? _placeholder()
+          : ListView.separated(
+              padding: EdgeInsets.fromLTRB(
+                  22, 20, 22, 28 + MediaQuery.of(context).viewInsets.bottom),
+              itemCount: sections.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 20),
+              itemBuilder: (_, i) => _section(sections[i]),
+            ),
+    );
+  }
+
+  Widget _placeholder() {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.description_outlined, size: 40, color: AppColors.muted),
+            SizedBox(height: 12),
+            Text('Bu metin yakında eklenecek.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, color: AppColors.muted)),
+          ],
         ),
       ),
     );
+  }
+
+  Widget _section(LegalSection s) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (s.heading != null) ...[
+          Text(s.heading!,
+              style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.ink)),
+          const SizedBox(height: 10),
+        ],
+        for (var i = 0; i < s.paragraphs.length; i++) ...[
+          if (i > 0) const SizedBox(height: 10),
+          _paragraph(s.paragraphs[i]),
+        ],
+      ],
+    );
+  }
+
+  /// `**...**` işaretli kısımları kalın gösteren basit paragraf oluşturucu.
+  Widget _paragraph(String text) {
+    const base = TextStyle(
+        fontSize: 13.5, height: 1.55, color: AppColors.muted);
+    final spans = <TextSpan>[];
+    final parts = text.split('**');
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i].isEmpty) continue;
+      spans.add(TextSpan(
+        text: parts[i],
+        style: i.isOdd
+            ? const TextStyle(fontWeight: FontWeight.w800, color: AppColors.ink)
+            : null,
+      ));
+    }
+    return RichText(text: TextSpan(style: base, children: spans));
   }
 }
 
@@ -632,12 +816,19 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
       TextEditingController(text: widget.user.soyisim);
   late final TextEditingController _emailC =
       TextEditingController(text: widget.user.email);
-  late final TextEditingController _telefonC =
-      TextEditingController(text: widget.user.telefon);
+  // Numara, uluslararası alan tarafından (initialValue) doldurulur.
+  final TextEditingController _telefonC = TextEditingController();
 
   late String _cinsiyet = widget.user.cinsiyet; // '' | erkek | kadin | diger
   late String _dogumGunu = widget.user.dogumGunu; // '' | YYYY-MM-DD
   late int? _ilceId = widget.user.ilceId;
+
+  // Telefon: seçili ülke + hane limiti (login ekranıyla aynı mantık).
+  PhoneNumber _phone = PhoneNumber(isoCode: 'TR');
+  int _phoneMaxDigits = 10;
+  String _phoneIso = 'TR';
+  TextEditingValue _lastPhoneValue = TextEditingValue.empty;
+  bool _enforcingPhone = false;
 
   List<Ilce> _ilceler = const [];
   bool _ilcelerLoading = true;
@@ -648,6 +839,127 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
   void initState() {
     super.initState();
     _loadIlceler();
+    _phoneMaxDigits = _maxDigitsFor(_phoneIso);
+    _telefonC.addListener(_enforcePhoneLimit);
+    _initPhone();
+  }
+
+  /// Mevcut kayıtlı numarayı (ulusal numara + kayıtlı ülke kodu) uluslararası
+  /// alana önceden yükler.
+  Future<void> _initPhone() async {
+    var raw = widget.user.telefon.trim();
+    if (raw.isEmpty) return;
+    if (!raw.startsWith('+')) {
+      // Kayıtlı ülke kodunu kullan (yoksa +90); baştaki 0'ı at.
+      final dial = widget.user.ulkeKodu.isNotEmpty ? widget.user.ulkeKodu : '+90';
+      var d = raw.replaceAll(RegExp(r'\D'), '');
+      if (d.startsWith('0')) d = d.substring(1);
+      raw = '$dial$d';
+    }
+    try {
+      final parsed = await PhoneNumber.getRegionInfoFromPhoneNumber(raw);
+      if (!mounted) return;
+      setState(() {
+        _phone = parsed;
+        _phoneIso = parsed.isoCode ?? 'TR';
+        _phoneMaxDigits = _maxDigitsFor(_phoneIso);
+      });
+    } catch (_) {
+      // Ayrıştırılamazsa TR varsayılanıyla boş başlar.
+    }
+  }
+
+  /// Ülkenin örnek mobil numarasından izin verilen ulusal hane sayısı.
+  int _maxDigitsFor(String iso) {
+    try {
+      final util = libphone.PhoneNumberUtil.instance;
+      final ex = util.getExampleNumberForType(
+              regionCode: iso, type: libphone.PhoneNumberType.mobile) ??
+          util.getExampleNumber(iso);
+      if (ex == null) return 15;
+      final nsn = util.getNationalSignificantNumber(ex);
+      return nsn.isEmpty ? 15 : nsn.length;
+    } catch (_) {
+      return 15;
+    }
+  }
+
+  /// Hane sayısı ülke limitini aşarsa girişi engeller (son geçerli değere döner).
+  void _enforcePhoneLimit() {
+    if (_enforcingPhone) return;
+    final digits = _telefonC.text.replaceAll(RegExp(r'\D'), '');
+    if (digits.length > _phoneMaxDigits) {
+      _enforcingPhone = true;
+      _telefonC.value = _lastPhoneValue;
+      _enforcingPhone = false;
+    } else {
+      _lastPhoneValue = _telefonC.value;
+    }
+  }
+
+  /// Seçili numarayı (ülke kodu, ulusal numara) olarak ayırır.
+  (String, String) _splitPhone() {
+    final dial = _phone.dialCode != null && _phone.dialCode!.isNotEmpty
+        ? '+${_phone.dialCode!.replaceAll('+', '')}'
+        : '+90';
+    final full = _phone.phoneNumber ?? '';
+    var national = full.startsWith(dial) ? full.substring(dial.length) : full;
+    national = national.replaceAll(RegExp(r'\D'), '');
+    if (national.isEmpty) {
+      national = _telefonC.text.replaceAll(RegExp(r'\D'), '');
+    }
+    return (dial, national);
+  }
+
+  /// Bayraklı ülke seçici + numara alanı; ülkeye göre boşluk/limit (login ile
+  /// aynı mantık).
+  Widget _phoneField() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: InternationalPhoneNumberInput(
+        onInputChanged: (n) {
+          _phone = n;
+          final iso = n.isoCode;
+          if (iso != null && iso != _phoneIso) {
+            _phoneIso = iso;
+            _phoneMaxDigits = _maxDigitsFor(iso);
+            _enforcePhoneLimit();
+          }
+        },
+        initialValue: _phone,
+        textFieldController: _telefonC,
+        formatInput: true,
+        maxLength: 20,
+        keyboardType:
+            const TextInputType.numberWithOptions(signed: true, decimal: true),
+        autoValidateMode: AutovalidateMode.disabled,
+        ignoreBlank: true,
+        spaceBetweenSelectorAndTextField: 0,
+        selectorConfig: const SelectorConfig(
+          selectorType: PhoneInputSelectorType.BOTTOM_SHEET,
+          setSelectorButtonAsPrefixIcon: true,
+          showFlags: true,
+          useEmoji: false,
+          leadingPadding: 8,
+          trailingSpace: false,
+        ),
+        selectorTextStyle: const TextStyle(
+            fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.ink),
+        textStyle: const TextStyle(fontSize: 15, color: AppColors.ink),
+        inputDecoration: const InputDecoration(
+          hintText: 'Telefon',
+          hintStyle: TextStyle(color: AppColors.muted),
+          border: InputBorder.none,
+          isCollapsed: true,
+          contentPadding: EdgeInsets.symmetric(vertical: 15),
+        ),
+      ),
+    );
   }
 
   Future<void> _loadIlceler() async {
@@ -661,6 +973,7 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
 
   @override
   void dispose() {
+    _telefonC.removeListener(_enforcePhoneLimit);
     _isimC.dispose();
     _soyisimC.dispose();
     _emailC.dispose();
@@ -673,7 +986,8 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
     final isim = _isimC.text.trim();
     final soyisim = _soyisimC.text.trim();
     final email = _emailC.text.trim();
-    final telefon = _telefonC.text.trim();
+    // Seçili ülke kodu (+90…) ile ulusal numarayı ayrı gönder.
+    final (ulkeKodu, telefon) = _splitPhone();
     if (isim.isEmpty || soyisim.isEmpty) {
       setState(() => _error = 'Ad ve soyad zorunlu.');
       return;
@@ -698,6 +1012,7 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
         soyisim: soyisim,
         email: email,
         telefon: telefon,
+        ulkeKodu: ulkeKodu,
         cinsiyet: _cinsiyet,
         dogumGunu: _dogumGunu,
         ilceId: _ilceId,
@@ -738,8 +1053,7 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
               keyboard: TextInputType.emailAddress),
           const SizedBox(height: 16),
           _label('Telefon'),
-          _field(_telefonC, Icons.phone_outlined,
-              hint: '05xx xxx xx xx', keyboard: TextInputType.phone),
+          _phoneField(),
           const SizedBox(height: 16),
           _label('Cinsiyet'),
           _genderSelector(),
@@ -863,8 +1177,6 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
         _genderChip('kadin', 'Kadın'),
         const SizedBox(width: 10),
         _genderChip('erkek', 'Erkek'),
-        const SizedBox(width: 10),
-        _genderChip('diger', 'Diğer'),
       ],
     );
   }
@@ -927,14 +1239,14 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
     var init = DateTime(2000, 1, 1);
     final parsed = DateTime.tryParse(_dogumGunu);
     if (parsed != null) init = parsed;
-    final picked = await showDatePicker(
-      context: context,
+    final picked = await showNativeDatePicker(
+      context,
       initialDate: init,
       firstDate: DateTime(1920),
       lastDate: DateTime.now(),
       helpText: 'Doğum Günü',
     );
-    if (picked != null) {
+    if (picked != null && mounted) {
       final m = picked.month.toString().padLeft(2, '0');
       final d = picked.day.toString().padLeft(2, '0');
       setState(() => _dogumGunu = '${picked.year}-$m-$d');
@@ -969,35 +1281,50 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
         ),
       );
     }
+    final val = _validIlceValue();
+    String label = 'İlçe seç';
+    Color color = AppColors.muted;
+    if (val != null) {
+      for (final il in _ilceler) {
+        if (il.id == val) {
+          label = il.ad;
+          color = AppColors.ink;
+          break;
+        }
+      }
+    }
     return _shell(
-      child: Row(
-        children: [
-          const Icon(Icons.location_city_outlined,
-              size: 19, color: AppColors.primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<int?>(
-                isExpanded: true,
-                value: _validIlceValue(),
-                icon: const Icon(Icons.keyboard_arrow_down,
-                    color: AppColors.primary),
-                hint: const Text('İlçe seç',
-                    style: TextStyle(fontSize: 14, color: AppColors.muted)),
-                style: const TextStyle(fontSize: 14, color: AppColors.ink),
-                items: [
-                  const DropdownMenuItem<int?>(
-                      value: null, child: Text('Belirtilmemiş')),
-                  for (final il in _ilceler)
-                    DropdownMenuItem<int?>(value: il.id, child: Text(il.ad)),
-                ],
-                onChanged: (v) => setState(() => _ilceId = v),
-              ),
+      child: GestureDetector(
+        onTap: _pickIlce,
+        behavior: HitTestBehavior.opaque,
+        child: Row(
+          children: [
+            const Icon(Icons.location_city_outlined,
+                size: 19, color: AppColors.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(label,
+                  style: TextStyle(fontSize: 14, color: color)),
             ),
-          ),
-        ],
+            const Icon(Icons.keyboard_arrow_down, color: AppColors.primary),
+          ],
+        ),
       ),
     );
+  }
+
+  Future<void> _pickIlce() async {
+    FocusScope.of(context).unfocus();
+    final res = await showNativePicker<int?>(
+      context,
+      title: 'İlçe seç',
+      selected: _validIlceValue(),
+      options: [
+        (null, 'Belirtilmemiş'),
+        for (final il in _ilceler) (il.id, il.ad),
+      ],
+    );
+    if (res != null && mounted) setState(() => _ilceId = res.value);
   }
 
   /// Mevcut ilçe id listede yoksa dropdown'ı null'a düşür (assertion'ı önler).

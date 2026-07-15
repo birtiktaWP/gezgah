@@ -22,7 +22,9 @@ dependencies:
   crypto: ^3.0.6
   device_info_plus: ^11.1.0
   package_info_plus: ^8.1.0
-  pdfrx: ^2.4.7
+  url_launcher: ^6.3.1
+  intl_phone_number_input: ^0.7.5
+  dlibphonenumber: ^1.1.67
 
 dev_dependencies:
   flutter_test:
@@ -54,7 +56,6 @@ flutter:
   assets:
     - assets/logo.svg
     - assets/kedy.svg
-    - assets/legal/
 
   fonts:
     - family: gez_gah

@@ -2,14 +2,12 @@ import 'package:flutter/material.dart';
 import '../data/api.dart';
 import '../data/favorites_service.dart';
 import '../data/models.dart';
+import '../navigation/main_nav.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/fav_heart.dart';
-import '../widgets/kedy_chat.dart';
-import '../widgets/search_modal.dart';
 import '../widgets/tabbar.dart';
 import 'detail_screen.dart';
-import 'events_screen.dart';
 
 /// Favorilerim — Hesabım'dan itilerek açılan ayrı sayfa. Yapı, Etkinlikler
 /// listesiyle aynıdır (hero + kart listesi + boş/hata/yükleniyor + "daha fazla
@@ -94,27 +92,6 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
         context, MaterialPageRoute(builder: (_) => DetailScreen(place: p)));
   }
 
-  void _onTab(int i) {
-    switch (i) {
-      case 0:
-        Navigator.popUntil(context, (r) => r.isFirst);
-        break;
-      case 1:
-        showSearchModal(context, onOpenDetail: _openDetail);
-        break;
-      case 2:
-        showKedyChat(context);
-        break;
-      case 3:
-        Navigator.push(
-            context, MaterialPageRoute(builder: (_) => const EventsScreen()));
-        break;
-      case 4:
-        Navigator.pop(context); // Hesabım'a geri dön
-        break;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -125,7 +102,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           Align(
             alignment: Alignment.bottomCenter,
             child: SafeArea(
-              child: FloatingTabBar(activeIndex: 4, onTap: _onTab),
+              child: FloatingTabBar(
+                  activeIndex: 4, onTap: MainNav.instance.select),
             ),
           ),
         ],

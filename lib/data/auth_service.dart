@@ -42,8 +42,8 @@ class AuthService {
   }
 
   /// E-posta + parola ile giriş (UYE_LOGIN.md). Başarısızsa [AuthException].
-  Future<AppUser> giris(String email, String parola) async {
-    final u = await UyeRepository.instance.giris(email, parola);
+  Future<AppUser> giris(String ulkeKodu, String telefon, String parola) async {
+    final u = await UyeRepository.instance.giris(ulkeKodu, telefon, parola);
     await _persist(u);
     return u;
   }
@@ -82,6 +82,7 @@ class AuthService {
     required String soyisim,
     required String email,
     required String telefon,
+    String? ulkeKodu,
     String? cinsiyet,
     String? dogumGunu,
     int? ilceId,
@@ -91,6 +92,7 @@ class AuthService {
       soyisim: soyisim,
       email: email,
       telefon: telefon,
+      ulkeKodu: ulkeKodu,
       cinsiyet: cinsiyet,
       dogumGunu: dogumGunu,
       ilceId: ilceId,

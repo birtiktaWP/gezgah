@@ -33,8 +33,8 @@ php rest/tools/migrate_app_uyeler.php
 | `id` | INT UNSIGNED, PK | — | Üye id'si |
 | `isim` | VARCHAR(100) | ✅ | Ad |
 | `soyisim` | VARCHAR(100) | ✅ | Soyad |
-| `email` | VARCHAR(190), UNIQUE | ✅ | E-posta (giriş anahtarı) |
-| `telefon` | VARCHAR(20) | ✅ | Cep telefonu (yalnızca rakam saklanır) |
+| `email` | VARCHAR(190), UNIQUE | ✅ | E-posta (benzersiz) |
+| `telefon` | VARCHAR(20) | ✅ | Cep telefonu (yalnızca rakam saklanır). **`ulke_kodu` ile birlikte giriş anahtarı** |
 | `parola` | VARCHAR(255) | ✅ (kayıtta) | bcrypt hash (`password_hash`) |
 | `ulke_kodu` | VARCHAR(8) | — | Ülke kodu, telefondan ayrı (vars. `+90`) |
 | `cinsiyet` | VARCHAR(20) | — | `erkek` \| `kadin` \| `diger` |
@@ -53,8 +53,8 @@ Diğerleri opsiyoneldir. Parola en az **6** karakter olmalı.
 
 | Method | Yol | Açıklama |
 |--------|-----|----------|
-| POST | `/uye/kayit` | Yeni hesap oluşturur (parola ile). Email varsa `409` |
-| POST | `/uye/giris` | E-posta + parola ile giriş |
+| POST | `/uye/kayit` | Yeni hesap oluşturur (parola ile). Telefon veya e-posta kayıtlıysa `409` |
+| POST | `/uye/giris` | **Ülke kodu + telefon + parola** ile giriş (bkz. [TELEFON_GIRIS.md](TELEFON_GIRIS.md)) |
 | GET | `/uye/me` | Üye token'ına göre profil |
 | POST | `/uye/guncelle` | Profil bilgilerini günceller (kısmi, giriş yapmış üye) |
 | POST | `/uye/sifre-degistir` | Mevcut parolayı değiştirir (giriş yapmış üye) |
@@ -106,23 +106,32 @@ Yanıt (**201**):
 ```
 
 Hatalar: `422` (zorunlu alan eksik / geçersiz email/telefon/parola<6/cinsiyet/dogum_gunu/ilce_id),
-`409` (e-posta zaten kayıtlı), `401` (cihaz token'ı yok).
+`409` (**telefon** veya e-posta zaten kayıtlı), `401` (cihaz token'ı yok).
+
+> **Telefon giriş anahtarıdır:** Aynı `ulke_kodu + telefon` ikinci kez kayıt
+> olamaz (409). Böylece telefonla giriş tekildir.
 
 ### `POST /uye/giris`
+
+**Ülke kodu + telefon + parola** ile giriş. Ayrıntı: [TELEFON_GIRIS.md](TELEFON_GIRIS.md).
 
 İstek başlığı: `Authorization: Bearer <cihaz_token>`
 
 ```json
-{ "email": "ayse@example.com", "parola": "gizli123" }
+{ "ulke_kodu": "+90", "telefon": "0555 111 22 33", "parola": "gizli123" }
 ```
+
+- `ulke_kodu`: `+90` / `90` → `+90`'a normalize edilir. Gönderilmezse `+90` varsayılır.
+- `telefon`: yalnızca rakama indirgenir (`0555 111 22 33` → `05551112233`).
 
 Yanıt (**200**): kayıt yanıtıyla aynı `{ token, uye }` yapısı. Her girişte
 `token` **yenilenir** (önceki token geçersiz olur).
 
-Hatalar: `422` (email/parola eksik), `401` (e-posta veya parola hatalı).
+Hatalar: `422` (telefon/parola eksik veya geçersiz ülke kodu),
+`401` (telefon veya parola hatalı).
 
 > **Güvenlik:** "kullanıcı yok" ile "parola yanlış" ayrımı yapılmaz; her ikisi
-> de `401 "E-posta veya parola hatalı."` döner (e-posta enumeration'a karşı).
+> de `401 "Telefon veya parola hatalı."` döner (enumeration'a karşı).
 
 ### `GET /uye/me`
 
@@ -217,10 +226,10 @@ curl -X POST https://api.gezgah.com/rest/uye/kayit \
      -H "Authorization: Bearer $DEV" -H "Content-Type: application/json" \
      -d '{"isim":"Ayşe","soyisim":"Kaya","email":"ayse@example.com","telefon":"05551112233","parola":"gizli123","ilce_id":3}'
 
-# 3) Giriş
+# 3) Giriş (ülke kodu + telefon + parola)
 curl -X POST https://api.gezgah.com/rest/uye/giris \
      -H "Authorization: Bearer $DEV" -H "Content-Type: application/json" \
-     -d '{"email":"ayse@example.com","parola":"gizli123"}'
+     -d '{"ulke_kodu":"+90","telefon":"05551112233","parola":"gizli123"}'
 
 # 4) Profil
 curl https://api.gezgah.com/rest/uye/me -H "Authorization: Bearer <uye_token>"
@@ -238,9 +247,10 @@ Future<void> uyeKayit(Map<String, dynamic> form) async {
   await storage.write(key: 'uye_token', value: res.data['data']['token']);
 }
 
-// Giriş
-Future<void> uyeGiris(String email, String parola) async {
-  final res = await Api.instance.dio.post('/uye/giris', data: {'email': email, 'parola': parola});
+// Giriş (ülke kodu + telefon + parola)
+Future<void> uyeGiris(String ulkeKodu, String telefon, String parola) async {
+  final res = await Api.instance.dio.post('/uye/giris',
+      data: {'ulke_kodu': ulkeKodu, 'telefon': telefon, 'parola': parola});
   await storage.write(key: 'uye_token', value: res.data['data']['token']);
 }
 ```
@@ -258,6 +268,7 @@ Future<void> uyeGiris(String email, String parola) async {
 
 ## İlgili dokümanlar
 
+- **Telefon ile giriş**: [TELEFON_GIRIS.md](TELEFON_GIRIS.md)
 - Cihaz token akışı: [CIHAZ_TOKEN.md](CIHAZ_TOKEN.md)
 - Güvenlik katmanları: [GUVENLIK.md](GUVENLIK.md)
 - İlçe listesi: `GET /ilceler` — [README.md](README.md)

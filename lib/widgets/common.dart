@@ -1,5 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/app_theme.dart';
 
@@ -303,6 +305,230 @@ class FavButton extends StatelessWidget {
           size: size * 0.5,
           color: active ? AppColors.heart : AppColors.primary,
         ),
+      ),
+    );
+  }
+}
+
+// ===========================================================================
+// Ortak giriş yardımcıları: telefon formatlayıcı + native seçiciler
+// ===========================================================================
+
+/// Türkiye cep telefonu formatlayıcı: yalnızca rakam kabul eder, en fazla 10
+/// hane tutar ve otomatik olarak "532 123 45 67" biçiminde boşluk ekler.
+class TrPhoneInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    // Rakam dışını temizle ve 10 hane ile sınırla.
+    var digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    if (digits.length > 10) digits = digits.substring(0, 10);
+
+    // 3-3-2-2 gruplama: 532 123 45 67
+    final buf = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      if (i == 3 || i == 6 || i == 8) buf.write(' ');
+      buf.write(digits[i]);
+    }
+    final text = buf.toString();
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+}
+
+/// Picker sonucu — `null` (kullanıcı vazgeçti) ile `value == null`
+/// (bilerek "belirtilmemiş" seçti) durumlarını ayırt etmek için sarmalar.
+class PickerResult<T> {
+  final T value;
+  const PickerResult(this.value);
+}
+
+/// Cihazın kendi tarih seçicisini tetikler: iOS'ta CupertinoDatePicker
+/// (tekerlek), diğer platformlarda Material [showDatePicker].
+Future<DateTime?> showNativeDatePicker(
+  BuildContext context, {
+  required DateTime initialDate,
+  required DateTime firstDate,
+  required DateTime lastDate,
+  String? helpText,
+}) {
+  final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
+  if (!isIOS) {
+    return showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: firstDate,
+      lastDate: lastDate,
+      helpText: helpText,
+    );
+  }
+
+  var temp = initialDate;
+  return showModalBottomSheet<DateTime>(
+    context: context,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (ctx) => SafeArea(
+      top: false,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _NativeSheetHeader(
+            title: helpText ?? 'Tarih seç',
+            onDone: () => Navigator.pop(ctx, temp),
+          ),
+          SizedBox(
+            height: 220,
+            child: CupertinoDatePicker(
+              mode: CupertinoDatePickerMode.date,
+              initialDateTime: initialDate,
+              minimumDate: firstDate,
+              maximumDate: lastDate,
+              onDateTimeChanged: (d) => temp = d,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// Cihazın kendi seçim tekerleğini/listesini tetikler: iOS'ta CupertinoPicker,
+/// diğer platformlarda modal liste. Vazgeçilirse `null`, seçim yapılırsa
+/// [PickerResult] döner.
+Future<PickerResult<T>?> showNativePicker<T>(
+  BuildContext context, {
+  required String title,
+  required List<(T, String)> options,
+  T? selected,
+}) {
+  final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
+  var index = options.indexWhere((o) => o.$1 == selected);
+  if (index < 0) index = 0;
+
+  if (isIOS) {
+    var temp = index;
+    return showModalBottomSheet<PickerResult<T>>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _NativeSheetHeader(
+              title: title,
+              onDone: () =>
+                  Navigator.pop(ctx, PickerResult<T>(options[temp].$1)),
+            ),
+            SizedBox(
+              height: 220,
+              child: CupertinoPicker(
+                scrollController:
+                    FixedExtentScrollController(initialItem: index),
+                itemExtent: 38,
+                onSelectedItemChanged: (i) => temp = i,
+                children: [
+                  for (final o in options)
+                    Center(
+                      child: Text(o.$2,
+                          style: const TextStyle(
+                              fontSize: 17, color: AppColors.ink)),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Android / diğer: modal liste (Material native davranış).
+  return showModalBottomSheet<PickerResult<T>>(
+    context: context,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (ctx) => SafeArea(
+      top: false,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(title,
+                  style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.ink)),
+            ),
+          ),
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final o in options)
+                  ListTile(
+                    title: Text(o.$2),
+                    trailing: o.$1 == selected
+                        ? const Icon(Icons.check, color: AppColors.primary)
+                        : null,
+                    onTap: () =>
+                        Navigator.pop(ctx, PickerResult<T>(o.$1)),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// Native alt sayfa (bottom sheet) başlığı: Vazgeç / başlık / Tamam.
+class _NativeSheetHeader extends StatelessWidget {
+  final String title;
+  final VoidCallback onDone;
+  const _NativeSheetHeader({required this.title, required this.onDone});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.line)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Vazgeç',
+                style: TextStyle(color: AppColors.muted)),
+          ),
+          Text(title,
+              style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.ink)),
+          TextButton(
+            onPressed: onDone,
+            child: const Text('Tamam',
+                style: TextStyle(
+                    color: AppColors.primary, fontWeight: FontWeight.w700)),
+          ),
+        ],
       ),
     );
   }

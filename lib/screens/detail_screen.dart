@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../data/api.dart';
 import '../data/auth_service.dart';
 import '../data/favorites_service.dart';
 import '../data/home_config.dart';
 import '../data/models.dart';
+import '../navigation/main_nav.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/confetti.dart';
@@ -944,7 +946,7 @@ class _DetailScreenState extends State<DetailScreen> {
         icon: Icons.location_on_outlined,
         title: 'Adres',
         value: d.adres,
-        onTap: () => _copy(d.adres, 'Adres')
+        onTap: () => _openMaps(d)
       ));
     }
     if (d.telefon.isNotEmpty) {
@@ -952,15 +954,7 @@ class _DetailScreenState extends State<DetailScreen> {
         icon: Icons.phone_outlined,
         title: 'İletişim',
         value: d.telefon,
-        onTap: () => _copy(d.telefon, 'Numara')
-      ));
-    }
-    if (d.email.isNotEmpty) {
-      specs.add((
-        icon: Icons.mail_outline,
-        title: 'E-posta',
-        value: d.email,
-        onTap: () => _copy(d.email, 'E-posta')
+        onTap: () => _callPhone(d.telefon)
       ));
     }
     if (specs.isEmpty) {
@@ -1038,6 +1032,28 @@ class _DetailScreenState extends State<DetailScreen> {
           content: Text('$label kopyalandı'),
           duration: const Duration(seconds: 2)),
     );
+  }
+
+  /// Telefona dokununca cihazın arama uygulamasını açar.
+  Future<void> _callPhone(String phone) async {
+    final digits = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    if (digits.isEmpty) return;
+    final uri = Uri(scheme: 'tel', path: digits);
+    if (!await launchUrl(uri) && mounted) {
+      _copy(phone, 'Numara');
+    }
+  }
+
+  /// Adrese dokununca harita/navigasyon uygulamasını açar. Koordinat varsa
+  /// onu, yoksa adres metnini arama sorgusu olarak kullanır.
+  Future<void> _openMaps(PlaceDetail d) async {
+    final query = d.hasCoord ? '${d.lat},${d.lng}' : d.adres;
+    final uri = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(query)}');
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+        mounted) {
+      _copy(d.adres, 'Adres');
+    }
   }
 
   /// "Değerlendirme Yap" — Bilgiler'in altındaki tam genişlikte buton.
@@ -1359,7 +1375,8 @@ class _DetailScreenState extends State<DetailScreen> {
         TabItemData(Icons.phone_outlined, 'Telefon', false, () {},
             svg: _svgPhone),
         null,
-        TabItemData(Icons.calendar_today_outlined, 'Etkinlik', false, () {},
+        TabItemData(Icons.calendar_today_outlined, 'Etkinlik', false,
+            () => MainNav.instance.select(3),
             svg: FloatingTabBar.svgEvent),
         TabItemData(Icons.qr_code_2, 'Menü', false, _openMenu, svg: _svgQr),
       ],

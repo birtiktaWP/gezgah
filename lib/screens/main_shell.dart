@@ -3,6 +3,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import '../data/auth_service.dart';
 import '../data/models.dart';
+import '../navigation/main_nav.dart';
 import '../theme/app_theme.dart';
 import '../widgets/kedy_chat.dart';
 import '../widgets/notifications_modal.dart';
@@ -30,14 +31,24 @@ class _MainShellState extends State<MainShell> {
   @override
   void initState() {
     super.initState();
+    // Tüm footer yönlendirmesini bu shell üstlenir (bkz. MainNav).
+    MainNav.instance.attach(_selectTab);
     // Oturum kapanırsa Hesabım sekmesinde kalınmasın.
     AuthService.instance.user.addListener(_onAuthChanged);
   }
 
   @override
   void dispose() {
+    MainNav.instance.detach(_selectTab);
     AuthService.instance.user.removeListener(_onAuthChanged);
     super.dispose();
+  }
+
+  /// İtilen bir sayfadan (Etkinlikler/Kategori/Favoriler…) footer'a basılınca
+  /// çağrılır: önce üstteki tüm sayfaları kapat, sonra sekmeyi/aksiyonu uygula.
+  void _selectTab(int i) {
+    Navigator.of(context).popUntil((r) => r.isFirst);
+    _onTab(i);
   }
 
   void _onAuthChanged() {
@@ -56,7 +67,6 @@ class _MainShellState extends State<MainShell> {
         _openKedy();
         break;
       case 3:
-        // Etkinlikler artık ayrı bir sayfa olarak açılır.
         Navigator.push(
             context, MaterialPageRoute(builder: (_) => const EventsScreen()));
         break;
@@ -151,7 +161,8 @@ class _MainShellState extends State<MainShell> {
             Align(
               alignment: Alignment.bottomCenter,
               child: SafeArea(
-                child: FloatingTabBar(activeIndex: _index, onTap: _onTab),
+                child: FloatingTabBar(
+                    activeIndex: _index, onTap: MainNav.instance.select),
               ),
             ),
           ],

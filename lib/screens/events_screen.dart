@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import '../data/api.dart';
 import '../data/models.dart';
+import '../navigation/main_nav.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
-import '../widgets/kedy_chat.dart';
-import '../widgets/search_modal.dart';
 import '../widgets/tabbar.dart';
-import 'detail_screen.dart';
 
 /// Etkinlikler — ayrı (itilerek açılan) sayfa. `GET /etkinlikler?upcoming=1`
 /// (yaklaşan etkinlikler). Sonuç boşsa ekranın ortasında bilgi gösterir.
@@ -87,29 +85,6 @@ class _EventsScreenState extends State<EventsScreen> {
     }
   }
 
-  // Aramadan bir mekan seçilince detayını açar (etkinlik listesi için değil).
-  void _openDetail(Place p) {
-    Navigator.push(
-        context, MaterialPageRoute(builder: (_) => DetailScreen(place: p)));
-  }
-
-  void _onTab(int i) {
-    switch (i) {
-      case 0:
-        Navigator.popUntil(context, (r) => r.isFirst);
-        break;
-      case 1:
-        showSearchModal(context, onOpenDetail: _openDetail);
-        break;
-      case 2:
-        showKedyChat(context);
-        break;
-      case 4:
-        Navigator.popUntil(context, (r) => r.isFirst);
-        break;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -120,7 +95,8 @@ class _EventsScreenState extends State<EventsScreen> {
           Align(
             alignment: Alignment.bottomCenter,
             child: SafeArea(
-              child: FloatingTabBar(activeIndex: 3, onTap: _onTab),
+              child: FloatingTabBar(
+                  activeIndex: 3, onTap: MainNav.instance.select),
             ),
           ),
         ],

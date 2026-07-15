@@ -9,7 +9,6 @@ import '../data/user_service.dart';
 import '../screens/category_screen.dart';
 import '../theme/app_theme.dart';
 import 'common.dart';
-import 'place_cards.dart';
 
 /// Gelişmiş arama — tam ekran açılan modal.
 void showSearchModal(BuildContext context,
@@ -52,7 +51,6 @@ class _SearchModalState extends State<_SearchModal> {
   List<String> _popular = MockData.popularSearches; // API gelene kadar fallback
   List<String> _history = const [];
   List<Category> _categories = const []; // ana sayfayla aynı kaynak
-  List<Place> _sponsored = const []; // search_page_settings sponsorlu
 
   @override
   void initState() {
@@ -74,25 +72,12 @@ class _SearchModalState extends State<_SearchModal> {
       cats = const [];
     }
 
-    // Arama sayfası sponsorlu restoranları (search_page_settings).
-    List<Place> sponsored = const [];
-    try {
-      final items = await HomeRepository.instance.aramaSponsorluRestoranlar();
-      sponsored = items.map((a) {
-        final cd = a.cityDistrict;
-        return a.toPlace(subtitle: cd.isNotEmpty ? cd : 'Restoran');
-      }).toList();
-    } catch (_) {
-      sponsored = const [];
-    }
-
     if (!mounted) return;
     setState(() {
       _userId = id;
       if (pop.isNotEmpty) _popular = pop;
       _history = hist;
       _categories = cats;
-      _sponsored = sponsored;
     });
   }
 
@@ -231,33 +216,6 @@ class _SearchModalState extends State<_SearchModal> {
                   _kedyHeader(),
                   const SizedBox(height: 12),
                   _kedyGrid(),
-                  const SizedBox(height: 26),
-                  _sectionTitle('Sponsorlu', link: true),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    height: 188,
-                    child: Builder(
-                      builder: (_) {
-                        final sponsored = _sponsored.isNotEmpty
-                            ? _sponsored
-                            : MockData.popular;
-                        return ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: sponsored.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(width: 14),
-                          itemBuilder: (_, i) => PopCard(
-                            place: sponsored[i],
-                            sponsored: true,
-                            onTap: () {
-                              Navigator.pop(context);
-                              widget.onOpenDetail?.call(sponsored[i]);
-                            },
-                          ),
-                        );
-                      },
-                    ),
-                  ),
                   const SizedBox(height: 26),
                   _sectionTitle('Kategoriler'),
                   const SizedBox(height: 14),

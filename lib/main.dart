@@ -20,11 +20,10 @@ Future<void> main() async {
     statusBarIconBrightness: Brightness.light,
   ));
 
-  // Üstteki durum çubuğunu (iOS saat/pil/sinyal — "siyah çubuk") gizle.
-  // Yalnızca alt sistem çubuğu görünür kalır; içerik tepeye kadar uzanır.
+  // Üstteki durum çubuğu (saat/pil/sinyal) ve alt sistem çubuğu görünür.
   SystemChrome.setEnabledSystemUIMode(
-    SystemUiMode.manual,
-    overlays: [SystemUiOverlay.bottom],
+    SystemUiMode.edgeToEdge,
+    overlays: SystemUiOverlay.values,
   );
 
   // Uygulamayı ilk açan her cihaz için anonim kimliği üret/yükle (yerel).
@@ -56,6 +55,16 @@ Future<void> main() async {
   runApp(GezgahApp(seenWelcome: seenWelcome));
 }
 
+/// Aşırı-kaydırma (bounce) yerine sınırda duran fizik — üstte beyaz boşluk
+/// açılmasını engeller. Uygulamadaki tüm kaydırılabilir alanlara uygulanır.
+class _NoBounceScrollBehavior extends MaterialScrollBehavior {
+  const _NoBounceScrollBehavior();
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) =>
+      const ClampingScrollPhysics();
+}
+
 class GezgahApp extends StatelessWidget {
   final bool seenWelcome;
   const GezgahApp({super.key, required this.seenWelcome});
@@ -66,6 +75,15 @@ class GezgahApp extends StatelessWidget {
       title: 'Gezgah',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      // Aşırı-kaydırmada (iOS bounce) üstte arka planın görünmesini önle;
+      // üstteki başlık/arama sabit kalsın (clamping = sınırda durur).
+      scrollBehavior: const _NoBounceScrollBehavior(),
+      // Uygulama genelinde: herhangi bir boşluğa dokununca klavyeyi kapat.
+      builder: (context, child) => GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        child: child,
+      ),
       home: _PhoneFrame(child: _Root(seenWelcome: seenWelcome)),
     );
   }

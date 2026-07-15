@@ -235,9 +235,10 @@ class UyeRepository {
 
   /// `POST /uye/giris` — e-posta + parola ile giriş. Hatalıysa [AuthException]
   /// ("E-posta veya parola hatalı."). Cihaz token'ı Bearer interceptor'dan gelir.
-  Future<AppUser> giris(String email, String parola) async {
+  Future<AppUser> giris(String ulkeKodu, String telefon, String parola) async {
     final res = await _guard(() => _dio.post('/uye/giris', data: {
-          'email': email.trim(),
+          'ulke_kodu': ulkeKodu,
+          'telefon': telefon,
           'parola': parola,
         }));
     return _handleUye(res, fallback: 'Giriş yapılamadı. Bilgileri kontrol et.');
