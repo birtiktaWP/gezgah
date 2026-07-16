@@ -935,8 +935,7 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
         textFieldController: _telefonC,
         formatInput: true,
         maxLength: 20,
-        keyboardType:
-            const TextInputType.numberWithOptions(signed: true, decimal: true),
+        keyboardType: TextInputType.phone,
         autoValidateMode: AutovalidateMode.disabled,
         ignoreBlank: true,
         spaceBetweenSelectorAndTextField: 0,

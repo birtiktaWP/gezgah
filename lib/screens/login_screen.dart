@@ -640,8 +640,7 @@ class _LoginScreenState extends State<LoginScreen> {
         textFieldController: _telefonC,
         formatInput: true, // ülkeye göre boşluk/gruplama
         maxLength: 20, // hane limitini kendimiz uyguluyoruz (bkz. _enforce)
-        keyboardType:
-            const TextInputType.numberWithOptions(signed: true, decimal: true),
+        keyboardType: TextInputType.phone,
         autoValidateMode: AutovalidateMode.disabled,
         ignoreBlank: true,
         spaceBetweenSelectorAndTextField: 0,

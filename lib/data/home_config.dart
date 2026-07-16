@@ -16,15 +16,10 @@ class HomeConfig {
   /// section_key: `tumu` — yatay kısayol satırı (ikonlar id'ye göre).
   /// "Tümü" (id 0) kaldırıldı; alan doğrudan kategori kısayolları ile başlar.
   static const List<HomeShortcut> tumu = [
-    HomeShortcut(138, 'Eczane'),
     HomeShortcut(62, 'Otopark'),
     HomeShortcut(139, 'Müze'),
     HomeShortcut(140, 'Mesire'),
-    HomeShortcut(1081, 'Kahvaltı'),
-    HomeShortcut(128, 'Tatlı & Fırın'),
-    HomeShortcut(129, 'Fast Food'),
-    HomeShortcut(1254, 'Balık'),
-    HomeShortcut(1199, 'Çay Bahçesi'),
+    HomeShortcut(0, 'Plaj'),
   ];
 
   /// section_key: `kahvalti_sokak_tatli` — vitrin kategori id'leri.
@@ -44,6 +39,7 @@ class HomeConfig {
     62: Icons.local_parking_outlined, // Otopark
     139: Icons.account_balance_outlined, // Müze
     140: Icons.park_outlined, // Mesire
+    0: Icons.beach_access_outlined, // Plaj
     1254: Icons.set_meal_outlined, // Balık
     1199: Icons.emoji_food_beverage_outlined, // Çay Bahçesi
     1: Icons.local_cafe_outlined, // Kafe

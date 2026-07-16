@@ -171,12 +171,16 @@ class Category {
   final String slug;
   final int mekanSayisi;
   final int parent; // 0 = üst düzey kategori; >0 ise bir kategorinin alt öğesi
+  final String? icon; // API'den gelen SVG ikon (kategori_svg_icon); yoksa null
+  final int? sortOrder; // öne çıkan kategori sırası (küçük = önce); yoksa null
   const Category({
     required this.id,
     required this.name,
     this.slug = '',
     this.mekanSayisi = 0,
     this.parent = 0,
+    this.icon,
+    this.sortOrder,
   });
 
   bool get isTopLevel => parent == 0;
@@ -189,6 +193,10 @@ class Category {
         slug: j['slug'] as String? ?? '',
         mekanSayisi: (j['mekan_sayisi'] as num?)?.toInt() ?? 0,
         parent: (j['parent'] as num?)?.toInt() ?? 0,
+        icon: (j['icon'] as String?)?.trim().isNotEmpty == true
+            ? (j['icon'] as String).trim()
+            : null,
+        sortOrder: (j['sort_order'] as num?)?.toInt(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -197,6 +205,8 @@ class Category {
         'slug': slug,
         'mekan_sayisi': mekanSayisi,
         'parent': parent,
+        'icon': icon,
+        'sort_order': sortOrder,
       };
 }
 

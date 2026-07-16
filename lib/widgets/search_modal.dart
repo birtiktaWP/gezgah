@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../data/api.dart';
-import '../data/home_config.dart';
 import '../data/mock_data.dart';
 import '../data/models.dart';
 import '../data/search_history.dart';
@@ -66,8 +65,14 @@ class _SearchModalState extends State<_SearchModal> {
     List<Category> cats = const [];
     try {
       final all = await HomeRepository.instance.kategoriler();
-      cats = all.where((c) => c.mekanSayisi > 0).toList()
-        ..sort((a, b) => b.mekanSayisi.compareTo(a.mekanSayisi));
+      // one_cikan_kategoriler'de mekan_sayisi yok (hepsi 0); bu durumda
+      // curated sırayı koru. Aksi halde (fallback /kategoriler) mekanı
+      // olanları mekan sayısına göre sırala.
+      final hasCounts = all.any((c) => c.mekanSayisi > 0);
+      cats = hasCounts
+          ? (all.where((c) => c.mekanSayisi > 0).toList()
+            ..sort((a, b) => b.mekanSayisi.compareTo(a.mekanSayisi)))
+          : all;
     } catch (_) {
       cats = const [];
     }
@@ -590,8 +595,13 @@ class _SearchModalState extends State<_SearchModal> {
                     decoration: BoxDecoration(
                         color: AppColors.primarySoft,
                         borderRadius: BorderRadius.circular(12)),
-                    child: Icon(HomeConfig.iconFor(c.id),
-                        color: AppColors.primary, size: 24),
+                    child: Center(
+                      child: CategoryIcon(
+                          icon: c.icon,
+                          id: c.id,
+                          color: AppColors.primary,
+                          size: 24),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(c.name,

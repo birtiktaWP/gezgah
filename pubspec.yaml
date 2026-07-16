@@ -26,6 +26,9 @@ dependencies:
   intl_phone_number_input: ^0.7.5
   dlibphonenumber: ^1.1.67
 
+  flutter_localizations:
+    sdk: flutter
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

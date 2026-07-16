@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../data/home_config.dart';
 import '../theme/app_theme.dart';
 
 /// Ağ görseli için tutarlı placeholder/error davranışı olan sarmalayıcı.
@@ -531,5 +532,39 @@ class _NativeSheetHeader extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Kategori ikonu: API'den gelen [icon] (SVG markup veya emoji/metin) varsa
+/// onu kullanır; yoksa id'ye göre [HomeConfig.iconFor] varsayılanına düşer.
+class CategoryIcon extends StatelessWidget {
+  final String? icon; // API: kategori_svg_icon (SVG markup ya da emoji)
+  final int id; // yedek ikon için kategori id'si
+  final double size;
+  final Color color;
+  const CategoryIcon({
+    super.key,
+    required this.icon,
+    required this.id,
+    this.size = 24,
+    this.color = AppColors.primary,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final ic = icon;
+    if (ic != null && ic.isNotEmpty) {
+      if (ic.contains('<svg')) {
+        return SvgPicture.string(
+          ic,
+          width: size,
+          height: size,
+          colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+        );
+      }
+      // Emoji / metin ikon
+      return Text(ic, style: TextStyle(fontSize: size * 0.9));
+    }
+    return Icon(HomeConfig.iconFor(id), size: size, color: color);
   }
 }

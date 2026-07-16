@@ -42,3 +42,6 @@ app.*.map.json
 
 # Eski HTML mockup klasörü (silindi)
 /mobile-html
+
+# Yerel dokümantasyon (repoya gönderilmez)
+.readme/

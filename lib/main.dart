@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'data/auth_service.dart';
 import 'data/device_service.dart';
@@ -75,6 +76,14 @@ class GezgahApp extends StatelessWidget {
       title: 'Gezgah',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      // Native tarih/saat seçiciler dahil tüm arayüz Türkçe.
+      locale: const Locale('tr'),
+      supportedLocales: const [Locale('tr'), Locale('en')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       // Aşırı-kaydırmada (iOS bounce) üstte arka planın görünmesini önle;
       // üstteki başlık/arama sabit kalsın (clamping = sınırda durur).
       scrollBehavior: const _NoBounceScrollBehavior(),

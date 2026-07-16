@@ -31,7 +31,7 @@ class HomeScreen extends StatefulWidget {
 typedef _Loc = ({double lat, double lng, bool real});
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _activeShortcut = -1; // başlangıçta hiçbir kısayol seçili değil
+  final int _activeShortcut = -1; // kısayollar şimdilik tıklanmıyor
 
   // Konum bir kez çözülür, tüm mesafe hesaplarında paylaşılır.
   late final Future<_Loc> _loc;
@@ -75,11 +75,15 @@ class _HomeScreenState extends State<HomeScreen> {
     _eventsFuture = store.etkinlikler();
   }
 
-  /// Kategori listesini filtreler/sıralar (mekanı olanlar, azalan mekan sayısı).
+  /// Öne çıkan kategoriler endpoint'ten seçili ve sıralı gelir; olduğu gibi
+  /// kullanılır. (Eski `/kategoriler` fallback'inde mekan sayısı olanlar öne
+  /// alınır.) Not: `one_cikan_kategoriler` yanıtında `mekan_sayisi` bulunmadığı
+  /// için `mekanSayisi > 0` filtresi TÜM listeyi eler — bu yüzden kaldırıldı.
   List<Category> _prepCategories(List<Category> all) {
-    final list = all.where((c) => c.mekanSayisi > 0).toList()
+    final hasCounts = all.any((c) => c.mekanSayisi > 0);
+    if (!hasCounts) return all; // curated liste: sırayı koru
+    return all.where((c) => c.mekanSayisi > 0).toList()
       ..sort((a, b) => b.mekanSayisi.compareTo(a.mekanSayisi));
-    return list;
   }
 
   /// Önbellekteki ApiPlace'leri (mesafesiz) Place kartlarına çevirir —
@@ -384,10 +388,8 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: HomeConfig.iconFor(s.id),
             label: s.name,
             active: _activeShortcut == i,
-            onTap: () {
-              setState(() => _activeShortcut = i);
-              _openCategory(s.id, s.name);
-            },
+            // Şimdilik tıklanmaz (navigasyon devre dışı).
+            onTap: null,
           );
         },
       ),
@@ -437,8 +439,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         decoration: BoxDecoration(
                             color: AppColors.primarySoft,
                             borderRadius: BorderRadius.circular(12)),
-                        child: Icon(HomeConfig.iconFor(c.id),
-                            color: AppColors.primary, size: 24),
+                        child: Center(
+                          child: CategoryIcon(
+                              icon: c.icon,
+                              id: c.id,
+                              color: AppColors.primary,
+                              size: 24),
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Text(c.name,

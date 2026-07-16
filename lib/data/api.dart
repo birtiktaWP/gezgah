@@ -645,25 +645,68 @@ class HomeRepository {
 
   Dio get _dio => Api.instance.dio;
 
-  /// `GET /kategoriler` — tüm sistem kategorileri (kısa süreli cache).
+  /// Öne çıkan kategoriler (kısa süreli cache). Önce
+  /// `GET /home-page-settings/one_cikan_kategoriler` denenir (kategoriler
+  /// `icon` SVG'siyle birlikte, seçili sırada gelir); yayında değilse
+  /// `GET /kategoriler`'e düşer.
   Future<List<Category>> kategoriler({bool forceRefresh = false}) async {
     final fresh = _categoriesAt != null &&
         DateTime.now().difference(_categoriesAt!) < _ttl;
     if (!forceRefresh && _categoriesCache != null && fresh) {
       return _categoriesCache!;
     }
+    List<Category>? list = await _oneCikanKategoriler();
+    list ??= await _tumKategoriler();
+    _categoriesCache = list;
+    _categoriesAt = DateTime.now();
+    return list;
+  }
+
+  /// `GET /home-page-settings/one_cikan_kategoriler` → `data.settings.categories`
+  /// (id, name, slug, icon). Hata/boşsa `null` döner (çağıran yedeğe düşer).
+  Future<List<Category>?> _oneCikanKategoriler() async {
+    try {
+      final res = await _dio.get('/home-page-settings/one_cikan_kategoriler');
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return null;
+      final settings = (body['data'] as Map?)?['settings'];
+      final cats = (settings as Map?)?['categories'];
+      if (cats is! List) return null;
+      final list = cats
+          .whereType<Map<String, dynamic>>()
+          .map(Category.fromJson)
+          .where((c) => c.id > 0)
+          .toList();
+      // sort_order'a göre artan sırala (KATEGORI_SIRALAMA.md); sort_order'ı
+      // olmayanlar mevcut (dizi) sırasını koruyarak sona eklenir.
+      final indexed = list.asMap().entries.toList();
+      indexed.sort((a, b) {
+        final sa = a.value.sortOrder;
+        final sb = b.value.sortOrder;
+        if (sa == null && sb == null) return a.key.compareTo(b.key);
+        if (sa == null) return 1;
+        if (sb == null) return -1;
+        final c = sa.compareTo(sb);
+        return c != 0 ? c : a.key.compareTo(b.key);
+      });
+      final sorted = indexed.map((e) => e.value).toList();
+      return sorted.isEmpty ? null : sorted;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// `GET /kategoriler` — tüm sistem kategorileri (yedek).
+  Future<List<Category>> _tumKategoriler() async {
     final res = await _dio.get('/kategoriler');
     final body = res.data as Map<String, dynamic>;
     if (body['success'] != true) {
       throw Exception(body['error']?['message'] ?? 'Kategoriler alınamadı');
     }
-    final list = (body['data'] as List<dynamic>)
+    return (body['data'] as List<dynamic>)
         .whereType<Map<String, dynamic>>()
         .map(Category.fromJson)
         .toList();
-    _categoriesCache = list;
-    _categoriesAt = DateTime.now();
-    return list;
   }
 
   /// Kategori detayı: kategori + alt kategoriler + sabit restoran + mekanlar.
