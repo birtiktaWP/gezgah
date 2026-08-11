@@ -16,8 +16,13 @@ import 'map_screen.dart';
 
 class CategoryScreen extends StatefulWidget {
   final int? categoryId;
+
+  /// Post type slug'ı (kategori yerine). Verilirse `/mekanlar?type=<type>` ile
+  /// listelenir (otopark | muze | mesire | plaj). Alt kategori/pin/filtre yok.
+  final String? type;
   final String title;
-  const CategoryScreen({super.key, this.categoryId, this.title = 'Kategori'});
+  const CategoryScreen(
+      {super.key, this.categoryId, this.type, this.title = 'Kategori'});
 
   @override
   State<CategoryScreen> createState() => _CategoryScreenState();
@@ -110,7 +115,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
 
   Future<void> _load() async {
     final id = widget.categoryId;
-    if (id == null) {
+    final type = widget.type;
+    if (id == null && type == null) {
       _useFallback();
       return;
     }
@@ -119,9 +125,29 @@ class _CategoryScreenState extends State<CategoryScreen> {
     // yere 4-5 sn döndürüyordu. Veri gelir gelmez gösterilir; konum gelince
     // mesafe + sıralama uygulanır.
     final locFuture = _ensureLoc();
+
+    // Type modu: kategori değil post type listesi (/mekanlar?type=).
+    if (type != null) {
+      try {
+        final r = await HomeRepository.instance.mekanlarByType(type, limit: 20);
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _places = List<Place>.from(r.items);
+          _total = r.items.length;
+          _hasMore = r.hasMore;
+          _nextPage = r.nextPage;
+        });
+        _applyLocationWhenReady(locFuture);
+      } catch (_) {
+        _useFallback();
+      }
+      return;
+    }
+
     try {
       final results = await Future.wait([
-        HomeRepository.instance.kategoriDetay(id, limit: 20),
+        HomeRepository.instance.kategoriDetay(id!, limit: 20),
         HomeRepository.instance.filtreler(type: 'restoran'),
       ]);
       final d = results[0] as CategoryDetail;
@@ -171,7 +197,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
   /// Kaydırma sonuna gelince otomatik olarak sonraki 20 kaydı yükler.
   Future<void> _loadMore() async {
     final id = widget.categoryId;
-    if (id == null ||
+    final type = widget.type;
+    if ((id == null && type == null) ||
         _loadingMore ||
         _loading ||
         !_hasMore ||
@@ -179,9 +206,32 @@ class _CategoryScreenState extends State<CategoryScreen> {
       return;
     }
     setState(() => _loadingMore = true);
+
+    // Type modu: sonraki sayfayı /mekanlar?type= ile çek.
+    if (type != null) {
+      try {
+        final r = await HomeRepository.instance
+            .mekanlarByType(type, page: _nextPage!, limit: 20);
+        if (!mounted) return;
+        final loc = _loc;
+        if (loc != null) _applyDistances(r.items, loc);
+        setState(() {
+          _places.addAll(r.items);
+          _total = _places.length;
+          _hasMore = r.hasMore;
+          _nextPage = r.nextPage;
+          _loadingMore = false;
+          _sortPlaces();
+        });
+      } catch (_) {
+        if (mounted) setState(() => _loadingMore = false);
+      }
+      return;
+    }
+
     try {
       final d = await HomeRepository.instance
-          .kategoriDetay(id, page: _nextPage!, limit: 20);
+          .kategoriDetay(id!, page: _nextPage!, limit: 20);
       if (!mounted) return;
       // Konum çözülmüşse mesafeleri uygula; değilse İl·İlçe kalır (bloklama).
       final loc = _loc;
@@ -614,12 +664,15 @@ class _CategoryScreenState extends State<CategoryScreen> {
             children: [
               GestureDetector(
                   onTap: _openSortSheet, child: _actBtn(Icons.swap_vert)),
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: _openFilterSheet,
-                child: _actBtn(Icons.filter_list,
-                    active: _selectedFilters.isNotEmpty),
-              ),
+              // Filtre yoksa (ör. type modu) filtre butonunu gizle.
+              if (_filters.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: _openFilterSheet,
+                  child: _actBtn(Icons.filter_list,
+                      active: _selectedFilters.isNotEmpty),
+                ),
+              ],
             ],
           ),
         ],

@@ -1084,6 +1084,44 @@ class HomeRepository {
     return sponsorluRestoranlar(ids);
   }
 
+  /// Post type'a göre sayfalı mekan listesi (`GET /mekanlar?type=<type>`).
+  /// Kategori değil `type` bazlıdır (otopark | muze | mesire | plaj). `/mekanlar`
+  /// meta döndürmediğinden `has_more`, dönen kayıt sayısı [limit]'e eşitse
+  /// varsayılır.
+  Future<({List<Place> items, bool hasMore, int? nextPage})> mekanlarByType(
+    String type, {
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      final list = await mekanlar(type: type, page: page, limit: limit);
+      final items = list.map(_apiToPlace).toList();
+      final hasMore = list.length >= limit;
+      return (
+        items: items,
+        hasMore: hasMore,
+        nextPage: hasMore ? page + 1 : null
+      );
+    } catch (_) {
+      return (items: const <Place>[], hasMore: false, nextPage: null);
+    }
+  }
+
+  /// [ApiPlace]'i liste kartı için [Place]'e çevirir. Koordinat yoksa mesafe
+  /// hesaplanmasın diye lat/lng NaN bırakılır (alt yazıya İl·İlçe yazılır).
+  Place _apiToPlace(ApiPlace ap) => Place(
+        id: ap.id,
+        name: ap.name,
+        category: 'Mekan',
+        subtitle: ap.cityDistrict,
+        rating: 0,
+        distance: ap.cityDistrict,
+        price: '',
+        image: ap.image,
+        lat: ap.lat ?? double.nan,
+        lng: ap.lng ?? double.nan,
+      );
+
   /// `GET /mekanlar` — restoran listesi (yeni → eski sıralı gelir).
   Future<List<ApiPlace>> mekanlar({
     String type = 'restoran',

@@ -70,9 +70,14 @@ class CategoryChip {
 /// Ana sayfa "Tümü" kısayol öğesi (home_page_settings → section_key `tumu`).
 /// İkon, id'ye göre `HomeConfig.iconFor` ile belirlenir (emoji kullanılmaz).
 class HomeShortcut {
-  final int id; // kategori post id (0 = "Tümü")
+  final int id; // ikon eşlemesi için kullanılır (HomeConfig.iconFor)
   final String name;
-  const HomeShortcut(this.id, this.name);
+
+  /// Post type slug'ı (kategori değil): `otopark` | `muze` | `mesire` | `plaj`.
+  /// `/mekanlar?type=<type>` ile listelenir.
+  final String type;
+
+  const HomeShortcut(this.id, this.name, {this.type = ''});
 }
 
 /// Öne çıkan / sponsorlu etkinlik (home_page_settings → sponsorlu_etkinlikler

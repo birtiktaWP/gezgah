@@ -202,6 +202,14 @@ class _HomeScreenState extends State<HomeScreen> {
             builder: (_) => CategoryScreen(categoryId: id, title: title)));
   }
 
+  /// Post type (otopark/muze/mesire/plaj) liste ekranını açar.
+  void _openType(String type, String title) {
+    Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => CategoryScreen(type: type, title: title)));
+  }
+
   // --- Build ------------------------------------------------------------------
 
   @override
@@ -390,8 +398,8 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: HomeConfig.iconFor(s.id),
             label: s.name,
             active: _activeShortcut == i,
-            // Şimdilik tıklanmaz (navigasyon devre dışı).
-            onTap: null,
+            // Bunlar kategori değil post type — type bazlı liste ekranını aç.
+            onTap: s.type.isNotEmpty ? () => _openType(s.type, s.name) : null,
           );
         },
       ),
