@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../data/api.dart';
 import '../data/mock_data.dart';
@@ -42,6 +43,7 @@ class _SearchModalState extends State<_SearchModal> {
   final TextEditingController _controller = TextEditingController();
 
   Timer? _debounce;
+  CancelToken? _searchCancel; // devam eden aramayı iptal etmek için
   String _query = '';
   bool _searching = false;
   List<SearchResult> _results = const [];
@@ -89,6 +91,7 @@ class _SearchModalState extends State<_SearchModal> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _searchCancel?.cancel('modal kapandı');
     _controller.dispose();
     super.dispose();
   }
@@ -98,6 +101,7 @@ class _SearchModalState extends State<_SearchModal> {
     _debounce?.cancel();
     final term = value.trim();
     if (term.length < 2) {
+      _searchCancel?.cancel('kısa sorgu'); // devam eden isteği iptal et
       setState(() {
         _results = const [];
         _searching = false;
@@ -105,15 +109,29 @@ class _SearchModalState extends State<_SearchModal> {
       return;
     }
     setState(() => _searching = true);
-    _debounce = Timer(const Duration(milliseconds: 350), () => _runSearch(term));
+    _debounce = Timer(const Duration(milliseconds: 250), () => _runSearch(term));
   }
 
   Future<void> _runSearch(String term) async {
+    // Önceki (geçersiz) aramayı iptal et; sunucu boşuna çalışmasın.
+    _searchCancel?.cancel('yeni arama');
+    final token = CancelToken();
+    _searchCancel = token;
     try {
-      final r = await HomeRepository.instance.arama(term, userId: _userId);
+      // İlk sonuç ekranı için 10 kayıt yeterli (daha küçük yanıt = daha hızlı);
+      // gerekirse kaydırma ile sonraki sayfalar çekilebilir.
+      final r = await HomeRepository.instance
+          .arama(term, userId: _userId, limit: 10, cancelToken: token);
       if (!mounted || _controller.text.trim() != term) return;
       setState(() {
         _results = r;
+        _searching = false;
+      });
+    } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) return; // iptal edildi → yoksay
+      if (!mounted) return;
+      setState(() {
+        _results = const [];
         _searching = false;
       });
     } catch (_) {
@@ -128,6 +146,7 @@ class _SearchModalState extends State<_SearchModal> {
   bool get _isSearching => _query.trim().length >= 2;
 
   void _clear() {
+    _searchCancel?.cancel('temizlendi');
     setState(() {
       _controller.clear();
       _query = '';

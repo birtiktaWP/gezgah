@@ -731,6 +731,14 @@ class HomeRepository {
   DateTime? _categoriesAt;
   static const _ttl = Duration(minutes: 12);
 
+  // Arama yanıtı kısa süreli bellek cache'i. Aynı/önek sorgular (ör. kullanıcı
+  // "kahve"den "kah"a silince) ağ turu olmadan anında döner. Sunucudaki Redis'e
+  // ek olarak istemci round-trip'ini de ortadan kaldırır.
+  final Map<String, ({DateTime at, List<SearchResult> results})> _searchCache =
+      {};
+  static const Duration _searchTtl = Duration(seconds: 90);
+  static const int _searchCacheMax = 40;
+
   Dio get _dio => Api.instance.dio;
 
   /// Öne çıkan kategoriler (kısa süreli cache). Önce
@@ -1127,9 +1135,19 @@ class HomeRepository {
     int page = 1,
     int limit = 20,
     String? userId, // gönderilirse arama geçmişine kullanıcıyla kaydedilir
+    CancelToken? cancelToken, // yeni sorgu gelince eskisini iptal etmek için
   }) async {
     final term = q.trim();
     if (term.length < 2) return const [];
+
+    // 1) Taze cache varsa ağ turu yapmadan anında dön.
+    final key = '$term|$page|$limit';
+    final cached = _searchCache[key];
+    if (cached != null &&
+        DateTime.now().difference(cached.at) < _searchTtl) {
+      return cached.results;
+    }
+
     final res = await _dio.get(
       '/arama',
       queryParameters: {
@@ -1138,12 +1156,13 @@ class HomeRepository {
         'limit': limit,
         if (userId != null && userId.isNotEmpty) 'user_id': userId,
       },
+      cancelToken: cancelToken,
     );
     final body = res.data as Map<String, dynamic>;
     if (body['success'] != true) return const [];
     final data = body['data'];
     if (data is! List) return const [];
-    return data.whereType<Map<String, dynamic>>().map((j) {
+    final list = data.whereType<Map<String, dynamic>>().map((j) {
       return SearchResult(
         place: _parsePlace(j),
         matchedProducts: (j['eslesen_urunler'] as List<dynamic>?)
@@ -1156,6 +1175,13 @@ class HomeRepository {
             const [],
       );
     }).toList();
+
+    // 2) Sonucu cache'le (basit FIFO budama ile boyut sınırla).
+    _searchCache[key] = (at: DateTime.now(), results: list);
+    if (_searchCache.length > _searchCacheMax) {
+      _searchCache.remove(_searchCache.keys.first);
+    }
+    return list;
   }
 
   /// En çok aranan kelimeler (ARAMA_GECMISI.md).
