@@ -114,8 +114,12 @@ class _CategoryScreenState extends State<CategoryScreen> {
       _useFallback();
       return;
     }
+    // Konumu PARALEL çöz — veri yüklemeyi bloklamasın. Gerçek cihazda GPS
+    // fix'i saniyeler sürebildiğinden, önce konumu beklemek ekranı gereksiz
+    // yere 4-5 sn döndürüyordu. Veri gelir gelmez gösterilir; konum gelince
+    // mesafe + sıralama uygulanır.
+    final locFuture = _ensureLoc();
     try {
-      final loc = await _ensureLoc();
       final results = await Future.wait([
         HomeRepository.instance.kategoriDetay(id, limit: 20),
         HomeRepository.instance.filtreler(type: 'restoran'),
@@ -123,8 +127,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
       final d = results[0] as CategoryDetail;
       final filters = results[1] as List<Filter>;
       if (!mounted) return;
-      _applyDistances(d.places, loc);
-      if (d.pinned != null) _applyDistances([d.pinned!], loc);
       setState(() {
         _loading = false;
         _filters = filters;
@@ -135,12 +137,24 @@ class _CategoryScreenState extends State<CategoryScreen> {
         _total = d.total;
         _hasMore = d.hasMore;
         _nextPage = d.nextPage;
-        _sortPlaces();
       });
+      _applyLocationWhenReady(locFuture);
     } catch (_) {
       // Endpoint yoksa/hata olursa mock vitrine düş (tasarım bozulmasın).
       _useFallback();
     }
+  }
+
+  /// Konum (paralel) çözülünce mesafeleri uygular ve listeyi yeniden sıralar.
+  /// Konum gelene kadar liste İl·İlçe alt yazısıyla ve sunucu sırasıyla görünür.
+  Future<void> _applyLocationWhenReady(Future<_Loc> locFuture) async {
+    final loc = await locFuture;
+    if (!mounted) return;
+    setState(() {
+      _applyDistances(_places, loc);
+      if (_pinned != null) _applyDistances([_pinned!], loc);
+      _sortPlaces();
+    });
   }
 
   void _useFallback() {
@@ -166,11 +180,12 @@ class _CategoryScreenState extends State<CategoryScreen> {
     }
     setState(() => _loadingMore = true);
     try {
-      final loc = await _ensureLoc();
       final d = await HomeRepository.instance
           .kategoriDetay(id, page: _nextPage!, limit: 20);
       if (!mounted) return;
-      _applyDistances(d.places, loc);
+      // Konum çözülmüşse mesafeleri uygula; değilse İl·İlçe kalır (bloklama).
+      final loc = _loc;
+      if (loc != null) _applyDistances(d.places, loc);
       setState(() {
         _places.addAll(d.places);
         _total = d.total;

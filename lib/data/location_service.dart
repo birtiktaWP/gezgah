@@ -11,15 +11,32 @@ class LocationService {
   static const double _fallbackLat = 40.9904;
   static const double _fallbackLng = 29.0292;
 
+  // Uygulama geneli kısa süreli konum cache'i. İlk çözümden sonra diğer
+  // ekranlar (kategori, harita, ana sayfa) aynı konumu anında kullanır;
+  // böylece her ekranda yeniden GPS fix'i beklenmez.
+  static ({double lat, double lng, bool real})? _cached;
+  static DateTime? _cachedAt;
+  static const Duration _cacheTtl = Duration(minutes: 5);
+
   /// Mesafe hesabı için bir konum çözer.
-  /// Sıra: anlık konum → son bilinen konum → varsayılan merkez.
+  /// Sıra: (taze cache) → anlık konum → son bilinen konum → varsayılan merkez.
   /// `real`, gerçek cihaz konumu kullanılıp kullanılmadığını belirtir.
-  static Future<({double lat, double lng, bool real})> resolve() async {
-    final pos = await _tryGetPosition();
-    if (pos != null) {
-      return (lat: pos.latitude, lng: pos.longitude, real: true);
+  static Future<({double lat, double lng, bool real})> resolve(
+      {bool forceRefresh = false}) async {
+    final c = _cached;
+    if (!forceRefresh &&
+        c != null &&
+        _cachedAt != null &&
+        DateTime.now().difference(_cachedAt!) < _cacheTtl) {
+      return c;
     }
-    return (lat: _fallbackLat, lng: _fallbackLng, real: false);
+    final pos = await _tryGetPosition();
+    final r = pos != null
+        ? (lat: pos.latitude, lng: pos.longitude, real: true)
+        : (lat: _fallbackLat, lng: _fallbackLng, real: false);
+    _cached = r;
+    _cachedAt = DateTime.now();
+    return r;
   }
 
   static Future<Position?> _tryGetPosition() async {
