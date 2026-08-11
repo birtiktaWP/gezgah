@@ -87,9 +87,11 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     }
   }
 
-  void _openDetail(Place p) {
+  void _openDetail(Place p, {Object? heroTag}) {
     Navigator.push(
-        context, MaterialPageRoute(builder: (_) => DetailScreen(place: p)));
+        context,
+        MaterialPageRoute(
+            builder: (_) => DetailScreen(place: p, heroTag: heroTag)));
   }
 
   @override
@@ -144,29 +146,38 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                 'Beğendiğin mekanları kalbe dokunarak favorilerine ekleyebilirsin.',
           ));
         }
-        return ListView(
+        // Lazy: hero (0) + favori satırları + (varsa) yükleniyor göstergesi.
+        // Öğeler ve görselleri yalnızca ekrana geldikçe oluşturulur.
+        return ListView.builder(
           controller: _scroll,
           padding: const EdgeInsets.only(bottom: 130),
-          children: [
-            _hero(),
-            const SizedBox(height: 20),
-            ...visible.map((p) => Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
-                  child: _favoriteRow(p),
-                )),
-            if (_loadingMore)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Center(
-                  child: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2.5, color: AppColors.primary),
-                  ),
+          itemCount: 1 + visible.length + (_loadingMore ? 1 : 0),
+          itemBuilder: (context, index) {
+            if (index == 0) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 20),
+                child: _hero(),
+              );
+            }
+            final i = index - 1;
+            if (i < visible.length) {
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
+                child: _favoriteRow(visible[i]),
+              );
+            }
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2.5, color: AppColors.primary),
                 ),
               ),
-          ],
+            );
+          },
         );
       },
     );
@@ -279,8 +290,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
 
   Widget _favoriteRow(Place p) {
     final location = p.distance.isNotEmpty ? p.distance : p.subtitle;
+    final tag = p.id > 0 ? 'fav-${p.id}' : null;
     return GestureDetector(
-      onTap: () => _openDetail(p),
+      onTap: () => _openDetail(p, heroTag: tag),
       child: Container(
         height: 110,
         decoration: BoxDecoration(
@@ -291,7 +303,10 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
         clipBehavior: Clip.antiAlias,
         child: Row(
           children: [
-            SizedBox(width: 110, height: 110, child: NetImage(p.image)),
+            SizedBox(
+                width: 110,
+                height: 110,
+                child: heroImage(tag, p.image)),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14),

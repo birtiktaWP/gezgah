@@ -48,4 +48,41 @@ class HomeConfig {
 
   static IconData iconFor(int id) =>
       categoryIcons[id] ?? Icons.restaurant_outlined;
+
+  /// İşletmeye özel harita ikonları — API'nin `custom_ikon` alanındaki anahtar
+  /// (slug) app içindeki bu sete eşlenir. Doluysa haritada bu ikon gösterilir;
+  /// boş/tanımsızsa kategori ikonuna (ardından varsayılana) düşülür.
+  ///
+  /// Backend bu anahtarlardan birini göndermelidir (ör. `custom_ikon: "pizza"`).
+  static const Map<String, IconData> customIcons = {
+    'kahve': Icons.local_cafe_outlined,
+    'kahvalti': Icons.free_breakfast_outlined,
+    'restoran': Icons.restaurant_outlined,
+    'fastfood': Icons.lunch_dining_outlined,
+    'doner': Icons.kebab_dining_outlined,
+    'tatli': Icons.cake_outlined,
+    'pizza': Icons.local_pizza_outlined,
+    'balik': Icons.set_meal_outlined,
+    'bar': Icons.local_bar_outlined,
+    'cay': Icons.emoji_food_beverage_outlined,
+    'muze': Icons.account_balance_outlined,
+    'park': Icons.park_outlined,
+    'plaj': Icons.beach_access_outlined,
+    'otel': Icons.hotel_outlined,
+    'eczane': Icons.local_pharmacy_outlined,
+    'otopark': Icons.local_parking_outlined,
+    'vegan': Icons.eco_outlined,
+    'yildiz': Icons.star_outline,
+    'kalp': Icons.favorite_border,
+    'muzik': Icons.music_note_outlined,
+    'etkinlik': Icons.celebration_outlined,
+  };
+
+  /// `custom_ikon` anahtarını app içi ikona çevirir; boş/tanımsızsa `null`
+  /// (çağıran kategori ikonuna düşer).
+  static IconData? customIconFor(String key) {
+    final k = key.trim().toLowerCase();
+    if (k.isEmpty) return null;
+    return customIcons[k];
+  }
 }

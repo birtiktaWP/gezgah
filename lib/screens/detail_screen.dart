@@ -12,6 +12,7 @@ import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/confetti.dart';
 import '../widgets/kedy_chat.dart';
+import '../widgets/reservation_sheet.dart';
 import '../widgets/tabbar.dart';
 import 'login_screen.dart';
 import 'menu_screen.dart';
@@ -23,7 +24,13 @@ import 'menu_screen.dart';
 /// çekilip doldurulur.
 class DetailScreen extends StatefulWidget {
   final Place place;
-  const DetailScreen({super.key, required this.place});
+
+  /// Liste kartındaki görselle eşleşen Hero etiketi. Verilirse üst görsel,
+  /// karttan detaya akıcı büyüyerek geçer. Kart ile bire bir aynı etiket
+  /// gönderilmelidir (aksi halde animasyon oynamaz, hata olmaz).
+  final Object? heroTag;
+
+  const DetailScreen({super.key, required this.place, this.heroTag});
 
   @override
   State<DetailScreen> createState() => _DetailScreenState();
@@ -38,6 +45,10 @@ class _DetailScreenState extends State<DetailScreen> {
 
   bool _loading = true;
   PlaceDetail? _detail;
+
+  // Rezervasyon seçenekleri (rezervasyon-api.md). `aktif` (Gezgah Plus) ise
+  // footer'daki "Rezerve" butonu etkinleşir. Detay ile birlikte çekilir.
+  RezervasyonSecenekler? _rez;
 
   // Aynı kategoriden benzer mekanlar (en altta ray). Detay yüklendikten sonra
   // ayrıca çekilir; boşken bölüm gizli kalır.
@@ -90,6 +101,16 @@ class _DetailScreenState extends State<DetailScreen> {
       _loading = false;
     });
     _fetchSimilar(d);
+    _fetchRezervasyon();
+  }
+
+  /// Rezervasyon seçeneklerini çeker (Plus mı, bölge/masa/saatler). Hata/kapalı
+  /// olursa `_rez` null kalır → "Rezerve" butonu pasif görünür.
+  Future<void> _fetchRezervasyon() async {
+    final opts =
+        await RezervasyonRepository.instance.secenekler(widget.place.id);
+    if (!mounted) return;
+    setState(() => _rez = opts);
   }
 
   /// Favoriye ekler/çıkarır. Giriş yoksa önce login açar (FAVORILER.md).
@@ -327,6 +348,23 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   Widget _hero() {
+    final content = _heroContent();
+    final tag = widget.heroTag;
+    if (tag == null) return content;
+    // Galeri bir PageView olduğundan, uçuş sırasında tek düz görsel gösteririz
+    // (glitch'i önler); iniş anında gerçek galeri devreye girer.
+    return Hero(
+      tag: tag,
+      flightShuttleBuilder: (_, __, ___, ____, _____) => NetImage(
+          widget.place.image.isNotEmpty
+              ? widget.place.image
+              : (_images.isNotEmpty ? _images.first : ''),
+          fit: BoxFit.cover),
+      child: content,
+    );
+  }
+
+  Widget _heroContent() {
     final images = _images;
     return SizedBox(
       height: 350,
@@ -798,14 +836,14 @@ class _DetailScreenState extends State<DetailScreen> {
       _fakeEvents = [
     (
       image:
-          'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&w=420&q=70',
+          '',
       day: '14 Haz',
       title: 'Akustik Gece',
       sub: 'Cumartesi · 20:00',
     ),
     (
       image:
-          'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=420&q=70',
+          '',
       day: '18 Haz',
       title: 'Kahve Tadımı',
       sub: 'Çarşamba · 15:00',
@@ -1078,6 +1116,100 @@ class _DetailScreenState extends State<DetailScreen> {
                     fontWeight: FontWeight.w700,
                     color: Colors.white)),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// "Rezerve" butonuna dokunulunca: işletme Plus ise formu açar, değilse
+  /// kısa bir bilgi gösterir.
+  void _onReserveTap() {
+    final rez = _rez;
+    if (rez == null || !rez.aktif) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bu işletme şu an online rezervasyona kapalı.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    _openReservationSheet(rez);
+  }
+
+  /// Rezervasyon formunu (bottom sheet) açar; başarılıysa başarı modalını
+  /// gösterir (rezervasyon-api.md).
+  Future<void> _openReservationSheet(RezervasyonSecenekler rez) async {
+    final result = await showReservationSheet(
+      context,
+      mekanId: widget.place.id,
+      placeName: _name,
+      options: rez,
+    );
+    if (result != null && mounted) {
+      _showReservationSuccess(result.tarih, result.kisi);
+    }
+  }
+
+  /// Rezervasyon oluşturulduğunda gösterilen başarı modalı.
+  void _showReservationSuccess(DateTime tarih, int kisi) {
+    String p(int n) => n.toString().padLeft(2, '0');
+    final tarihStr =
+        '${p(tarih.day)}.${p(tarih.month)}.${tarih.year} · ${p(tarih.hour)}:${p(tarih.minute)}';
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: const BoxDecoration(
+                    color: Color(0xFFF0FBF4), shape: BoxShape.circle),
+                child: const Icon(Icons.event_available_rounded,
+                    size: 34, color: AppColors.open),
+              ),
+              const SizedBox(height: 16),
+              const Text('Rezervasyon talebin alındı!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primary)),
+              const SizedBox(height: 8),
+              Text(
+                  '$_name\n$tarihStr · $kisi kişi\n\n'
+                  'Talebin işletmeye iletildi. Onaylandığında seni '
+                  'bilgilendireceğiz.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 13.5, color: AppColors.muted, height: 1.4)),
+              const SizedBox(height: 20),
+              GestureDetector(
+                onTap: () => Navigator.pop(ctx),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Center(
+                    child: Text('Tamam',
+                        style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white)),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1368,9 +1500,13 @@ class _DetailScreenState extends State<DetailScreen> {
 
   Widget _detailTabbar() {
     return FloatingTabBarShell(
-      onKedyTap: () => showKedyChat(context),
+      onKedyTap: () => showKedyChat(context, postId: widget.place.id),
       items: [
-        TabItemData(Icons.event_available_outlined, 'Rezerve', false, () {},
+        TabItemData(
+            Icons.event_available_outlined,
+            'Rezerve',
+            _rez?.aktif == true, // Plus ise etkin (beyaz), değilse soluk
+            _onReserveTap,
             svg: _svgReserve),
         TabItemData(Icons.phone_outlined, 'Telefon', false, () {},
             svg: _svgPhone),

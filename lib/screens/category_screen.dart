@@ -380,9 +380,11 @@ class _CategoryScreenState extends State<CategoryScreen> {
 
   String get _title => _category?.name ?? widget.title;
 
-  void _openDetail(Place p) {
+  void _openDetail(Place p, {Object? heroTag}) {
     Navigator.push(
-        context, MaterialPageRoute(builder: (_) => DetailScreen(place: p)));
+        context,
+        MaterialPageRoute(
+            builder: (_) => DetailScreen(place: p, heroTag: heroTag)));
   }
 
   @override
@@ -391,74 +393,102 @@ class _CategoryScreenState extends State<CategoryScreen> {
       backgroundColor: AppColors.bg,
       body: Stack(
         children: [
-          ListView(
+          ListView.builder(
             controller: _scroll,
             padding: const EdgeInsets.only(bottom: 120),
-            children: [
-              _header(),
-              if (_loading)
-                const Padding(
-                  padding: EdgeInsets.only(top: 90),
-                  child: Center(
-                    child: SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2.5, color: AppColors.primary),
-                    ),
+            // Lazy: 0 = başlık (+ alt kategori/pin), sonra mekan kartları, en
+            // sonda durum/footer. Mekan kartları ve görselleri yalnızca ekrana
+            // geldikçe oluşturulur.
+            itemCount: _loading ? 1 : 2 + _visiblePlaces.length,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _header(),
+                    if (_loading)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 90),
+                        child: Center(
+                          child: SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2.5, color: AppColors.primary),
+                          ),
+                        ),
+                      )
+                    else ...[
+                      const SizedBox(height: 16),
+                      if (_subs.isNotEmpty) ...[
+                        _categoryPills(),
+                        const SizedBox(height: 18),
+                      ],
+                      _listHead(),
+                      if (_visiblePinned != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
+                          child: ListTileCard(
+                            place: _visiblePinned!,
+                            heroTag: _visiblePinned!.id > 0
+                                ? 'cat-pin-${_visiblePinned!.id}'
+                                : null,
+                            onTap: () => _openDetail(_visiblePinned!,
+                                heroTag: _visiblePinned!.id > 0
+                                    ? 'cat-pin-${_visiblePinned!.id}'
+                                    : null),
+                          ),
+                        ),
+                    ],
+                  ],
+                );
+              }
+
+              final i = index - 1;
+              if (i < _visiblePlaces.length) {
+                final p = _visiblePlaces[i];
+                final tag = p.id > 0 ? 'cat-${p.id}' : null;
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
+                  child: ListTileCard(
+                    place: p,
+                    heroTag: tag,
+                    onTap: () => _openDetail(p, heroTag: tag),
                   ),
-                )
-              else ...[
-                const SizedBox(height: 16),
-                if (_subs.isNotEmpty) ...[
-                  _categoryPills(),
-                  const SizedBox(height: 18),
-                ],
-                _listHead(),
-                if (_visiblePinned != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
-                    child: ListTileCard(
-                      place: _visiblePinned!,
-                      onTap: () => _openDetail(_visiblePinned!),
-                    ),
-                  ),
-                ...List.generate(_visiblePlaces.length, (i) {
-                  final p = _visiblePlaces[i];
-                  return Padding(
-                    padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
-                    child: ListTileCard(
-                      place: p,
-                      onTap: () => _openDetail(p),
-                    ),
-                  );
-                }),
-                if (_visiblePlaces.isEmpty && _visiblePinned == null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(22, 30, 22, 30),
-                    child: Center(
-                      child: Text(
-                          _selectedFilters.isEmpty
-                              ? 'Bu kategoride mekan bulunamadı'
-                              : 'Seçili filtrelere uygun mekan bulunamadı',
-                          style: const TextStyle(
-                              fontSize: 13, color: AppColors.muted)),
-                    ),
-                  ),
-                if (_loadingMore)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Center(
-                      child: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2.5, color: AppColors.primary),
+                );
+              }
+
+              // Son slot: boş durum mesajı ve/veya "daha fazla yükleniyor".
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_visiblePlaces.isEmpty && _visiblePinned == null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(22, 30, 22, 30),
+                      child: Center(
+                        child: Text(
+                            _selectedFilters.isEmpty
+                                ? 'Bu kategoride mekan bulunamadı'
+                                : 'Seçili filtrelere uygun mekan bulunamadı',
+                            style: const TextStyle(
+                                fontSize: 13, color: AppColors.muted)),
                       ),
                     ),
-                  ),
-              ],
-            ],
+                  if (_loadingMore)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Center(
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2.5, color: AppColors.primary),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
           Align(
             alignment: Alignment.bottomCenter,

@@ -9,12 +9,14 @@ class PopCard extends StatelessWidget {
   final Place place;
   final VoidCallback? onTap;
   final bool sponsored;
+  final Object? heroTag;
 
   const PopCard({
     super.key,
     required this.place,
     this.onTap,
     this.sponsored = false,
+    this.heroTag,
   });
 
   @override
@@ -37,7 +39,7 @@ class PopCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  NetImage(place.image),
+                  heroImage(heroTag, place.image),
                   if (sponsored)
                     Positioned(
                       top: 9,
@@ -122,8 +124,10 @@ class _Tag extends StatelessWidget {
 class GridTile2 extends StatelessWidget {
   final Place place;
   final VoidCallback? onTap;
+  final Object? heroTag;
 
-  const GridTile2({super.key, required this.place, this.onTap});
+  const GridTile2(
+      {super.key, required this.place, this.onTap, this.heroTag});
 
   @override
   Widget build(BuildContext context) {
@@ -144,7 +148,7 @@ class GridTile2 extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  NetImage(place.image),
+                  heroImage(heroTag, place.image),
                   Positioned(
                     left: 8,
                     top: 8,
@@ -223,8 +227,10 @@ class GridTile2 extends StatelessWidget {
 class ListTileCard extends StatelessWidget {
   final Place place;
   final VoidCallback? onTap;
+  final Object? heroTag;
 
-  const ListTileCard({super.key, required this.place, this.onTap});
+  const ListTileCard(
+      {super.key, required this.place, this.onTap, this.heroTag});
 
   @override
   Widget build(BuildContext context) {
@@ -247,7 +253,7 @@ class ListTileCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  NetImage(place.image),
+                  heroImage(heroTag, place.image),
                   Positioned(
                     left: 8,
                     top: 8,
@@ -330,7 +336,7 @@ class ListTileCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  NetImage(place.image),
+                  heroImage(heroTag, place.image),
                   Positioned(
                     left: 8,
                     top: 8,

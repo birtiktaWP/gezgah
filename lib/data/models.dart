@@ -584,3 +584,95 @@ String _absUrl(dynamic v, String host) {
   if (v is! String || v.isEmpty) return '';
   return v.startsWith('http') ? v : '$host$v';
 }
+
+/// Rezervasyon bölgesi (`/rezervasyon/secenekler` → `bolgeler[]`).
+class RezervasyonBolge {
+  final int id;
+  final String isim;
+  const RezervasyonBolge({required this.id, this.isim = ''});
+
+  factory RezervasyonBolge.fromJson(Map<String, dynamic> j) => RezervasyonBolge(
+        id: (j['id'] as num?)?.toInt() ?? 0,
+        isim: (j['isim'] ?? j['ad'] ?? '').toString().trim(),
+      );
+}
+
+/// Rezervasyon seçenekleri (`GET /rezervasyon/secenekler`, rezervasyon-api.md).
+/// [aktif] false ise işletme Gezgah Plus değildir → rezervasyon alınmaz.
+class RezervasyonSecenekler {
+  final int mekanId;
+  final bool aktif;
+  final bool bolgeZorunlu;
+  final List<RezervasyonBolge> bolgeler;
+
+  /// Bölge id → o bölgeye ait masa/oda adları.
+  final Map<int, List<String>> masalar;
+
+  /// Gün anahtarı → çalışma saati metni ("09:00 - 23:00" / "Kapalı" / null).
+  final Map<String, String?> calismaSaatleri;
+
+  const RezervasyonSecenekler({
+    required this.mekanId,
+    this.aktif = false,
+    this.bolgeZorunlu = false,
+    this.bolgeler = const [],
+    this.masalar = const {},
+    this.calismaSaatleri = const {},
+  });
+
+  factory RezervasyonSecenekler.fromJson(Map<String, dynamic> j) {
+    final bolgeler = (j['bolgeler'] as List<dynamic>?)
+            ?.whereType<Map<String, dynamic>>()
+            .map(RezervasyonBolge.fromJson)
+            .where((b) => b.id > 0)
+            .toList() ??
+        const <RezervasyonBolge>[];
+
+    final masalarRaw = j['masalar'];
+    final masalar = <int, List<String>>{};
+    if (masalarRaw is Map) {
+      masalarRaw.forEach((k, v) {
+        final id = int.tryParse(k.toString());
+        if (id == null) return;
+        if (v is List) {
+          masalar[id] =
+              v.map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+        }
+      });
+    }
+
+    final saatlerRaw = j['calisma_saatleri'];
+    final saatler = <String, String?>{};
+    if (saatlerRaw is Map) {
+      saatlerRaw.forEach((k, v) {
+        saatler[k.toString()] = v?.toString();
+      });
+    }
+
+    return RezervasyonSecenekler(
+      mekanId: (j['mekan_id'] as num?)?.toInt() ?? 0,
+      aktif: j['rezervasyon_aktif'] == true,
+      bolgeZorunlu: j['bolge_zorunlu'] == true,
+      bolgeler: bolgeler,
+      masalar: masalar,
+      calismaSaatleri: saatler,
+    );
+  }
+}
+
+/// Kedy sohbet mesajı (`/kedy/gecmis` ve yerel geçmiş için). [role] "user"
+/// veya "assistant"; [content] mesaj metni (app-kedy.md).
+class KedyMessage {
+  final String role;
+  final String content;
+  const KedyMessage({required this.role, this.content = ''});
+
+  bool get isUser => role == 'user';
+
+  factory KedyMessage.fromJson(Map<String, dynamic> j) => KedyMessage(
+        role: (j['role'] ?? '').toString().trim(),
+        content: (j['content'] ?? '').toString(),
+      );
+
+  Map<String, String> toJson() => {'role': role, 'content': content};
+}

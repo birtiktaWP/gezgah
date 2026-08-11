@@ -65,6 +65,36 @@ class AuthException implements Exception {
   String toString() => message;
 }
 
+/// Hız sınırı aşıldığında (HTTP 429) fırlatılır (rest-api-v2 §4). Kullanıcıya
+/// "biraz sonra tekrar dene" mesajı göstermek ve kısa bir backoff uygulamak
+/// için kullanılır. [retryAfter] sunucu `Retry-After` başlığını verirse dolar.
+class RateLimitException implements Exception {
+  final String message;
+  final Duration? retryAfter;
+  RateLimitException(this.message, {this.retryAfter});
+  @override
+  String toString() => message;
+}
+
+/// Rezervasyon akışı hataları (rezervasyon-api.md §3). [detail] sunucunun
+/// döndüğü `error.details` kodudur (ör. `need_code`, `code_wrong`,
+/// `need_consent`, `closed`, `need_bolge`) — UI buna göre tepki verebilir.
+class ReservationException implements Exception {
+  final String message;
+  final String? detail;
+  ReservationException(this.message, {this.detail});
+  @override
+  String toString() => message;
+}
+
+/// Kedy asistanı hataları (app-kedy.md). Kullanıcıya gösterilebilir mesaj taşır.
+class KedyException implements Exception {
+  final String message;
+  KedyException(this.message);
+  @override
+  String toString() => message;
+}
+
 /// Her isteğe güvenlik başlıklarını ekler (bkz. GUVENLIK.md §4).
 class _SecurityInterceptor extends Interceptor {
   @override
@@ -135,6 +165,24 @@ class _SecurityInterceptor extends Interceptor {
   @override
   Future<void> onResponse(
       Response response, ResponseInterceptorHandler handler) async {
+    // Hız sınırı (rest-api-v2 §4): 429'u hata olarak yükselt ki çağıranlar
+    // (özellikle `_guard`'lı kimlik akışları) kullanıcıya net mesaj + backoff
+    // gösterebilsin. `validateStatus < 500` olduğundan buraya normal yanıt
+    // olarak düşer; burada reddediyoruz.
+    if (response.statusCode == 429) {
+      return handler.reject(
+        DioException(
+          requestOptions: response.requestOptions,
+          response: response,
+          type: DioExceptionType.badResponse,
+          error: RateLimitException(
+            _rateLimitMessage(response),
+            retryAfter: _retryAfter(response),
+          ),
+        ),
+      );
+    }
+
     final opts = response.requestOptions;
     final alreadyRetried = opts.extra['__auth_retried__'] == true;
     final usedDeviceAuth = opts.extra['__device_auth__'] == true;
@@ -166,6 +214,23 @@ class _SecurityInterceptor extends Interceptor {
       if (msg is String && msg.toLowerCase().contains('token')) return true;
     }
     return false;
+  }
+
+  /// 429 yanıtından sunucunun döndüğü mesajı çıkarır; yoksa genel mesaj.
+  String _rateLimitMessage(Response response) {
+    final data = response.data;
+    if (data is Map && data['error'] is Map) {
+      final m = data['error']['message'];
+      if (m is String && m.trim().isNotEmpty) return m;
+    }
+    return 'Çok fazla istek gönderildi. Lütfen biraz sonra tekrar dene.';
+  }
+
+  /// `Retry-After` başlığını (saniye) süreye çevirir; yoksa null.
+  Duration? _retryAfter(Response response) {
+    final h = response.headers.value('retry-after');
+    final secs = h == null ? null : int.tryParse(h.trim());
+    return secs == null ? null : Duration(seconds: secs);
   }
 
   /// `/cihaz/kayit` cihaz token'ının üretildiği yerdir; token hazırlığını
@@ -401,7 +466,16 @@ class UyeRepository {
       return await run();
     } on AuthException {
       rethrow;
+    } on RateLimitException {
+      rethrow;
     } on DioException catch (e) {
+      // Hız sınırı (429): RateLimitException olarak yükselt ki UI backoff
+      // (geri sayım) uygulayabilsin (rest-api-v2 §4).
+      final err = e.error;
+      if (err is RateLimitException) throw err;
+      if (e.response?.statusCode == 429) {
+        throw RateLimitException(_dioMessage(e));
+      }
       throw AuthException(_dioMessage(e));
     } catch (_) {
       throw AuthException('Beklenmeyen bir hata oluştu. Lütfen tekrar dene.');
@@ -409,6 +483,12 @@ class UyeRepository {
   }
 
   String _dioMessage(DioException e) {
+    // Hız sınırı (429): interceptor RateLimitException taşır → net mesaj göster.
+    final err = e.error;
+    if (err is RateLimitException) return err.message;
+    if (e.response?.statusCode == 429) {
+      return 'Çok fazla deneme yapıldı. Lütfen biraz sonra tekrar dene.';
+    }
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
@@ -530,6 +610,11 @@ class ApiPlace {
   final String ilce; // ilçe
   final List<int> categoryIds;
 
+  /// API'den gelen işletmeye özel harita ikonu anahtarı (`custom_ikon`).
+  /// Doluysa haritada bu ikon (app içindeki setten) gösterilir; boşsa kategori
+  /// ikonuna düşülür.
+  final String customIcon;
+
   const ApiPlace({
     required this.id,
     required this.name,
@@ -539,6 +624,7 @@ class ApiPlace {
     this.sehir = '',
     this.ilce = '',
     this.categoryIds = const [],
+    this.customIcon = '',
   });
 
   bool get hasCoord => lat != null && lng != null;
@@ -574,6 +660,7 @@ class ApiPlace {
         'sehir': sehir,
         'ilce': ilce,
         'category_ids': categoryIds,
+        'custom_ikon': customIcon,
       };
 
   factory ApiPlace.fromCache(Map<String, dynamic> j) => ApiPlace(
@@ -588,6 +675,7 @@ class ApiPlace {
                 ?.map((e) => (e as num).toInt())
                 .toList() ??
             const [],
+        customIcon: (j['custom_ikon'] as String?) ?? '',
       );
 }
 
@@ -1327,6 +1415,7 @@ class HomeRepository {
               ?.map((e) => (e as num).toInt())
               .toList() ??
           const [],
+      customIcon: (j['custom_ikon'] as String?)?.trim() ?? '',
     );
   }
 
@@ -1361,21 +1450,38 @@ class FavRepository {
     return Options(headers: {'Authorization': 'Bearer $token'});
   }
 
-  /// `POST /uye/favoriler` — favoriye ekler (idempotent). Başarılıysa true.
-  Future<bool> ekle(int postId) async {
-    final res = await _dio.post('/uye/favoriler',
-        data: {'post_id': postId}, options: await _auth());
-    final body = res.data;
-    return body is Map && body['success'] == true;
+  /// Hız sınırı (429) hatasını kullanıcıya gösterilebilir
+  /// [RateLimitException]'a çevirir (rest-api-v2 §4); diğer hataları olduğu
+  /// gibi bırakır. UI, favori değişimini geri alıp mesajı gösterir.
+  Future<T> _mapRate<T>(Future<T> Function() run) async {
+    try {
+      return await run();
+    } on DioException catch (e) {
+      final err = e.error;
+      if (err is RateLimitException) throw err;
+      if (e.response?.statusCode == 429) {
+        throw RateLimitException(
+            'Çok fazla istek gönderildi. Lütfen biraz sonra tekrar dene.');
+      }
+      rethrow;
+    }
   }
 
+  /// `POST /uye/favoriler` — favoriye ekler (idempotent). Başarılıysa true.
+  Future<bool> ekle(int postId) => _mapRate(() async {
+        final res = await _dio.post('/uye/favoriler',
+            data: {'post_id': postId}, options: await _auth());
+        final body = res.data;
+        return body is Map && body['success'] == true;
+      });
+
   /// `DELETE /uye/favoriler` — favoriden çıkarır (idempotent). Başarılıysa true.
-  Future<bool> cikar(int postId) async {
-    final res = await _dio.delete('/uye/favoriler',
-        data: {'post_id': postId}, options: await _auth());
-    final body = res.data;
-    return body is Map && body['success'] == true;
-  }
+  Future<bool> cikar(int postId) => _mapRate(() async {
+        final res = await _dio.delete('/uye/favoriler',
+            data: {'post_id': postId}, options: await _auth());
+        final body = res.data;
+        return body is Map && body['success'] == true;
+      });
 
   /// `GET /uye/favoriler?page=&limit=` — favori mekanları (en yeni önce).
   /// Sayfalama meta'sıyla birlikte döner.
@@ -1456,5 +1562,218 @@ class FavRepository {
               .toList() ??
           const [],
     );
+  }
+}
+
+/// İşletme rezervasyonu — `/rezervasyon/*` (rezervasyon-api.md).
+///
+/// Akış: 1) [secenekler] ile işletme Plus mı / bölge-masa-saatler,
+/// 2) [kodGonder] telefona SMS OTP, 3) [olustur] kod + bilgilerle kayıt.
+/// Kimlik interceptor'dan (cihaz/üye token'ı) gelir.
+class RezervasyonRepository {
+  RezervasyonRepository._();
+  static final RezervasyonRepository instance = RezervasyonRepository._();
+
+  Dio get _dio => Api.instance.dio;
+
+  /// `GET /rezervasyon/secenekler?mekan_id=` — işletme rezervasyona açık mı
+  /// (Plus), bölge/masa/çalışma saatleri. Hata/kapalıysa null döner (çağıran
+  /// rezervasyon butonunu pasif tutar).
+  Future<RezervasyonSecenekler?> secenekler(int mekanId) async {
+    if (mekanId <= 0) return null;
+    try {
+      final res = await _dio.get(
+        '/rezervasyon/secenekler',
+        queryParameters: {'mekan_id': mekanId},
+      );
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return null;
+      final data = body['data'];
+      if (data is! Map<String, dynamic>) return null;
+      return RezervasyonSecenekler.fromJson(data);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// `POST /rezervasyon/kod-gonder` — telefona 6 haneli SMS kodu. Başarıda
+  /// kodun geçerlilik süresini (sn) döner. 429'da [RateLimitException],
+  /// diğer hatalarda [ReservationException] fırlatır.
+  Future<int> kodGonder({required int mekanId, required String telefon}) async {
+    try {
+      final res = await _dio.post('/rezervasyon/kod-gonder', data: {
+        'mekan_id': mekanId,
+        'telefon': telefon,
+      });
+      final body = res.data;
+      if (body is Map && body['success'] == true) {
+        final meta = (body['meta'] as Map?) ?? const {};
+        return (meta['gecerlilik_sn'] as num?)?.toInt() ?? 300;
+      }
+      throw ReservationException(
+          _rezMessage(body) ?? 'Doğrulama kodu gönderilemedi.',
+          detail: _rezDetail(body));
+    } on ReservationException {
+      rethrow;
+    } on DioException catch (e) {
+      throw _mapRezError(e, 'Doğrulama kodu gönderilemedi.');
+    }
+  }
+
+  /// `POST /rezervasyon` — rezervasyon oluşturur. Başarıda `hash` döner.
+  /// Doğrulama hatalarında `error.details` kodu taşıyan [ReservationException]
+  /// fırlatır (rezervasyon-api.md §3).
+  Future<String> olustur({
+    required int mekanId,
+    required String adSoyad,
+    required String telefon,
+    required String tarih, // "YYYY-MM-DDTHH:MM"
+    required String kod,
+    required bool kvkk,
+    int kisi = 1,
+    int? bolgeId,
+    String? masa,
+    String? not,
+  }) async {
+    try {
+      final res = await _dio.post('/rezervasyon', data: {
+        'mekan_id': mekanId,
+        'ad_soyad': adSoyad,
+        'telefon': telefon,
+        'kisi': kisi,
+        'tarih': tarih,
+        'kod': kod,
+        'kvkk': kvkk,
+        if (bolgeId != null && bolgeId > 0) 'bolge_id': bolgeId,
+        if (masa != null && masa.isNotEmpty) 'masa': masa,
+        if (not != null && not.trim().isNotEmpty) 'not': not.trim(),
+      });
+      final body = res.data;
+      if (body is Map && body['success'] == true) {
+        final data = body['data'];
+        final hash = data is Map ? (data['hash'] as String?) : null;
+        return hash ?? '';
+      }
+      throw ReservationException(
+          _rezMessage(body) ?? 'Rezervasyon oluşturulamadı.',
+          detail: _rezDetail(body));
+    } on ReservationException {
+      rethrow;
+    } on DioException catch (e) {
+      throw _mapRezError(e, 'Rezervasyon oluşturulamadı.');
+    }
+  }
+
+  Exception _mapRezError(DioException e, String fallback) {
+    final err = e.error;
+    if (err is RateLimitException) return err;
+    if (e.response?.statusCode == 429) {
+      return RateLimitException(
+          _rezMessage(e.response?.data) ??
+              'Çok fazla deneme. Lütfen biraz sonra tekrar dene.',
+          retryAfter: null);
+    }
+    return ReservationException(_rezMessage(e.response?.data) ?? fallback,
+        detail: _rezDetail(e.response?.data));
+  }
+
+  String? _rezMessage(dynamic body) {
+    if (body is! Map) return null;
+    final err = body['error'];
+    if (err is! Map) return null;
+    final msg = err['message'];
+    return (msg is String && msg.trim().isNotEmpty) ? msg : null;
+  }
+
+  String? _rezDetail(dynamic body) {
+    if (body is! Map) return null;
+    final err = body['error'];
+    if (err is! Map) return null;
+    final d = err['details'];
+    if (d is String && d.trim().isNotEmpty) return d;
+    if (d is Map && d['code'] is String) return d['code'] as String;
+    return null;
+  }
+}
+
+/// Kedy yapay zeka asistanı — `/kedy` ve `/kedy/gecmis` (app-kedy.md).
+///
+/// Mobil API bir proxy'dir; istek `kedy.gezgah.com`'a `source=app` ile iletilir.
+/// Kimlik interceptor'dan (cihaz/üye token'ı) gelir. Üye girişliyse geçmiş
+/// sunucuda tutulur; anonimde istemci `history` gönderebilir.
+class KedyRepository {
+  KedyRepository._();
+  static final KedyRepository instance = KedyRepository._();
+
+  Dio get _dio => Api.instance.dio;
+
+  /// `POST /kedy` — kullanıcının mesajını gönderir, asistan yanıtını döner.
+  /// [postId] "bu işletme" bağlamı; [history] yalnız anonim kullanıcıda
+  /// gönderilir. 429'da [RateLimitException], diğer hatalarda [KedyException].
+  Future<String> sor({
+    required String message,
+    int? postId,
+    String lang = 'tr',
+    List<KedyMessage>? history,
+  }) async {
+    try {
+      final res = await _dio.post('/kedy', data: {
+        'message': message,
+        if (postId != null && postId > 0) 'postId': postId,
+        'lang': lang,
+        if (history != null && history.isNotEmpty)
+          'history': history.map((m) => m.toJson()).toList(),
+      });
+      final body = res.data;
+      if (body is Map && body['success'] == true) {
+        final data = body['data'];
+        final answer = data is Map ? (data['answer'] as String?) : null;
+        if (answer != null && answer.trim().isNotEmpty) return answer.trim();
+        return 'Şu an yanıt veremedim. Biraz sonra tekrar dener misin?';
+      }
+      throw KedyException(_kedyMessage(body) ?? 'Kedy yanıt veremedi.');
+    } on KedyException {
+      rethrow;
+    } on DioException catch (e) {
+      final err = e.error;
+      if (err is RateLimitException) throw err;
+      if (e.response?.statusCode == 429) {
+        throw RateLimitException(
+            _kedyMessage(e.response?.data) ??
+                'Kedy şu an çok yoğun. Biraz sonra tekrar dene.');
+      }
+      throw KedyException('Kedy\'ye ulaşılamadı. İnternet bağlantını kontrol et.');
+    }
+  }
+
+  /// `GET /kedy/gecmis?days=` — giriş yapmış üyenin son N günlük geçmişi.
+  /// Anonim kullanıcıda / hatada boş liste döner.
+  Future<List<KedyMessage>> gecmis({int days = 7}) async {
+    try {
+      final res = await _dio.get('/kedy/gecmis',
+          queryParameters: {'days': days});
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return const [];
+      final data = body['data'];
+      final list = data is Map ? data['history'] : null;
+      if (list is! List) return const [];
+      return list
+          .whereType<Map<String, dynamic>>()
+          .map(KedyMessage.fromJson)
+          .where((m) => m.content.trim().isNotEmpty)
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  String? _kedyMessage(dynamic body) {
+    if (body is! Map) return null;
+    final err = body['error'];
+    if (err is Map) {
+      final msg = err['message'];
+      if (msg is String && msg.trim().isNotEmpty) return msg;
+    }
+    return null;
   }
 }

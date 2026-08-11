@@ -132,29 +132,38 @@ class _EventsScreenState extends State<EventsScreen> {
       ));
     }
 
-    return ListView(
+    // Lazy: hero (0) + etkinlik satırları + (varsa) yükleniyor göstergesi.
+    // Öğeler ve görselleri yalnızca ekrana geldikçe oluşturulur.
+    return ListView.builder(
       controller: _scroll,
       padding: const EdgeInsets.only(bottom: 130),
-      children: [
-        _hero(),
-        const SizedBox(height: 20),
-        ..._events.map((e) => Padding(
-              padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
-              child: _eventRow(e),
-            )),
-        if (_loadingMore)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Center(
-              child: SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2.5, color: AppColors.primary),
-              ),
+      itemCount: 1 + _events.length + (_loadingMore ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 20),
+            child: _hero(),
+          );
+        }
+        final i = index - 1;
+        if (i < _events.length) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
+            child: _eventRow(_events[i]),
+          );
+        }
+        return const Padding(
+          padding: EdgeInsets.symmetric(vertical: 16),
+          child: Center(
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2.5, color: AppColors.primary),
             ),
           ),
-      ],
+        );
+      },
     );
   }
 

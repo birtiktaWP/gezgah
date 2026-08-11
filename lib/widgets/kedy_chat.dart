@@ -1,17 +1,22 @@
 import 'package:flutter/material.dart';
+import '../data/api.dart';
+import '../data/auth_service.dart';
+import '../data/models.dart';
 import '../data/mock_data.dart';
+import '../screens/login_screen.dart';
 import 'common.dart';
 
-/// Kedy yapay zeka asistanı — alttan açılan tam yükseklikli sohbet paneli.
+/// Kedy yapay zeka asistanı — alttan açılan tam yükseklikli sohbet paneli
+/// (app-kedy.md). [postId] verilirse "bu işletme" bağlamı olarak gönderilir.
 /// Tasarım: tasarim/index.html içindeki koyu (siyah) temalı chatbot paneli.
-Future<void> showKedyChat(BuildContext context) {
+Future<void> showKedyChat(BuildContext context, {int? postId}) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     useRootNavigator: true,
     backgroundColor: Colors.transparent,
     barrierColor: Colors.black.withValues(alpha: 0.45),
-    builder: (_) => const _KedyChatSheet(),
+    builder: (_) => _KedyChatSheet(postId: postId),
   );
 }
 
@@ -38,7 +43,8 @@ class _K {
 }
 
 class _KedyChatSheet extends StatefulWidget {
-  const _KedyChatSheet();
+  final int? postId;
+  const _KedyChatSheet({this.postId});
 
   @override
   State<_KedyChatSheet> createState() => _KedyChatSheetState();
@@ -55,23 +61,61 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scroll = ScrollController();
 
-  void _send(String text) {
+  bool _sending = false; // Kedy yanıtı bekleniyor (yazıyor…)
+  bool _loadingHistory = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (AuthService.instance.isLoggedIn) _loadHistory();
+  }
+
+  /// Giriş yapmış üyenin sunucudaki Kedy geçmişini yükler (app-kedy.md).
+  Future<void> _loadHistory() async {
+    if (!AuthService.instance.isLoggedIn) return;
+    setState(() => _loadingHistory = true);
+    final hist = await KedyRepository.instance.gecmis(days: 7);
+    if (!mounted) return;
+    setState(() {
+      _messages
+        ..clear()
+        ..addAll(hist.map((m) => _Message(m.content, m.isUser)));
+      _loadingHistory = false;
+    });
+    _scrollDown();
+  }
+
+  Future<void> _send(String text) async {
     final value = text.trim();
-    if (value.isEmpty) return;
+    if (value.isEmpty || _sending) return;
     setState(() {
       _messages.add(_Message(value, true));
       _controller.clear();
+      _sending = true;
     });
     _scrollDown();
-    Future.delayed(const Duration(milliseconds: 700), () {
+    try {
+      final answer = await KedyRepository.instance.sor(
+        message: value,
+        postId: widget.postId,
+        lang: 'tr',
+      );
       if (!mounted) return;
-      setState(() {
-        _messages.add(_Message(
-            'Hemen bakıyorum… Yakınında 3 harika seçenek buldum! İstersen listeyi açayım.',
-            false));
-      });
+      setState(() => _messages.add(_Message(answer, false)));
+    } on RateLimitException catch (e) {
+      if (!mounted) return;
+      setState(() => _messages.add(_Message(e.message, false)));
+    } on KedyException catch (e) {
+      if (!mounted) return;
+      setState(() => _messages.add(_Message(e.message, false)));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _messages
+          .add(_Message('Bir sorun oluştu. Lütfen tekrar dene.', false)));
+    } finally {
+      if (mounted) setState(() => _sending = false);
       _scrollDown();
-    });
+    }
   }
 
   void _scrollDown() {
@@ -96,11 +140,9 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
     final mq = MediaQuery.of(context);
     // Klavye açıkken klavye zaten gezinme çubuğunu kaplar; kapalıyken sistem
     // gezinme çubuğu (safe area) kadar boşluk bırak. Çift saymamak için max.
-    final bottomInset =
-        mq.viewInsets.bottom > mq.viewPadding.bottom
-            ? mq.viewInsets.bottom
-            : mq.viewPadding.bottom;
-    final started = _messages.isNotEmpty;
+    final bottomInset = mq.viewInsets.bottom > mq.viewPadding.bottom
+        ? mq.viewInsets.bottom
+        : mq.viewPadding.bottom;
     return Container(
       height: MediaQuery.of(context).size.height * 0.94,
       decoration: const BoxDecoration(
@@ -112,22 +154,101 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
         child: Column(
           children: [
             _header(context),
+            // Üye girişine göre canlı: giriş yoksa ortada "Üye Girişi Yap"
+            // kapısı, varsa sohbet + öneriler + giriş çubuğu.
             Expanded(
-              child: started
-                  ? ListView.builder(
-                      controller: _scroll,
-                      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-                      itemCount: _messages.length,
-                      itemBuilder: (_, i) => _bubble(_messages[i]),
-                    )
-                  : _welcome(),
+              child: ValueListenableBuilder<AppUser?>(
+                valueListenable: AuthService.instance.user,
+                builder: (_, user, __) {
+                  if (user == null) return _loginGate();
+                  return _chatBody(bottomInset);
+                },
+              ),
             ),
-            if (!started) _suggests(),
-            _inputBar(bottomInset),
           ],
         ),
       ),
     );
+  }
+
+  Widget _chatBody(double bottomInset) {
+    final started = _messages.isNotEmpty;
+    return Column(
+      children: [
+        Expanded(
+          child: _loadingHistory
+              ? const Center(
+                  child: SizedBox(
+                    width: 26,
+                    height: 26,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.5, color: Colors.white),
+                  ),
+                )
+              : (started ? _list() : _welcome()),
+        ),
+        if (!started && !_loadingHistory) _suggests(),
+        _inputBar(bottomInset),
+      ],
+    );
+  }
+
+  // ---- Üye girişi kapısı (giriş yoksa tam ortada) ---------------------------
+  Widget _loginGate() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const KedyIcon(size: 88, color: Colors.white),
+            const SizedBox(height: 18),
+            const Text('Kedy seni bekliyor',
+                style: TextStyle(
+                    fontSize: 21,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white)),
+            const SizedBox(height: 8),
+            const SizedBox(
+              width: 260,
+              child: Text(
+                'Kedy ile sohbet etmek, mekan önerileri almak ve rezervasyon '
+                'yapmak için üye girişi yapmalısın.',
+                textAlign: TextAlign.center,
+                style:
+                    TextStyle(fontSize: 13.5, height: 1.5, color: _K.muted),
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: 220,
+              height: 50,
+              child: ElevatedButton.icon(
+                onPressed: _openLogin,
+                icon: const Icon(Icons.login, size: 19),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+                label: const Text('Üye Girişi Yap',
+                    style: TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w800)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openLogin() async {
+    final ok = await openLogin(context);
+    if (ok == true && mounted && AuthService.instance.isLoggedIn) {
+      _loadHistory();
+    }
   }
 
   // ---- Header ---------------------------------------------------------------
@@ -212,6 +333,19 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
     );
   }
 
+  // ---- Mesaj listesi (yazıyor… göstergesi dahil) ----------------------------
+  Widget _list() {
+    return ListView.builder(
+      controller: _scroll,
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+      itemCount: _messages.length + (_sending ? 1 : 0),
+      itemBuilder: (_, i) {
+        if (i >= _messages.length) return _typing();
+        return _bubble(_messages[i]);
+      },
+    );
+  }
+
   // ---- Mesaj balonu ---------------------------------------------------------
   Widget _bubble(_Message m) {
     if (m.me) {
@@ -264,6 +398,32 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
                   style: const TextStyle(
                       fontSize: 14, height: 1.5, color: _K.botText)),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---- "Yazıyor…" göstergesi ------------------------------------------------
+  Widget _typing() {
+    return const Padding(
+      padding: EdgeInsets.only(bottom: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 30,
+            height: 30,
+            child: Center(child: KedyIcon(size: 22, color: Colors.white)),
+          ),
+          SizedBox(width: 9),
+          Padding(
+            padding: EdgeInsets.only(top: 6),
+            child: Text('yazıyor…',
+                style: TextStyle(
+                    fontSize: 13.5,
+                    fontStyle: FontStyle.italic,
+                    color: _K.muted)),
           ),
         ],
       ),
@@ -324,6 +484,7 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
               Expanded(
                 child: TextField(
                   controller: _controller,
+                  enabled: !_sending,
                   textInputAction: TextInputAction.send,
                   onSubmitted: _send,
                   cursorColor: Colors.white,
@@ -338,11 +499,17 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
               ),
               const SizedBox(width: 8),
               GestureDetector(
-                onTap: () => _send(_controller.text),
-                child: const SizedBox(
+                onTap: _sending ? null : () => _send(_controller.text),
+                child: SizedBox(
                   width: 36,
                   height: 36,
-                  child: Icon(Icons.pets, color: Colors.white, size: 24),
+                  child: _sending
+                      ? const Padding(
+                          padding: EdgeInsets.all(7),
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2.2, color: Colors.white),
+                        )
+                      : const Icon(Icons.pets, color: Colors.white, size: 24),
                 ),
               ),
             ],

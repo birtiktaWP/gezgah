@@ -143,8 +143,13 @@ class _MapScreenState extends State<MapScreen> {
     if (mounted) setState(() => _markers = markers);
   }
 
-  /// Mekanın kategori ikonunu bulur (kategori_ids içinde tanımlı ilk ikon).
+  /// Mekanın harita ikonunu belirler.
+  /// 1) API'den gelen işletmeye özel `custom_ikon` doluysa onu,
+  /// 2) yoksa kategori ikonunu (kategori_ids içinde tanımlı ilk ikon),
+  /// 3) o da yoksa varsayılanı kullanır.
   IconData _iconForPlace(ApiPlace p) {
+    final custom = HomeConfig.customIconFor(p.customIcon);
+    if (custom != null) return custom;
     for (final id in p.categoryIds) {
       final ic = HomeConfig.categoryIcons[id];
       if (ic != null) return ic;
@@ -384,7 +389,7 @@ class _MapScreenState extends State<MapScreen> {
               width: 120,
               height: 130,
               child: p.image.isNotEmpty
-                  ? NetImage(p.image)
+                  ? heroImage(p.id > 0 ? 'map-${p.id}' : null, p.image)
                   : Container(
                       color: AppColors.primarySoft,
                       child: const Icon(Icons.restaurant_outlined,
@@ -435,7 +440,9 @@ class _MapScreenState extends State<MapScreen> {
                                   builder: (_) => DetailScreen(
                                       place: p.toPlace(
                                           subtitle:
-                                              loc.isNotEmpty ? loc : 'Konum')))),
+                                              loc.isNotEmpty ? loc : 'Konum'),
+                                      heroTag:
+                                          p.id > 0 ? 'map-${p.id}' : null))),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 16, vertical: 9),

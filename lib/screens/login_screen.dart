@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:dlibphonenumber/dlibphonenumber.dart' as libphone;
 import 'package:flutter/material.dart';
 import 'package:intl_phone_number_input/intl_phone_number_input.dart';
 
+import '../data/api.dart';
 import '../data/auth_service.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
@@ -34,6 +37,11 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _busy = false;
   bool _obscure = true;
   String? _error;
+
+  // Hız sınırı (429) sonrası kısa geri sayım (rest-api-v2 §4): buton bu süre
+  // boyunca kilitlenir; kullanıcı tekrar tekrar denemeye zorlanmaz.
+  int _cooldown = 0;
+  Timer? _cooldownTimer;
 
   final _isimC = TextEditingController();
   final _soyisimC = TextEditingController();
@@ -107,8 +115,26 @@ class _LoginScreenState extends State<LoginScreen> {
   List<Ilce> _ilceler = const [];
   bool _ilcelerLoaded = false;
 
+  /// 429 sonrası [seconds] saniyelik geri sayımı başlatır; her saniye buton
+  /// etiketini günceller, bitince butonu tekrar açar.
+  void _startCooldown(int seconds) {
+    _cooldownTimer?.cancel();
+    setState(() => _cooldown = seconds);
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      setState(() {
+        _cooldown -= 1;
+        if (_cooldown <= 0) t.cancel();
+      });
+    });
+  }
+
   @override
   void dispose() {
+    _cooldownTimer?.cancel();
     _telefonC.removeListener(_enforcePhoneLimit);
     _isimC.dispose();
     _soyisimC.dispose();
@@ -219,6 +245,11 @@ class _LoginScreenState extends State<LoginScreen> {
       }
       if (!mounted) return;
       Navigator.of(context).pop(true);
+    } on RateLimitException catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.message);
+      // Sunucu Retry-After verdiyse onu, yoksa makul bir varsayılan kullan.
+      _startCooldown(e.retryAfter?.inSeconds ?? 20);
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString());
@@ -504,10 +535,11 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _primaryButton() {
+    final cooling = _cooldown > 0;
     return SizedBox(
       height: 52,
       child: ElevatedButton(
-        onPressed: _busy ? null : _submit,
+        onPressed: (_busy || cooling) ? null : _submit,
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
@@ -523,7 +555,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: CircularProgressIndicator(
                     strokeWidth: 2.5, color: Colors.white),
               )
-            : Text(_register ? 'Kayıt Ol' : 'Giriş Yap',
+            : Text(
+                cooling
+                    ? 'Tekrar dene ($_cooldown sn)'
+                    : (_register ? 'Kayıt Ol' : 'Giriş Yap'),
                 style: const TextStyle(
                     fontSize: 15.5, fontWeight: FontWeight.w800)),
       ),

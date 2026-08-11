@@ -183,9 +183,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // --- Navigasyon -------------------------------------------------------------
 
-  void _openDetail(Place p) {
+  void _openDetail(Place p, {Object? heroTag}) {
     Navigator.push(
-        context, MaterialPageRoute(builder: (_) => DetailScreen(place: p)));
+        context,
+        MaterialPageRoute(
+            builder: (_) => DetailScreen(place: p, heroTag: heroTag)));
   }
 
   void _openMap() {
@@ -853,9 +855,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 separatorBuilder: (_, __) => const SizedBox(width: 14),
                 itemBuilder: (_, i) {
                   final p = places[i];
+                  // Rail başlığı + id → sayfa içinde benzersiz Hero etiketi.
+                  // id yoksa (mock) etiket verme → çakışma olmaz.
+                  final tag = p.id > 0 ? 'rail-$title-${p.id}' : null;
                   return PopCard(
                     place: p,
-                    onTap: () => _openDetail(p),
+                    heroTag: tag,
+                    onTap: () => _openDetail(p, heroTag: tag),
                   );
                 },
               );

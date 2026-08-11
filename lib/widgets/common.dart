@@ -36,6 +36,15 @@ class NetImage extends StatelessWidget {
   }
 }
 
+/// [url] görselini `NetImage` ile gösterir; [tag] verildiyse liste→detay
+/// geçişinde akıcı büyüme için `Hero` ile sarmalar. [tag] null ise düz görsel
+/// döner (Hero yok → aynı ekranda tag çakışması riski olmaz).
+Widget heroImage(Object? tag, String url, {BoxFit fit = BoxFit.cover}) {
+  final img = NetImage(url, fit: fit);
+  if (tag == null) return img;
+  return Hero(tag: tag, child: img);
+}
+
 /// "Gezgah" markası — HTML'deki orijinal SVG logo.
 class GezgahWordmark extends StatelessWidget {
   final Color color;

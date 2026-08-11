@@ -49,7 +49,7 @@ class MockData {
       month: 'Haz',
       location: 'Harbiye Açıkhava · 20:00',
       image:
-          'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&w=640&q=70',
+          '',
     ),
     EventItem(
       title: 'Sokak Lezzetleri Günü',
@@ -58,7 +58,7 @@ class MockData {
       month: 'Haz',
       location: 'Moda Sahili · 12:00',
       image:
-          'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=640&q=70',
+          '',
     ),
     EventItem(
       title: 'Yaz Akşamı Konserleri',
@@ -67,7 +67,7 @@ class MockData {
       month: 'Haz',
       location: 'Kadıköy Sahne · 21:00',
       image:
-          'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=640&q=70',
+          '',
     ),
   ];
 
@@ -80,7 +80,7 @@ class MockData {
       distance: '1.1 km',
       price: '₺₺',
       image:
-          'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=420&q=70',
+          '',
       tags: ['restoran'],
       favorite: true,
     ),
@@ -92,7 +92,7 @@ class MockData {
       distance: '0.6 km',
       price: '₺₺',
       image:
-          'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=420&q=70',
+          '',
       tags: ['kafe', 'tatlı'],
     ),
     Place(
@@ -103,7 +103,7 @@ class MockData {
       distance: '4.2 km',
       price: '₺',
       image:
-          'https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?auto=format&fit=crop&w=420&q=70',
+          '',
       tags: ['müze'],
     ),
   ];
@@ -117,7 +117,7 @@ class MockData {
       distance: '1.2 km',
       price: '₺250',
       image:
-          'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=420&q=70',
+          '',
       state: OpenState.open,
       favorite: true,
       tags: ['restoran'],
@@ -130,7 +130,7 @@ class MockData {
       distance: '0.8 km',
       price: '₺320',
       image:
-          'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=420&q=70',
+          '',
       state: OpenState.open,
       tags: ['restoran'],
     ),
@@ -142,7 +142,7 @@ class MockData {
       distance: '2.4 km',
       price: '₺480',
       image:
-          'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=420&q=70',
+          '',
       state: OpenState.closing,
       tags: ['suşi', 'restoran'],
     ),
@@ -154,7 +154,7 @@ class MockData {
       distance: '1.6 km',
       price: '₺190',
       image:
-          'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=420&q=70',
+          '',
       state: OpenState.open,
       tags: ['vegan', 'restoran'],
     ),
@@ -170,7 +170,7 @@ class MockData {
       distance: '0.7 km',
       price: '%25 indirim',
       image:
-          'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=640&q=70',
+          '',
       sponsored: true,
       verified: true,
       state: OpenState.open,
@@ -183,7 +183,7 @@ class MockData {
       distance: '0.9 km',
       price: '₺220 / kişi',
       image:
-          'https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&w=640&q=70',
+          '',
       state: OpenState.open,
       favorite: true,
     ),
@@ -195,7 +195,7 @@ class MockData {
       distance: '1.4 km',
       price: '₺180 / kişi',
       image:
-          'https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=640&q=70',
+          '',
       state: OpenState.open,
     ),
     Place(
@@ -206,7 +206,7 @@ class MockData {
       distance: '2.1 km',
       price: '₺340 / kişi',
       image:
-          'https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=640&q=70',
+          '',
       state: OpenState.closing,
     ),
     Place(
@@ -217,7 +217,7 @@ class MockData {
       distance: '1.8 km',
       price: '₺200 / kişi',
       image:
-          'https://images.unsplash.com/photo-1504754524776-8f4f37790ca0?auto=format&fit=crop&w=640&q=70',
+          '',
       state: OpenState.open,
     ),
     Place(
@@ -228,7 +228,7 @@ class MockData {
       distance: '0.5 km',
       price: '₺150 / kişi',
       image:
-          'https://images.unsplash.com/photo-1551218808-94e220e084d2?auto=format&fit=crop&w=640&q=70',
+          '',
       state: OpenState.open,
     ),
   ];
@@ -243,7 +243,7 @@ class MockData {
       distance: '3.5 km',
       price: '₺₺',
       image:
-          'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=320&q=70',
+          '',
       lat: 40.9810,
       lng: 29.0270,
       tags: ['kafe'],
@@ -256,7 +256,7 @@ class MockData {
       distance: '1.2 km',
       price: '₺250',
       image:
-          'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=320&q=70',
+          '',
       lat: 40.9905,
       lng: 29.0258,
       tags: ['restoran'],
@@ -269,7 +269,7 @@ class MockData {
       distance: '0.8 km',
       price: '₺320',
       image:
-          'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=320&q=70',
+          '',
       lat: 40.9868,
       lng: 29.0331,
       tags: ['restoran'],
@@ -282,7 +282,7 @@ class MockData {
       distance: '2.4 km',
       price: '₺480',
       image:
-          'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=320&q=70',
+          '',
       lat: 40.9942,
       lng: 29.0292,
       tags: ['suşi', 'restoran'],
@@ -295,7 +295,7 @@ class MockData {
       distance: '0.6 km',
       price: '₺180',
       image:
-          'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=320&q=70',
+          '',
       lat: 40.9772,
       lng: 29.0248,
       tags: ['kafe', 'tatlı'],
@@ -308,7 +308,7 @@ class MockData {
       distance: '1.6 km',
       price: '₺190',
       image:
-          'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=320&q=70',
+          '',
       lat: 40.9931,
       lng: 29.0205,
       tags: ['vegan', 'restoran'],
@@ -333,7 +333,7 @@ class MockData {
       month: 'Haz',
       location: 'Cumartesi · 20:00',
       image:
-          'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&w=420&q=70',
+          '',
     ),
     EventItem(
       title: 'Kahve Tadımı',
@@ -342,7 +342,7 @@ class MockData {
       month: 'Haz',
       location: 'Çarşamba · 15:00',
       image:
-          'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=420&q=70',
+          '',
     ),
     EventItem(
       title: 'DJ Performans',
@@ -351,7 +351,7 @@ class MockData {
       month: 'Haz',
       location: 'Cumartesi · 22:00',
       image:
-          'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=420&q=70',
+          '',
     ),
   ];
 
@@ -385,7 +385,7 @@ class MockData {
       distance: '1.2 km',
       price: '₺₺',
       image:
-          'https://images.unsplash.com/photo-1453614512568-c4024d13c247?auto=format&fit=crop&w=420&q=70',
+          '',
     ),
     Place(
       name: 'Kronotrop',
@@ -395,7 +395,7 @@ class MockData {
       distance: '2.0 km',
       price: '₺₺',
       image:
-          'https://images.unsplash.com/photo-1442512595331-e89e73853f31?auto=format&fit=crop&w=420&q=70',
+          '',
     ),
     Place(
       name: 'Coffee Sapiens',
@@ -405,7 +405,7 @@ class MockData {
       distance: '2.8 km',
       price: '₺₺',
       image:
-          'https://images.unsplash.com/photo-1493857671505-72967e2e2760?auto=format&fit=crop&w=420&q=70',
+          '',
     ),
   ];
 
