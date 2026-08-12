@@ -5,10 +5,12 @@ import '../data/auth_service.dart';
 import '../data/models.dart';
 import '../navigation/main_nav.dart';
 import '../theme/app_theme.dart';
+import '../widgets/category_sheet.dart';
 import '../widgets/kedy_chat.dart';
 import '../widgets/notifications_modal.dart';
 import '../widgets/search_modal.dart';
 import '../widgets/tabbar.dart';
+import 'category_screen.dart';
 import 'detail_screen.dart';
 import 'events_screen.dart';
 import 'home_screen.dart';
@@ -16,7 +18,7 @@ import 'login_screen.dart';
 import 'profile_screen.dart';
 
 /// Uygulama iskeleti: sayfa içeriği + yüzen tab bar.
-/// 0 Keşfet · 1 Ara (modal) · 2 Kedy (modal) · 3 Etkinlikler · 4 Hesabım
+/// 0 Keşfet · 1 Kategori (sheet) · 2 Kedy (modal) · 3 Etkinlikler · 4 Hesabım
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -61,7 +63,7 @@ class _MainShellState extends State<MainShell> {
   void _onTab(int i) {
     switch (i) {
       case 1:
-        showSearchModal(context, onOpenDetail: _openDetail);
+        _openCategorySheet();
         break;
       case 2:
         _openKedy();
@@ -98,6 +100,21 @@ class _MainShellState extends State<MainShell> {
     if (mounted) setState(() => _kedyOpen = false);
   }
 
+  /// Footer "Kategori": alttan kategori paneli açar; seçilen kategori liste
+  /// sayfasında (CategoryScreen) açılır.
+  void _openCategorySheet() {
+    showCategorySheet(context, onSelect: (id, name) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => CategoryScreen(categoryId: id, title: name)),
+      );
+    });
+  }
+
+  /// Ana sayfadaki arama kutusu için gelişmiş arama modalı.
+  void _openSearch() => showSearchModal(context, onOpenDetail: _openDetail);
+
   void _openDetail(Place p) {
     Navigator.push(
         context, MaterialPageRoute(builder: (_) => DetailScreen(place: p)));
@@ -109,9 +126,9 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     final pages = <Widget>[
       HomeScreen(
-        // Ana sayfadaki arama kutusu, footer'daki "Arama" sekmesiyle aynı
-        // aksiyonu tetikler.
-        onOpenSearch: () => _onTab(1),
+        // Ana sayfadaki arama kutusu gelişmiş arama modalını açar (footer
+        // artık "Kategori"; arama yalnızca ana sayfa kutusundan tetiklenir).
+        onOpenSearch: _openSearch,
         onOpenNotifications: _openNotifications,
       ),
       const SizedBox.shrink(), // 1: Ara (modal)

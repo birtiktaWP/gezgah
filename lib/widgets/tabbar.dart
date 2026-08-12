@@ -23,8 +23,6 @@ class FloatingTabBar extends StatelessWidget {
   // _TabItem'da colorFilter ile uygulanır.
   static const String _svgHome =
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M245.6 4.3c6.1-5.7 15.7-5.7 21.8 0l240 224c6.5 6 6.8 16.2 .8 22.6s-16.2 6.8-22.6 .8l-21.1-19.7 0 216c0 35.3-28.7 64-64 64l-288 0c-35.3 0-64-28.7-64-64l0-216-21.1 19.7c-6.5 6-16.6 5.7-22.6-.8s-5.7-16.6 .8-22.6l240-224zm10.9 33.6l-176 164.3 0 245.8c0 17.7 14.3 32 32 32l64 0 0-112c0-35.3 28.7-64 64-64l32 0c35.3 0 64 28.7 64 64l0 112 64 0c17.7 0 32-14.3 32-32l0-245.8-176-164.3zM208.5 480l96 0 0-112c0-17.7-14.3-32-32-32l-32 0c-17.7 0-32 14.3-32 32l0 112z"/></svg>';
-  static const String _svgSearch =
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M384 208a176 176 0 1 0 -352 0 176 176 0 1 0 352 0zM343.3 366C307 397.2 259.7 416 208 416 93.1 416 0 322.9 0 208S93.1 0 208 0 416 93.1 416 208c0 51.7-18.8 99-50 135.3L507.3 484.7c6.2 6.2 6.2 16.4 0 22.6s-16.4 6.2-22.6 0L343.3 366z"/></svg>';
   /// Etkinlik ikonu (Font Awesome). Detay sayfası footer'ı da aynı ikonu
   /// kullanabilsin diye herkese açık.
   static const String svgEvent =
@@ -42,8 +40,8 @@ class FloatingTabBar extends StatelessWidget {
         TabItemData(Icons.home_outlined, 'Ana Sayfa', activeIndex == 0,
             () => onTap(0),
             svg: _svgHome),
-        TabItemData(Icons.search, 'Arama', activeIndex == 1, () => onTap(1),
-            svg: _svgSearch),
+        TabItemData(Icons.grid_view_outlined, 'Kategori', activeIndex == 1,
+            () => onTap(1)),
         null, // Kedy yuvası (boş; daire üstte konumlanır)
         TabItemData(Icons.calendar_today_outlined, 'Etkinlikler',
             activeIndex == 3, () => onTap(3),

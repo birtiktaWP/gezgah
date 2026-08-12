@@ -10,6 +10,7 @@ import '../navigation/main_nav.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/place_cards.dart';
+import '../widgets/search_modal.dart';
 import '../widgets/tabbar.dart';
 import 'detail_screen.dart';
 import 'map_screen.dart';
@@ -126,15 +127,15 @@ class _CategoryScreenState extends State<CategoryScreen> {
     // mesafe + sıralama uygulanır.
     final locFuture = _ensureLoc();
 
-    // Type modu: kategori değil post type listesi (/mekanlar?type=).
+    // Type modu: kategori değil post type listesi (GET /yerler?type=).
     if (type != null) {
       try {
-        final r = await HomeRepository.instance.mekanlarByType(type, limit: 20);
+        final r = await HomeRepository.instance.yerler(type, limit: 20);
         if (!mounted) return;
         setState(() {
           _loading = false;
           _places = List<Place>.from(r.items);
-          _total = r.items.length;
+          _total = r.total;
           _hasMore = r.hasMore;
           _nextPage = r.nextPage;
         });
@@ -207,17 +208,16 @@ class _CategoryScreenState extends State<CategoryScreen> {
     }
     setState(() => _loadingMore = true);
 
-    // Type modu: sonraki sayfayı /mekanlar?type= ile çek.
+    // Type modu: sonraki sayfayı GET /yerler?type= ile çek.
     if (type != null) {
       try {
         final r = await HomeRepository.instance
-            .mekanlarByType(type, page: _nextPage!, limit: 20);
+            .yerler(type, page: _nextPage!, limit: 20);
         if (!mounted) return;
         final loc = _loc;
         if (loc != null) _applyDistances(r.items, loc);
         setState(() {
           _places.addAll(r.items);
-          _total = _places.length;
           _hasMore = r.hasMore;
           _nextPage = r.nextPage;
           _loadingMore = false;
@@ -592,6 +592,13 @@ class _CategoryScreenState extends State<CategoryScreen> {
                         color: AppColors.primary)),
               ),
             ),
+            GlassButton(
+              icon: Icons.search,
+              flat: true,
+              onTap: () =>
+                  showSearchModal(context, onOpenDetail: _openDetail),
+            ),
+            const SizedBox(width: 4),
             GlassButton(
               icon: Icons.location_on_outlined,
               flat: true,

@@ -179,6 +179,8 @@ class _DetailScreenState extends State<DetailScreen> {
       'restoran' => 'Restoran',
       'plaj' => 'Plaj',
       'mesire' => 'Mesire',
+      'otopark' => 'Otopark',
+      'muze' => 'Müze',
       _ => widget.place.category.isNotEmpty ? widget.place.category : 'Mekan',
     };
   }
@@ -1514,7 +1516,9 @@ class _DetailScreenState extends State<DetailScreen> {
         TabItemData(Icons.calendar_today_outlined, 'Etkinlik', false,
             () => MainNav.instance.select(3),
             svg: FloatingTabBar.svgEvent),
-        TabItemData(Icons.qr_code_2, 'Menü', false, _openMenu, svg: _svgQr),
+        TabItemData(Icons.qr_code_2, 'Menü',
+            _detail?.menu.isNotEmpty ?? false, _openMenu,
+            svg: _svgQr),
       ],
     );
   }

@@ -1084,26 +1084,55 @@ class HomeRepository {
     return sponsorluRestoranlar(ids);
   }
 
-  /// Post type'a göre sayfalı mekan listesi (`GET /mekanlar?type=<type>`).
-  /// Kategori değil `type` bazlıdır (otopark | muze | mesire | plaj). `/mekanlar`
-  /// meta döndürmediğinden `has_more`, dönen kayıt sayısı [limit]'e eşitse
-  /// varsayılır.
-  Future<({List<Place> items, bool hasMore, int? nextPage})> mekanlarByType(
+  /// Restoran dışı yerler — `GET /yerler?type=<type>` (yeni-endpoints.md).
+  /// Kategori değil **post type** bazlıdır (otopark | muze | mesire | plaj).
+  /// Redis önbellekli; gerçek sayfalama meta'sı (`total`, `pages`) döner.
+  Future<({List<Place> items, bool hasMore, int? nextPage, int total})> yerler(
     String type, {
     int page = 1,
     int limit = 20,
   }) async {
     try {
-      final list = await mekanlar(type: type, page: page, limit: limit);
-      final items = list.map(_apiToPlace).toList();
-      final hasMore = list.length >= limit;
+      final res = await _dio.get('/yerler', queryParameters: {
+        'type': type,
+        'page': page,
+        'limit': limit,
+      });
+      final body = res.data;
+      if (body is! Map || body['success'] != true) {
+        return (
+          items: const <Place>[],
+          hasMore: false,
+          nextPage: null,
+          total: 0
+        );
+      }
+      final data = body['data'];
+      final items = (data is List)
+          ? data
+              .whereType<Map<String, dynamic>>()
+              .map(_parsePlace)
+              .map(_apiToPlace)
+              .toList()
+          : <Place>[];
+      final meta = (body['meta'] as Map?) ?? const {};
+      final curPage = (meta['page'] as num?)?.toInt() ?? page;
+      final pages = (meta['pages'] as num?)?.toInt() ?? 1;
+      final total = (meta['total'] as num?)?.toInt() ?? items.length;
+      final hasMore = curPage < pages;
       return (
         items: items,
         hasMore: hasMore,
-        nextPage: hasMore ? page + 1 : null
+        nextPage: hasMore ? curPage + 1 : null,
+        total: total,
       );
     } catch (_) {
-      return (items: const <Place>[], hasMore: false, nextPage: null);
+      return (
+        items: const <Place>[],
+        hasMore: false,
+        nextPage: null,
+        total: 0
+      );
     }
   }
 
