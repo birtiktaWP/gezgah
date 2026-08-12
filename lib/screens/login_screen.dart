@@ -274,7 +274,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   Text(_register ? 'Aramıza katıl' : 'Tekrar hoş geldin',
                       style: const TextStyle(
-                          fontSize: 22, fontWeight: FontWeight.w800)),
+                          fontSize: 22, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 6),
                   Text(
                     _register
@@ -392,7 +392,7 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Text(text,
             style: const TextStyle(
                 fontSize: 13,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w600,
                 color: AppColors.ink)),
       );
 
@@ -425,7 +425,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Text(label,
                     style: TextStyle(
                         fontSize: 13.5,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                         color: _cinsiyet == value
                             ? AppColors.primary
                             : AppColors.ink)),
@@ -560,7 +560,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ? 'Tekrar dene ($_cooldown sn)'
                     : (_register ? 'Kayıt Ol' : 'Giriş Yap'),
                 style: const TextStyle(
-                    fontSize: 15.5, fontWeight: FontWeight.w800)),
+                    fontSize: 15.5, fontWeight: FontWeight.w600)),
       ),
     );
   }
@@ -576,7 +576,7 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Text(_register ? 'Giriş yap' : 'Kayıt ol',
               style: const TextStyle(
                   fontSize: 13.5,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                   color: AppColors.primary)),
         ),
       ],
@@ -688,7 +688,7 @@ class _LoginScreenState extends State<LoginScreen> {
           trailingSpace: false,
         ),
         selectorTextStyle: const TextStyle(
-            fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.ink),
+            fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.ink),
         textStyle: const TextStyle(fontSize: 15, color: AppColors.ink),
         inputDecoration: const InputDecoration(
           hintText: 'Telefon *',

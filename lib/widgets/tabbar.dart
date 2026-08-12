@@ -207,7 +207,7 @@ class _KedyLabelSlot extends StatelessWidget {
         Text('Kedy',
             style: TextStyle(
                 fontSize: 10,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w600,
                 color: Colors.white)),
       ],
     );

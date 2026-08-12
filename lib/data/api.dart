@@ -615,6 +615,12 @@ class ApiPlace {
   /// ikonuna düşülür.
   final String customIcon;
 
+  // Önceden üretilmiş thumbnail'ler (thumbnail-update.md). Yoksa null.
+  final String? thumbnail;
+  final String? thumbSquare;
+  final String? thumbCard;
+  final String? thumbWide;
+
   const ApiPlace({
     required this.id,
     required this.name,
@@ -625,7 +631,23 @@ class ApiPlace {
     this.ilce = '',
     this.categoryIds = const [],
     this.customIcon = '',
+    this.thumbnail,
+    this.thumbSquare,
+    this.thumbCard,
+    this.thumbWide,
   });
+
+  /// Ekran alanına göre en uygun görsel: istenen boyut → `thumbnail` → `image`.
+  String thumb(ThumbSize size) {
+    final t = switch (size) {
+      ThumbSize.square => thumbSquare,
+      ThumbSize.card => thumbCard,
+      ThumbSize.wide => thumbWide,
+    };
+    if (t != null && t.isNotEmpty) return t;
+    if (thumbnail != null && thumbnail!.isNotEmpty) return thumbnail!;
+    return image;
+  }
 
   bool get hasCoord => lat != null && lng != null;
 
@@ -648,6 +670,10 @@ class ApiPlace {
         lat: lat ?? 41.0082,
         lng: lng ?? 28.9784,
         tags: const ['restoran'],
+        thumbnail: thumbnail,
+        thumbSquare: thumbSquare,
+        thumbCard: thumbCard,
+        thumbWide: thumbWide,
       );
 
   /// Yerel önbellek (disk) için serileştirme.
@@ -684,11 +710,13 @@ class SearchResult {
   final ApiPlace place;
   final List<String> matchedProducts; // eslesen_urunler
   final List<String> matchTypes; // eslesme: "isim" ve/veya "menu"
+  final int? mesafeM; // konum verildiyse sunucudan gelen mesafe (metre)
 
   const SearchResult({
     required this.place,
     this.matchedProducts = const [],
     this.matchTypes = const [],
+    this.mesafeM,
   });
 
   bool get matchedByMenu => matchTypes.contains('menu');
@@ -731,6 +759,10 @@ class HomeRepository {
   DateTime? _categoriesAt;
   static const _ttl = Duration(minutes: 12);
 
+  // Kategori ağacı (/kategoriler/agac) kısa süreli cache'i.
+  List<Category>? _agacCache;
+  DateTime? _agacAt;
+
   // Arama yanıtı kısa süreli bellek cache'i (tab + sorgu + sayfa bazlı). Aynı/
   // önek sorgular ağ turu olmadan anında döner (sunucu Redis'ine ek).
   final Map<
@@ -771,6 +803,32 @@ class HomeRepository {
     _categoriesCache = list;
     _categoriesAt = DateTime.now();
     return list;
+  }
+
+  /// Tüm kategoriler + parent ilişkileri (`GET /kategoriler/agac`,
+  /// yeni-endpoints.md). Her kayıtta `icon` (SVG) ve `mekan_sayisi` bulunur.
+  /// Kısa süreli cache'lidir (sunucuda ayrıca Redis).
+  Future<List<Category>> kategorilerAgac({bool forceRefresh = false}) async {
+    final fresh =
+        _agacAt != null && DateTime.now().difference(_agacAt!) < _ttl;
+    if (!forceRefresh && _agacCache != null && fresh) return _agacCache!;
+    try {
+      final res = await _dio.get('/kategoriler/agac');
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return const [];
+      final data = body['data'];
+      if (data is! List) return const [];
+      final list = data
+          .whereType<Map<String, dynamic>>()
+          .map(Category.fromJson)
+          .where((c) => c.id > 0)
+          .toList();
+      _agacCache = list;
+      _agacAt = DateTime.now();
+      return list;
+    } catch (_) {
+      return const [];
+    }
   }
 
   /// `GET /home-page-settings/one_cikan_kategoriler` → `data.settings.categories`
@@ -942,6 +1000,10 @@ class HomeRepository {
               .map((e) => e.toInt())
               .toList() ??
           const [],
+      thumbnail: ap.thumbnail,
+      thumbSquare: ap.thumbSquare,
+      thumbCard: ap.thumbCard,
+      thumbWide: ap.thumbWide,
     );
   }
 
@@ -1164,6 +1226,10 @@ class HomeRepository {
         image: ap.image,
         lat: ap.lat ?? double.nan,
         lng: ap.lng ?? double.nan,
+        thumbnail: ap.thumbnail,
+        thumbSquare: ap.thumbSquare,
+        thumbCard: ap.thumbCard,
+        thumbWide: ap.thumbWide,
       );
 
   /// `GET /mekanlar` — restoran listesi (yeni → eski sıralı gelir).
@@ -1225,6 +1291,10 @@ class HomeRepository {
     int limit = 20,
     String? userId,
     CancelToken? cancelToken,
+    double? lat,
+    double? lng,
+    String? sort,
+    List<int>? filtreler,
   }) async {
     const empty = (
       items: <SearchResult>[],
@@ -1235,7 +1305,11 @@ class HomeRepository {
     final term = q.trim();
     if (term.length < 2) return empty;
 
-    final key = '$term|$page|$limit';
+    final fq = (filtreler == null || filtreler.isEmpty)
+        ? ''
+        : (filtreler.toList()..sort()).join(',');
+    final key =
+        '$term|$page|$limit|${sort ?? ''}|$fq|${_coordKey(lat, lng)}';
     final c = _mekanCache[key];
     if (c != null && DateTime.now().difference(c.at) < _searchTtl) {
       return (
@@ -1253,6 +1327,10 @@ class HomeRepository {
         'tab': 'mekan',
         'page': page,
         'limit': limit,
+        if (lat != null && lng != null) 'lat': lat,
+        if (lat != null && lng != null) 'lng': lng,
+        if (sort != null && sort.isNotEmpty) 'sort': sort,
+        if (fq.isNotEmpty) 'filtreler': fq,
         if (userId != null && userId.isNotEmpty) 'user_id': userId,
       },
       cancelToken: cancelToken,
@@ -1272,6 +1350,7 @@ class HomeRepository {
                       ?.whereType<String>()
                       .toList() ??
                   const [],
+              mesafeM: (j['mesafe_m'] as num?)?.toInt(),
             );
           }).toList()
         : <SearchResult>[];
@@ -1310,6 +1389,10 @@ class HomeRepository {
     int limit = 20,
     String? userId,
     CancelToken? cancelToken,
+    double? lat,
+    double? lng,
+    String? sort,
+    List<int>? filtreler,
   }) async {
     const empty = (
       items: <FoodResult>[],
@@ -1320,7 +1403,11 @@ class HomeRepository {
     final term = q.trim();
     if (term.length < 2) return empty;
 
-    final key = '$term|$page|$limit';
+    final fq = (filtreler == null || filtreler.isEmpty)
+        ? ''
+        : (filtreler.toList()..sort()).join(',');
+    final key =
+        '$term|$page|$limit|${sort ?? ''}|$fq|${_coordKey(lat, lng)}';
     final c = _yemekCache[key];
     if (c != null && DateTime.now().difference(c.at) < _searchTtl) {
       return (
@@ -1338,6 +1425,10 @@ class HomeRepository {
         'tab': 'yemek',
         'page': page,
         'limit': limit,
+        if (lat != null && lng != null) 'lat': lat,
+        if (lat != null && lng != null) 'lng': lng,
+        if (sort != null && sort.isNotEmpty) 'sort': sort,
+        if (fq.isNotEmpty) 'filtreler': fq,
         if (userId != null && userId.isNotEmpty) 'user_id': userId,
       },
       cancelToken: cancelToken,
@@ -1383,6 +1474,7 @@ class HomeRepository {
       return '';
     }
 
+    final thumbs = _parseThumbs(m);
     final place = Place(
       id: (m['id'] as num?)?.toInt() ?? 0,
       name: (m['ad'] as String?)?.trim().isNotEmpty == true
@@ -1396,6 +1488,10 @@ class HomeRepository {
       image: img(m['image'] ?? m['thumbnail']),
       lat: coord?.$1 ?? double.nan,
       lng: coord?.$2 ?? double.nan,
+      thumbnail: thumbs.thumbnail,
+      thumbSquare: thumbs.square,
+      thumbCard: thumbs.card,
+      thumbWide: thumbs.wide,
     );
 
     return FoodResult(
@@ -1405,7 +1501,14 @@ class HomeRepository {
       gorsel: img(j['gorsel']),
       begeni: (j['begeni'] as num?)?.toInt() ?? 0,
       mekan: place,
+      mesafeM: (m['mesafe_m'] as num?)?.toInt(),
     );
+  }
+
+  /// Arama cache anahtarı için konumu ~1.1 km kovaya yuvarlar (yoksa 'none').
+  String _coordKey(double? lat, double? lng) {
+    if (lat == null || lng == null) return 'none';
+    return '${lat.toStringAsFixed(2)},${lng.toStringAsFixed(2)}';
   }
 
   /// En çok aranan kelimeler (ARAMA_GECMISI.md).
@@ -1633,6 +1736,9 @@ class HomeRepository {
       }
     }
 
+    // Önceden üretilmiş thumbnail'ler (thumbnail-update.md).
+    final thumbs = _parseThumbs(j);
+
     // Koordinat: önce enlem/boylam alanları, sonra "kordinat" metni.
     double? lat = (j['enlem'] as num?)?.toDouble();
     double? lng = (j['boylam'] as num?)?.toDouble();
@@ -1666,6 +1772,30 @@ class HomeRepository {
               .toList() ??
           const [],
       customIcon: (j['custom_ikon'] as String?)?.trim() ?? '',
+      thumbnail: thumbs.thumbnail,
+      thumbSquare: thumbs.square,
+      thumbCard: thumbs.card,
+      thumbWide: thumbs.wide,
+    );
+  }
+
+  /// `thumbnail` + `thumbnails{square,card,wide}` alanlarını (varsa tam URL'e
+  /// çevirerek) ayrıştırır (thumbnail-update.md).
+  ({String? thumbnail, String? square, String? card, String? wide})
+      _parseThumbs(Map<String, dynamic> j) {
+    String? abs(dynamic v) {
+      if (v is String && v.isNotEmpty) {
+        return v.startsWith('http') ? v : '$kApiHost$v';
+      }
+      return null;
+    }
+
+    final tn = j['thumbnails'];
+    return (
+      thumbnail: abs(j['thumbnail']),
+      square: tn is Map ? abs(tn['square']) : null,
+      card: tn is Map ? abs(tn['card']) : null,
+      wide: tn is Map ? abs(tn['wide']) : null,
     );
   }
 
@@ -1774,11 +1904,20 @@ class FavRepository {
 
   /// Favori listesi kaydını [Place]'e çevirir (kategori mekan özetiyle aynı).
   Place _favToPlace(Map<String, dynamic> j) {
-    final img = (j['image'] ?? j['thumbnail']);
-    var image = '';
-    if (img is String && img.isNotEmpty) {
-      image = img.startsWith('http') ? img : '$kApiHost$img';
+    String? abs(dynamic v) {
+      if (v is String && v.isNotEmpty) {
+        return v.startsWith('http') ? v : '$kApiHost$v';
+      }
+      return null;
     }
+
+    final image = abs(j['image']) ?? abs(j['thumbnail']) ?? '';
+    final thumbnail = abs(j['thumbnail']);
+    final tn = j['thumbnails'];
+    final tSquare = tn is Map ? abs(tn['square']) : null;
+    final tCard = tn is Map ? abs(tn['card']) : null;
+    final tWide = tn is Map ? abs(tn['wide']) : null;
+
     final sehir = (j['sehir'] ?? '').toString().trim();
     final ilce = (j['ilce'] ?? '').toString().trim();
     final loc = [sehir, ilce].where((s) => s.isNotEmpty).join(' · ');
@@ -1811,6 +1950,10 @@ class FavRepository {
               .map((e) => e.toInt())
               .toList() ??
           const [],
+      thumbnail: thumbnail,
+      thumbSquare: tSquare,
+      thumbCard: tCard,
+      thumbWide: tWide,
     );
   }
 }
@@ -1967,13 +2110,19 @@ class KedyRepository {
     List<KedyMessage>? history,
   }) async {
     try {
-      final res = await _dio.post('/kedy', data: {
-        'message': message,
-        if (postId != null && postId > 0) 'postId': postId,
-        'lang': lang,
-        if (history != null && history.isNotEmpty)
-          'history': history.map((m) => m.toJson()).toList(),
-      });
+      // Üye girişliyse üye token'ıyla gönder → sunucu geçmişi üyeye (app_id)
+      // bağlar ve kalıcı saklar. Anonimde interceptor cihaz token'ını ekler.
+      final res = await _dio.post(
+        '/kedy',
+        data: {
+          'message': message,
+          if (postId != null && postId > 0) 'postId': postId,
+          'lang': lang,
+          if (history != null && history.isNotEmpty)
+            'history': history.map((m) => m.toJson()).toList(),
+        },
+        options: await _uyeAuth(),
+      );
       final body = res.data;
       if (body is Map && body['success'] == true) {
         final data = body['data'];
@@ -2000,8 +2149,11 @@ class KedyRepository {
   /// Anonim kullanıcıda / hatada boş liste döner.
   Future<List<KedyMessage>> gecmis({int days = 7}) async {
     try {
-      final res = await _dio.get('/kedy/gecmis',
-          queryParameters: {'days': days});
+      final res = await _dio.get(
+        '/kedy/gecmis',
+        queryParameters: {'days': days},
+        options: await _uyeAuth(),
+      );
       final body = res.data;
       if (body is! Map || body['success'] != true) return const [];
       final data = body['data'];
@@ -2015,6 +2167,14 @@ class KedyRepository {
     } catch (_) {
       return const [];
     }
+  }
+
+  /// Üye token'ı varsa Authorization başlığını döndürür (sunucu geçmişi üyeye
+  /// bağlasın). Yoksa null → interceptor cihaz token'ını ekler (anonim).
+  Future<Options?> _uyeAuth() async {
+    final token = await Api.instance.uyeToken;
+    if (token == null || token.isEmpty) return null;
+    return Options(headers: {'Authorization': 'Bearer $token'});
   }
 
   String? _kedyMessage(dynamic body) {

@@ -167,7 +167,7 @@ class SectionHead extends StatelessWidget {
                   Text('Tümü',
                       style: TextStyle(
                           fontSize: 13,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w600,
                           color: AppColors.primary)),
                   Icon(Icons.chevron_right, size: 18, color: AppColors.primary),
                 ],
@@ -256,7 +256,7 @@ class RatingBadge extends StatelessWidget {
           Text(rating.toStringAsFixed(1),
               style: const TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                   color: AppColors.ink)),
         ],
       ),
@@ -285,7 +285,7 @@ class OpenDot extends StatelessWidget {
               style: TextStyle(fontSize: 8, color: color)),
           Text(open ? 'Açık' : 'Kapanıyor',
               style: TextStyle(
-                  fontSize: 10.5, fontWeight: FontWeight.w800, color: color)),
+                  fontSize: 10.5, fontWeight: FontWeight.w600, color: color)),
         ],
       ),
     );
@@ -480,7 +480,7 @@ Future<PickerResult<T>?> showNativePicker<T>(
               child: Text(title,
                   style: const TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w600,
                       color: AppColors.ink)),
             ),
           ),
@@ -530,13 +530,13 @@ class _NativeSheetHeader extends StatelessWidget {
           Text(title,
               style: const TextStyle(
                   fontSize: 15,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w600,
                   color: AppColors.ink)),
           TextButton(
             onPressed: onDone,
             child: const Text('Tamam',
                 style: TextStyle(
-                    color: AppColors.primary, fontWeight: FontWeight.w700)),
+                    color: AppColors.primary, fontWeight: FontWeight.w600)),
           ),
         ],
       ),

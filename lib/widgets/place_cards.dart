@@ -39,7 +39,7 @@ class PopCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  heroImage(heroTag, place.image),
+                  heroImage(heroTag, place.thumb(ThumbSize.card)),
                   if (sponsored)
                     Positioned(
                       top: 9,
@@ -72,7 +72,7 @@ class PopCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                           fontSize: 14.5,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w600,
                           letterSpacing: -0.2)),
                   const SizedBox(height: 5),
                   Row(
@@ -115,7 +115,7 @@ class _Tag extends StatelessWidget {
           style: const TextStyle(
               color: Colors.white,
               fontSize: 10,
-              fontWeight: FontWeight.w800)),
+              fontWeight: FontWeight.w600)),
     );
   }
 }
@@ -148,7 +148,7 @@ class GridTile2 extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  heroImage(heroTag, place.image),
+                  heroImage(heroTag, place.thumb(ThumbSize.card)),
                   Positioned(
                     left: 8,
                     top: 8,
@@ -175,7 +175,7 @@ class GridTile2 extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                                 fontSize: 14,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w600,
                                 letterSpacing: -0.2)),
                       ),
                       const Icon(Icons.star_rounded,
@@ -183,7 +183,7 @@ class GridTile2 extends StatelessWidget {
                       const SizedBox(width: 3),
                       Text(place.rating.toStringAsFixed(1),
                           style: const TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.w800)),
+                              fontSize: 12, fontWeight: FontWeight.w600)),
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -209,7 +209,7 @@ class GridTile2 extends StatelessWidget {
                       Text(place.price,
                           style: const TextStyle(
                               fontSize: 11.5,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w600,
                               color: AppColors.ink)),
                     ],
                   ),
@@ -253,7 +253,7 @@ class ListTileCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  heroImage(heroTag, place.image),
+                  heroImage(heroTag, place.thumb(ThumbSize.square)),
                   Positioned(
                     left: 8,
                     top: 8,
@@ -277,7 +277,7 @@ class ListTileCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                   fontSize: 14,
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w600,
                                   letterSpacing: -0.2)),
                         ),
                         FavHeart(postId: place.id, circle: false, size: 20),
@@ -304,7 +304,7 @@ class ListTileCard extends StatelessWidget {
                         Text(place.price,
                             style: const TextStyle(
                                 fontSize: 11.5,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w600,
                                 color: AppColors.ink)),
                       ],
                     ),
@@ -336,7 +336,7 @@ class ListTileCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  heroImage(heroTag, place.image),
+                  heroImage(heroTag, place.thumb(ThumbSize.wide)),
                   Positioned(
                     left: 8,
                     top: 8,
@@ -355,7 +355,7 @@ class ListTileCard extends StatelessWidget {
                       Text(place.name,
                           style: const TextStyle(
                               fontSize: 14,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w600,
                               letterSpacing: -0.2)),
                       const SizedBox(width: 7),
                       Container(
@@ -386,14 +386,14 @@ class ListTileCard extends StatelessWidget {
                         child: const Text('SPONSORLU',
                             style: TextStyle(
                                 fontSize: 10,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w600,
                                 letterSpacing: 0.3,
                                 color: AppColors.primary)),
                       ),
                       Text(place.price,
                           style: const TextStyle(
                               fontSize: 11.5,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w600,
                               color: AppColors.ink)),
                     ],
                   ),

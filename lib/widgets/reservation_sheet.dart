@@ -424,7 +424,7 @@ class _ReservationSheetState extends State<_ReservationSheet> {
               children: [
                 const Text('Rezervasyon',
                     style:
-                        TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                        TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 2),
                 Text(widget.placeName,
                     maxLines: 1,
@@ -456,7 +456,7 @@ class _ReservationSheetState extends State<_ReservationSheet> {
         child: Text(t,
             style: const TextStyle(
                 fontSize: 13,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w600,
                 color: AppColors.ink)),
       );
 
@@ -559,7 +559,7 @@ class _ReservationSheetState extends State<_ReservationSheet> {
           child: Center(
             child: Text('$_kisi kişi',
                 style: const TextStyle(
-                    fontSize: 15.5, fontWeight: FontWeight.w800)),
+                    fontSize: 15.5, fontWeight: FontWeight.w600)),
           ),
         ),
         btn(Icons.add, () => setState(() => _kisi++), _kisi < 50),
@@ -637,7 +637,7 @@ class _ReservationSheetState extends State<_ReservationSheet> {
                             ? '$_resend sn'
                             : (_codeSent ? 'Tekrar' : 'Kod Gönder'),
                         style: const TextStyle(
-                            fontSize: 13.5, fontWeight: FontWeight.w800)),
+                            fontSize: 13.5, fontWeight: FontWeight.w600)),
               ),
             ),
           ],
@@ -732,7 +732,7 @@ class _ReservationSheetState extends State<_ReservationSheet> {
                 child: CircularProgressIndicator(
                     strokeWidth: 2.5, color: Colors.white))
             : const Text('Rezervasyonu Oluştur',
-                style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800)),
+                style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w600)),
       ),
     );
   }

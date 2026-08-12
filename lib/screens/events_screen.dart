@@ -208,7 +208,7 @@ class _EventsScreenState extends State<EventsScreen> {
           Text(title,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                  fontSize: 16, fontWeight: FontWeight.w800)),
+                  fontSize: 16, fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           Text(subtitle,
               textAlign: TextAlign.center,
@@ -226,7 +226,7 @@ class _EventsScreenState extends State<EventsScreen> {
                 child: Text(action,
                     style: const TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                         color: Colors.white)),
               ),
             ),
@@ -262,7 +262,7 @@ class _EventsScreenState extends State<EventsScreen> {
                 const Text('Etkinlikler',
                     style: TextStyle(
                         fontSize: 20,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w600,
                         color: Colors.white)),
               ],
             ),
@@ -309,7 +309,7 @@ class _EventsScreenState extends State<EventsScreen> {
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                                 fontSize: 11,
-                                fontWeight: FontWeight.w700,
+                                fontWeight: FontWeight.w600,
                                 color: AppColors.primary)),
                       ),
                       const SizedBox(height: 6),
@@ -318,7 +318,7 @@ class _EventsScreenState extends State<EventsScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w800)),
+                            fontSize: 15, fontWeight: FontWeight.w600)),
                     if (subtitle.isNotEmpty) ...[
                       const SizedBox(height: 5),
                       Row(

@@ -97,7 +97,7 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
               children: [
                 const Text('Bildirimler',
                     style: TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w800)),
+                        fontSize: 18, fontWeight: FontWeight.w600)),
                 const Spacer(),
                 if (_hasUnread)
                   TextButton(
@@ -176,7 +176,7 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
               child: Text(key,
                   style: const TextStyle(
                       fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w600,
                       color: AppColors.muted)),
             ),
             ...groups[key]!.map(_tile),
@@ -212,7 +212,7 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
                           fontSize: 13.5,
                           height: 1.35,
                           fontWeight:
-                              n.unread ? FontWeight.w700 : FontWeight.w500,
+                              n.unread ? FontWeight.w600 : FontWeight.w500,
                           color: AppColors.ink)),
                   if (_relative(n.date).isNotEmpty) ...[
                     const SizedBox(height: 5),
@@ -261,7 +261,7 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
             Text(title,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.w800)),
+                    fontSize: 16, fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             Text(subtitle,
                 textAlign: TextAlign.center,
@@ -280,7 +280,7 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
                   child: Text(action,
                       style: const TextStyle(
                           fontSize: 14,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w600,
                           color: Colors.white)),
                 ),
               ),

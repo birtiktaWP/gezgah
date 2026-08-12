@@ -206,7 +206,7 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
             const Text('Kedy seni bekliyor',
                 style: TextStyle(
                     fontSize: 21,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w600,
                     color: Colors.white)),
             const SizedBox(height: 8),
             const SizedBox(
@@ -235,7 +235,7 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
                 ),
                 label: const Text('Üye Girişi Yap',
                     style: TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w800)),
+                        fontSize: 15, fontWeight: FontWeight.w600)),
               ),
             ),
           ],
@@ -269,7 +269,7 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
                 const Text('Kedy',
                     style: TextStyle(
                         fontSize: 16,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                         color: Colors.white)),
                 const SizedBox(height: 5),
                 Row(

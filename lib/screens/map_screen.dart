@@ -316,7 +316,7 @@ class _MapScreenState extends State<MapScreen> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                              fontSize: 13, fontWeight: FontWeight.w700)),
+                              fontSize: 13, fontWeight: FontWeight.w600)),
                     ),
                   ],
                 ),
@@ -388,8 +388,9 @@ class _MapScreenState extends State<MapScreen> {
             SizedBox(
               width: 120,
               height: 130,
-              child: p.image.isNotEmpty
-                  ? heroImage(p.id > 0 ? 'map-${p.id}' : null, p.image)
+              child: p.thumb(ThumbSize.square).isNotEmpty
+                  ? heroImage(p.id > 0 ? 'map-${p.id}' : null,
+                      p.thumb(ThumbSize.square))
                   : Container(
                       color: AppColors.primarySoft,
                       child: const Icon(Icons.restaurant_outlined,
@@ -407,7 +408,7 @@ class _MapScreenState extends State<MapScreen> {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w800)),
+                            fontSize: 15, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -431,7 +432,7 @@ class _MapScreenState extends State<MapScreen> {
                         Text(_distanceText(p),
                             style: const TextStyle(
                                 fontSize: 14,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w600,
                                 color: AppColors.primary)),
                         GestureDetector(
                           onTap: () => Navigator.push(
@@ -453,7 +454,7 @@ class _MapScreenState extends State<MapScreen> {
                             child: const Text('Detayı Gör',
                                 style: TextStyle(
                                     fontSize: 13,
-                                    fontWeight: FontWeight.w700,
+                                    fontWeight: FontWeight.w600,
                                     color: Colors.white)),
                           ),
                         ),

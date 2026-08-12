@@ -289,7 +289,7 @@ class _DetailScreenState extends State<DetailScreen> {
           const SizedBox(width: 8),
           Text(open ? 'Şu an açık' : 'Şu an kapalı',
               style: TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w700, color: fg)),
+                  fontSize: 13, fontWeight: FontWeight.w600, color: fg)),
           if (open && st.until != null) ...[
             const SizedBox(width: 6),
             Text("· ${st.until}'a kadar",
@@ -615,7 +615,7 @@ class _DetailScreenState extends State<DetailScreen> {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                             fontSize: 14.5,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w600,
                             color: AppColors.primary)),
                     const SizedBox(height: 6),
                     Row(
@@ -695,7 +695,7 @@ class _DetailScreenState extends State<DetailScreen> {
                 const Text('Gezgah Onaylı Mekan',
                     style: TextStyle(
                         fontSize: 14.5,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w600,
                         color: Colors.white)),
                 const SizedBox(height: 3),
                 Text('Kalite ve hizmet ekibimizce doğrulandı',
@@ -737,7 +737,7 @@ class _DetailScreenState extends State<DetailScreen> {
           Text(text,
               style: const TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w600,
                   color: AppColors.primary)),
         ],
       ),
@@ -903,7 +903,7 @@ class _DetailScreenState extends State<DetailScreen> {
                           Text(e.day,
                               style: const TextStyle(
                                   fontSize: 12,
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w600,
                                   color: AppColors.primary)),
                         ],
                       ),
@@ -922,7 +922,7 @@ class _DetailScreenState extends State<DetailScreen> {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                           fontSize: 14.5,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w600,
                           color: AppColors.primary)),
                   const SizedBox(height: 6),
                   Row(
@@ -1042,7 +1042,7 @@ class _DetailScreenState extends State<DetailScreen> {
                   Text(title,
                       style: const TextStyle(
                           fontSize: 14,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w600,
                           color: AppColors.primary)),
                   const SizedBox(height: 2),
                   Text(value,
@@ -1115,7 +1115,7 @@ class _DetailScreenState extends State<DetailScreen> {
             Text('Değerlendirme Yap',
                 style: TextStyle(
                     fontSize: 15,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w600,
                     color: Colors.white)),
           ],
         ),
@@ -1181,7 +1181,7 @@ class _DetailScreenState extends State<DetailScreen> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                       fontSize: 18,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w600,
                       color: AppColors.primary)),
               const SizedBox(height: 8),
               Text(
@@ -1205,7 +1205,7 @@ class _DetailScreenState extends State<DetailScreen> {
                     child: Text('Tamam',
                         style: TextStyle(
                             fontSize: 14.5,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w600,
                             color: Colors.white)),
                   ),
                 ),
@@ -1256,7 +1256,7 @@ class _DetailScreenState extends State<DetailScreen> {
               const Text('Teşekkürler!',
                   style: TextStyle(
                       fontSize: 18,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w600,
                       color: AppColors.primary)),
               const SizedBox(height: 8),
               const Text('Değerlendirmen başarıyla alındı.',
@@ -1276,7 +1276,7 @@ class _DetailScreenState extends State<DetailScreen> {
                     child: Text('Tamam',
                         style: TextStyle(
                             fontSize: 14.5,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w600,
                             color: Colors.white)),
                   ),
                 ),
@@ -1316,7 +1316,7 @@ class _DetailScreenState extends State<DetailScreen> {
               const Text('Çalışma Saatleri',
                   style: TextStyle(
                       fontSize: 17,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w600,
                       color: AppColors.primary)),
               const SizedBox(height: 6),
               _hoursTable(d),
@@ -1341,7 +1341,7 @@ class _DetailScreenState extends State<DetailScreen> {
                     style: TextStyle(
                         fontSize: 13.5,
                         fontWeight: key == todayKey
-                            ? FontWeight.w800
+                            ? FontWeight.w600
                             : FontWeight.w500,
                         color: AppColors.primary)),
                 Text(
@@ -1678,7 +1678,7 @@ class _GalleryGridScreen extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                   fontSize: 17,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w600,
                   color: AppColors.primary),
             ),
           ),
@@ -1820,7 +1820,7 @@ class _ReviewSheetState extends State<_ReviewSheet> {
               const Text('Değerlendirme Yap',
                   style: TextStyle(
                       fontSize: 18,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w600,
                       color: AppColors.primary)),
               const SizedBox(height: 4),
               Text(widget.placeName,
@@ -1885,7 +1885,7 @@ class _ReviewSheetState extends State<_ReviewSheet> {
                       child: Text('Gönder',
                           style: TextStyle(
                               fontSize: 15,
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w600,
                               color: Colors.white)),
                     ),
                   ),

@@ -305,13 +305,13 @@ class _CategoryScreenState extends State<CategoryScreen> {
                         children: [
                           const Text('Filtrele',
                               style: TextStyle(
-                                  fontSize: 17, fontWeight: FontWeight.w800)),
+                                  fontSize: 17, fontWeight: FontWeight.w600)),
                           GestureDetector(
                             onTap: () => setSheet(() => temp.clear()),
                             child: const Text('Temizle',
                                 style: TextStyle(
                                     fontSize: 13,
-                                    fontWeight: FontWeight.w700,
+                                    fontWeight: FontWeight.w600,
                                     color: AppColors.primary)),
                           ),
                         ],
@@ -361,7 +361,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                           },
                           child: const Text('Uygula',
                               style: TextStyle(
-                                  fontSize: 15, fontWeight: FontWeight.w800)),
+                                  fontSize: 15, fontWeight: FontWeight.w600)),
                         ),
                       ),
                     ),
@@ -393,7 +393,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
             title: Text(label,
                 style: TextStyle(
                     fontSize: 15,
-                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w600,
                     color: selected ? AppColors.primary : AppColors.ink)),
             trailing: selected
                 ? const Icon(Icons.check, color: AppColors.primary)
@@ -428,7 +428,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                   alignment: Alignment.centerLeft,
                   child: Text('Sırala',
                       style: TextStyle(
-                          fontSize: 17, fontWeight: FontWeight.w800)),
+                          fontSize: 17, fontWeight: FontWeight.w600)),
                 ),
               ),
               option(_SortMode.yakinlik, Icons.near_me_outlined,
@@ -588,7 +588,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                 child: Text(_title,
                     style: const TextStyle(
                         fontSize: 17,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w600,
                         color: AppColors.primary)),
               ),
             ),

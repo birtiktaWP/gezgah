@@ -121,7 +121,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Çıkış Yap',
                 style: TextStyle(
-                    color: AppColors.closing, fontWeight: FontWeight.w700)),
+                    color: AppColors.closing, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -185,7 +185,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: Text('Hesabım',
                         style: TextStyle(
                             fontSize: 17,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w600,
                             color: Colors.white)),
                   ),
                 ),
@@ -228,7 +228,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Text(_initials,
                 style: const TextStyle(
                     fontSize: 20,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                     color: Colors.white)),
           ),
           const SizedBox(width: 14),
@@ -239,7 +239,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Text(_displayName,
                     style: const TextStyle(
                         fontSize: 16,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w600,
                         color: Colors.white)),
                 if (_displayEmail.isNotEmpty) ...[
                   const SizedBox(height: 2),
@@ -268,7 +268,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Text('Düzenle',
                       style: TextStyle(
                           fontSize: 13,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w600,
                           color: AppColors.primary)),
                 ],
               ),
@@ -306,7 +306,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           Text(value,
               style: const TextStyle(
-                  fontSize: 20, fontWeight: FontWeight.w800)),
+                  fontSize: 20, fontWeight: FontWeight.w600)),
           const SizedBox(height: 2),
           Text(label,
               style: const TextStyle(fontSize: 11, color: AppColors.muted)),
@@ -330,7 +330,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Text(title,
                   style: const TextStyle(
                       fontSize: 14,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w600,
                       color: AppColors.ink)),
             ),
           Container(
@@ -375,7 +375,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Text(title,
                       style: TextStyle(
                           fontSize: 14,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w600,
                           color: danger ? AppColors.closing : AppColors.ink)),
                   if (sub != null) ...[
                     const SizedBox(height: 2),
@@ -473,7 +473,7 @@ class _SheetScaffold extends StatelessWidget {
                 Expanded(
                   child: Text(title,
                       style: const TextStyle(
-                          fontSize: 17, fontWeight: FontWeight.w800)),
+                          fontSize: 17, fontWeight: FontWeight.w600)),
                 ),
               ],
             ),
@@ -507,7 +507,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
           const Text('Tercihler',
               style: TextStyle(
                   fontSize: 14,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w600,
                   color: AppColors.ink)),
           const SizedBox(height: 10),
           Container(
@@ -538,7 +538,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
               onPressed: _confirmDeleteAccount,
               icon: const Icon(Icons.delete_outline, size: 20),
               label: const Text('Hesabımı Sil',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.closing,
                 side: const BorderSide(color: AppColors.closing),
@@ -577,7 +577,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                 alignment: Alignment.centerLeft,
                 child: Text('Dil',
                     style: TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w700)),
+                        fontSize: 16, fontWeight: FontWeight.w600)),
               ),
             ),
             for (final lang in const [
@@ -626,7 +626,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             const Text('Talebiniz alınmıştır',
                 textAlign: TextAlign.center,
                 style:
-                    TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                    TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             const Text(
                 'Hesap silme talebin alındı. İşlem tamamlandığında '
@@ -648,7 +648,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                     borderRadius: BorderRadius.circular(12)),
               ),
               child: const Text('Tamam',
-                  style: TextStyle(fontWeight: FontWeight.w700)),
+                  style: TextStyle(fontWeight: FontWeight.w600)),
             ),
           ),
         ],
@@ -711,7 +711,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
         children: [
           Text(title,
               style:
-                  const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                  const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
           const SizedBox(height: 2),
           Text(sub,
               style: const TextStyle(fontSize: 12.5, color: AppColors.muted)),
@@ -768,7 +768,7 @@ class _LegalSheet extends StatelessWidget {
           Text(s.heading!,
               style: const TextStyle(
                   fontSize: 15,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                   color: AppColors.ink)),
           const SizedBox(height: 10),
         ],
@@ -791,7 +791,7 @@ class _LegalSheet extends StatelessWidget {
       spans.add(TextSpan(
         text: parts[i],
         style: i.isOdd
-            ? const TextStyle(fontWeight: FontWeight.w800, color: AppColors.ink)
+            ? const TextStyle(fontWeight: FontWeight.w600, color: AppColors.ink)
             : null,
       ));
     }
@@ -948,7 +948,7 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
           trailingSpace: false,
         ),
         selectorTextStyle: const TextStyle(
-            fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.ink),
+            fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.ink),
         textStyle: const TextStyle(fontSize: 15, color: AppColors.ink),
         inputDecoration: const InputDecoration(
           hintText: 'Telefon',
@@ -1110,7 +1110,7 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
                     )
                   : const Text('Değişiklikleri Kaydet',
                       style: TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w700)),
+                          fontSize: 15, fontWeight: FontWeight.w600)),
             ),
           ),
         ],
@@ -1454,7 +1454,7 @@ class _PasswordChangeSheetState extends State<_PasswordChangeSheet> {
                     )
                   : const Text('Şifreyi Güncelle',
                       style: TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w700)),
+                          fontSize: 15, fontWeight: FontWeight.w600)),
             ),
           ),
         ],

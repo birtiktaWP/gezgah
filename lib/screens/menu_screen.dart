@@ -67,7 +67,7 @@ class MenuScreen extends StatelessWidget {
                   const Text('Menü',
                       style: TextStyle(
                           fontSize: 19,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w600,
                           color: Colors.white)),
                   if (title.isNotEmpty)
                     Text(title,
@@ -93,7 +93,7 @@ class MenuScreen extends StatelessWidget {
           child: Text(cat.kategori,
               style: const TextStyle(
                   fontSize: 17,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                   color: AppColors.primary)),
         ),
       ...cat.urunler.map(_item),
@@ -130,14 +130,14 @@ class MenuScreen extends StatelessWidget {
                     Expanded(
                       child: Text(u.ad,
                           style: const TextStyle(
-                              fontSize: 14.5, fontWeight: FontWeight.w700)),
+                              fontSize: 14.5, fontWeight: FontWeight.w600)),
                     ),
                     if (u.fiyat.isNotEmpty) ...[
                       const SizedBox(width: 8),
                       Text('${u.fiyat} ₺',
                           style: const TextStyle(
                               fontSize: 14,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w600,
                               color: AppColors.primary)),
                     ],
                   ],

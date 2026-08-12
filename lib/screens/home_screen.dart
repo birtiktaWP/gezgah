@@ -292,7 +292,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                           fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w600,
                           color: Colors.white)),
                 ),
               ],
@@ -301,7 +301,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const Text('Şehrin en iyi',
                 style: TextStyle(
                     fontSize: 24,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w600,
                     height: 1.25,
                     letterSpacing: -0.5,
                     color: Colors.white)),
@@ -311,7 +311,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 phrases: MockData.typedPhrases,
                 style: const TextStyle(
                     fontSize: 24,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w600,
                     letterSpacing: -0.5,
                     color: Colors.white),
               ),
@@ -569,7 +569,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Sponsorlu restoran büyük kartı.
   Widget _sponsoredCard(Place p) => _bigCard(
-        image: p.image,
+        image: p.thumb(ThumbSize.wide),
         badgeIcon: Icons.verified,
         badgeText: 'SPONSORLU',
         title: p.name,
@@ -631,14 +631,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         Text(day,
                             style: const TextStyle(
                                 fontSize: 18,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w600,
                                 color: AppColors.primary,
                                 height: 1)),
                         const SizedBox(height: 3),
                         Text(month,
                             style: const TextStyle(
                                 fontSize: 10.5,
-                                fontWeight: FontWeight.w700,
+                                fontWeight: FontWeight.w600,
                                 color: AppColors.primary,
                                 height: 1)),
                       ],
@@ -670,7 +670,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           Text('Etkinlik',
                               style: TextStyle(
                                   fontSize: 11,
-                                  fontWeight: FontWeight.w700,
+                                  fontWeight: FontWeight.w600,
                                   color: Colors.white)),
                         ],
                       ),
@@ -681,7 +681,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                             fontSize: 17,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w600,
                             color: Colors.white)),
                     if (e.time.trim().isNotEmpty) ...[
                       const SizedBox(height: 5),
@@ -755,7 +755,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Text(badgeText,
                           style: const TextStyle(
                               fontSize: 10.5,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w600,
                               letterSpacing: 0.3,
                               color: AppColors.primary)),
                     ],
@@ -774,7 +774,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                             fontSize: 17,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w600,
                             color: Colors.white)),
                     const SizedBox(height: 6),
                     Row(
@@ -803,7 +803,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: Text(trailing,
                                 style: const TextStyle(
                                     fontSize: 11,
-                                    fontWeight: FontWeight.w700,
+                                    fontWeight: FontWeight.w600,
                                     color: Colors.white)),
                           ),
                         ],

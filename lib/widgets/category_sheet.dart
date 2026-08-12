@@ -44,13 +44,12 @@ class _CategorySheetState extends State<_CategorySheet> {
 
   Future<void> _load() async {
     try {
-      final all = await HomeRepository.instance.kategoriler();
-      // Mekanı olanları öne al (varsa mekan_sayisi'ya göre), yoksa mevcut sıra.
-      final hasCounts = all.any((c) => c.mekanSayisi > 0);
-      final list = hasCounts
-          ? (all.where((c) => c.mekanSayisi > 0).toList()
-            ..sort((a, b) => b.mekanSayisi.compareTo(a.mekanSayisi)))
-          : all;
+      // Tüm kategoriler + mekan sayıları (/kategoriler/agac).
+      final all = await HomeRepository.instance.kategorilerAgac();
+      // Mekanı olanları öne al ve mekan sayısına göre azalan sırala.
+      final withCounts = all.where((c) => c.mekanSayisi > 0).toList()
+        ..sort((a, b) => b.mekanSayisi.compareTo(a.mekanSayisi));
+      final list = withCounts.isNotEmpty ? withCounts : all;
       if (!mounted) return;
       setState(() {
         _cats = list;
@@ -104,7 +103,7 @@ class _CategorySheetState extends State<_CategorySheet> {
         children: [
           const Expanded(
             child: Text('Kategoriler',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
           ),
           GestureDetector(
             onTap: () => Navigator.pop(context),
@@ -143,57 +142,63 @@ class _CategorySheetState extends State<_CategorySheet> {
         ),
       );
     }
-    return GridView.builder(
+    return ListView.separated(
       controller: controller,
       padding: EdgeInsets.fromLTRB(20, 8, 20, 24 + bottomInset),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 0.92,
-      ),
       itemCount: _cats.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (_, i) => _tile(_cats[i]),
     );
   }
 
+  /// Tam genişlik tek satır: solda ikon, ortada başlık, en sağda mekan sayısı.
   Widget _tile(Category c) {
     return GestureDetector(
       onTap: () => _select(c),
       child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(color: AppColors.line),
         ),
-        padding: const EdgeInsets.all(10),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Row(
           children: [
             Container(
-              width: 48,
-              height: 48,
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
                 color: AppColors.primarySoft,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Center(
                 child: CategoryIcon(
                     icon: c.icon,
                     id: c.id,
                     color: AppColors.primary,
-                    size: 24),
+                    size: 22),
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              c.name,
-              maxLines: 2,
-              textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                  fontSize: 12.5, fontWeight: FontWeight.w600, height: 1.15),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                c.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontSize: 14.5, fontWeight: FontWeight.w600),
+              ),
             ),
+            const SizedBox(width: 10),
+            if (c.mekanSayisi > 0)
+              Text(
+                '${c.mekanSayisi}',
+                style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.muted),
+              ),
           ],
         ),
       ),

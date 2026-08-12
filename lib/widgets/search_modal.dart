@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../data/api.dart';
+import '../data/location_service.dart';
 import '../data/mock_data.dart';
 import '../data/models.dart';
 import '../data/search_history.dart';
@@ -66,6 +67,14 @@ class _SearchModalState extends State<_SearchModal>
   int? _foodNextPage;
   String? _foodTerm; // yemekler'in yüklendiği terim (null = yüklenmedi)
 
+  // Konum (mesafe sıralaması) + yemek sekmesi sıralama/filtre durumu.
+  double? _lat;
+  double? _lng;
+  bool _hasCoord = false;
+  String _foodSort = 'likes'; // konum gelince 'distance' olur
+  final Set<int> _foodFilters = {}; // seçili filtre id'leri (yemek)
+  List<Filter> _allFilters = const []; // /filtreler (filtre sheet için)
+
   String? _userId; // arama geçmişi kaydı için (varsa gerçek, yoksa anonim)
   List<String> _popular = MockData.popularSearches; // API gelene kadar fallback
   List<String> _history = const [];
@@ -89,7 +98,34 @@ class _SearchModalState extends State<_SearchModal>
       }
     });
     _loadInitial();
+    _resolveLoc();
   }
+
+  /// Konumu (mesafe sıralaması için) çözer. Gerçek konum varsa mekan/yemek
+  /// varsayılanı mesafeye döner; aktif bir sorgu varsa yeniden çalıştırılır.
+  Future<void> _resolveLoc() async {
+    final loc = await LocationService.resolve();
+    if (!mounted || !loc.real) return;
+    setState(() {
+      _lat = loc.lat;
+      _lng = loc.lng;
+      _hasCoord = true;
+      // Kullanıcı elle bir sıralama seçmediyse mesafeyi varsayılan yap.
+      if (_foodSort == 'likes') _foodSort = 'distance';
+    });
+    // Konum geç geldiyse ve arama aktifse mesafeye göre yenile.
+    final term = _query.trim();
+    if (term.length >= 2) {
+      _runMekan(term);
+      if (_tab.index == 1) _runFood(term);
+    }
+  }
+
+  /// Mekan sekmesi için etkin sıralama (konum varsa mesafe, yoksa alaka).
+  String? get _mekanSort => _hasCoord ? 'distance' : null;
+
+  /// Metre → "1.2 km" (yoksa boş).
+  String _km(int? m) => m == null ? '' : LocationService.format(m.toDouble());
 
   /// Yemekler sekmesine geçilince aynı terimle bir kez yükler (tab=yemek).
   void _onTabChanged() {
@@ -178,8 +214,15 @@ class _SearchModalState extends State<_SearchModal>
     _placeCancel = token;
     if (mounted) setState(() => _placeLoading = true);
     try {
-      final r = await HomeRepository.instance
-          .aramaMekan(term, userId: _userId, limit: 20, cancelToken: token);
+      final r = await HomeRepository.instance.aramaMekan(
+        term,
+        userId: _userId,
+        limit: 20,
+        cancelToken: token,
+        lat: _lat,
+        lng: _lng,
+        sort: _mekanSort,
+      );
       if (!mounted || _controller.text.trim() != term) return;
       setState(() {
         _placeItems = r.items;
@@ -210,8 +253,16 @@ class _SearchModalState extends State<_SearchModal>
     _foodCancel = token;
     if (mounted) setState(() => _foodLoading = true);
     try {
-      final r = await HomeRepository.instance
-          .aramaYemek(term, userId: _userId, limit: 20, cancelToken: token);
+      final r = await HomeRepository.instance.aramaYemek(
+        term,
+        userId: _userId,
+        limit: 20,
+        cancelToken: token,
+        lat: _lat,
+        lng: _lng,
+        sort: _foodSort,
+        filtreler: _foodFilters.toList(),
+      );
       if (!mounted || _controller.text.trim() != term) return;
       setState(() {
         _foodItems = r.items;
@@ -244,8 +295,15 @@ class _SearchModalState extends State<_SearchModal>
     if (term.length < 2) return;
     setState(() => _placeMoreLoading = true);
     try {
-      final r = await HomeRepository.instance
-          .aramaMekan(term, userId: _userId, page: _placeNextPage!, limit: 20);
+      final r = await HomeRepository.instance.aramaMekan(
+        term,
+        userId: _userId,
+        page: _placeNextPage!,
+        limit: 20,
+        lat: _lat,
+        lng: _lng,
+        sort: _mekanSort,
+      );
       if (!mounted) return;
       setState(() {
         _placeItems = [..._placeItems, ...r.items];
@@ -264,8 +322,16 @@ class _SearchModalState extends State<_SearchModal>
     if (term.length < 2) return;
     setState(() => _foodMoreLoading = true);
     try {
-      final r = await HomeRepository.instance
-          .aramaYemek(term, userId: _userId, page: _foodNextPage!, limit: 20);
+      final r = await HomeRepository.instance.aramaYemek(
+        term,
+        userId: _userId,
+        page: _foodNextPage!,
+        limit: 20,
+        lat: _lat,
+        lng: _lng,
+        sort: _foodSort,
+        filtreler: _foodFilters.toList(),
+      );
       if (!mounted) return;
       setState(() {
         _foodItems = [..._foodItems, ...r.items];
@@ -323,6 +389,205 @@ class _SearchModalState extends State<_SearchModal>
     await SearchHistory.instance.clear();
     if (!mounted) return;
     setState(() => _history = const []);
+  }
+
+  /// Yemekler sekmesi sıralama seçimi (bottom sheet).
+  void _openFoodSort() {
+    final options = <(String, String)>[
+      if (_hasCoord) ('distance', 'Yakınlığa göre'),
+      ('price_asc', 'Fiyat: Artan'),
+      ('price_desc', 'Fiyat: Azalan'),
+      ('likes', 'Beğeniye göre'),
+    ];
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(22, 18, 22, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Sırala',
+                    style: TextStyle(
+                        fontSize: 17, fontWeight: FontWeight.w600)),
+              ),
+            ),
+            for (final o in options)
+              InkWell(
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _applyFoodSort(o.$1);
+                },
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(o.$2,
+                            style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: _foodSort == o.$1
+                                    ? FontWeight.w600
+                                    : FontWeight.w500,
+                                color: _foodSort == o.$1
+                                    ? AppColors.primary
+                                    : AppColors.ink)),
+                      ),
+                      if (_foodSort == o.$1)
+                        const Icon(Icons.check, color: AppColors.primary),
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _applyFoodSort(String s) {
+    if (s == _foodSort) return;
+    setState(() => _foodSort = s);
+    final term = _query.trim();
+    if (term.length >= 2) _runFood(term);
+  }
+
+  /// Yemekler sekmesi filtre seçimi (bottom sheet, /filtreler).
+  Future<void> _openFoodFilter() async {
+    if (_allFilters.isEmpty) {
+      _allFilters = await HomeRepository.instance.filtreler(type: 'restoran');
+    }
+    if (!mounted) return;
+    if (_allFilters.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Filtre bulunamadı')),
+      );
+      return;
+    }
+    final temp = Set<int>.from(_foodFilters);
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(22, 18, 22, 8),
+                child: Row(
+                  children: [
+                    const Text('Filtrele',
+                        style: TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.w600)),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () => setSheet(temp.clear),
+                      child: const Text('Temizle',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary)),
+                    ),
+                  ],
+                ),
+              ),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  children: [
+                    for (final f in _allFilters)
+                      InkWell(
+                        onTap: () => setSheet(() {
+                          if (temp.contains(f.id)) {
+                            temp.remove(f.id);
+                          } else {
+                            temp.add(f.id);
+                          }
+                        }),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(f.name,
+                                    style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: temp.contains(f.id)
+                                            ? FontWeight.w600
+                                            : FontWeight.w500,
+                                        color: temp.contains(f.id)
+                                            ? AppColors.primary
+                                            : AppColors.ink)),
+                              ),
+                              Icon(
+                                temp.contains(f.id)
+                                    ? Icons.check_box
+                                    : Icons.check_box_outline_blank,
+                                color: temp.contains(f.id)
+                                    ? AppColors.primary
+                                    : AppColors.muted,
+                                size: 22,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                    20, 8, 20, 16 + MediaQuery.of(ctx).padding.bottom),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: const Text('Uygula',
+                        style: TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ).then((applied) {
+      if (applied == true && mounted) {
+        setState(() {
+          _foodFilters
+            ..clear()
+            ..addAll(temp);
+        });
+        final term = _query.trim();
+        if (term.length >= 2) _runFood(term);
+      }
+    });
   }
 
   /// Kategoriye dokununca arama modalını kapatıp kategori detayını açar.
@@ -431,9 +696,9 @@ class _SearchModalState extends State<_SearchModal>
         labelColor: Colors.white,
         unselectedLabelColor: AppColors.ink,
         labelStyle:
-            const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+            const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
         unselectedLabelStyle:
-            const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+            const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
         tabs: const [Tab(text: 'Mekanlar'), Tab(text: 'Yemekler')],
       ),
     );
@@ -492,6 +757,16 @@ class _SearchModalState extends State<_SearchModal>
   }
 
   Widget _foodsTab() {
+    // Toolbar (sırala + filtrele) her durumda üstte kalsın; içerik altında.
+    return Column(
+      children: [
+        _foodToolbar(),
+        Expanded(child: _foodsContent()),
+      ],
+    );
+  }
+
+  Widget _foodsContent() {
     final term = _query.trim();
     // Bu terim için yemekler henüz yüklenmediyse (sekmeye yeni geçildi) veya
     // yükleniyorsa spinner göster — yanlış "sonuç yok" göstermemek için.
@@ -502,11 +777,55 @@ class _SearchModalState extends State<_SearchModal>
     return ListView.separated(
       controller: _foodScroll,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
       itemCount: _foodItems.length + (_foodMoreLoading ? 1 : 0),
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (_, i) =>
           i >= _foodItems.length ? _moreSpinner() : _foodTile(_foodItems[i]),
+    );
+  }
+
+  String get _foodSortLabel => switch (_foodSort) {
+        'distance' => 'Yakınlığa göre',
+        'price_asc' => 'Fiyat: Artan',
+        'price_desc' => 'Fiyat: Azalan',
+        _ => 'Beğeniye göre',
+      };
+
+  Widget _foodToolbar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 2, 20, 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(_foodSortLabel,
+                style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.muted)),
+          ),
+          GestureDetector(onTap: _openFoodSort, child: _sfBtn(Icons.swap_vert)),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: _openFoodFilter,
+            child: _sfBtn(Icons.filter_list, active: _foodFilters.isNotEmpty),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sfBtn(IconData icon, {bool active = false}) {
+    return Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        color: active ? AppColors.primary : Colors.white,
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: active ? AppColors.primary : AppColors.line),
+      ),
+      child: Icon(icon,
+          size: 18, color: active ? Colors.white : AppColors.primary),
     );
   }
 
@@ -515,6 +834,8 @@ class _SearchModalState extends State<_SearchModal>
   Widget _foodTile(FoodResult f) {
     final p = f.mekan;
     final loc = p.subtitle;
+    // Ürünün kendi görseli varsa onu, yoksa mekanın kare thumbnail'ını kullan.
+    final foodImg = f.gorsel.isNotEmpty ? f.gorsel : p.thumb(ThumbSize.square);
     return GestureDetector(
       onTap: () {
         _commitHistory(_query);
@@ -535,8 +856,8 @@ class _SearchModalState extends State<_SearchModal>
               child: SizedBox(
                 width: 56,
                 height: 56,
-                child: f.gorsel.isNotEmpty
-                    ? NetImage(f.gorsel)
+                child: foodImg.isNotEmpty
+                    ? NetImage(foodImg)
                     : Container(
                         color: AppColors.primarySoft,
                         child: const Icon(Icons.restaurant_menu,
@@ -554,7 +875,7 @@ class _SearchModalState extends State<_SearchModal>
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                          fontSize: 14.5, fontWeight: FontWeight.w800)),
+                          fontSize: 14.5, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 4),
                   Row(
                     children: [
@@ -563,7 +884,11 @@ class _SearchModalState extends State<_SearchModal>
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                            loc.isNotEmpty ? '${p.name} · $loc' : p.name,
+                            [
+                              p.name,
+                              _km(f.mesafeM),
+                              loc
+                            ].where((s) => s.isNotEmpty).join(' · '),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -579,7 +904,7 @@ class _SearchModalState extends State<_SearchModal>
                           Text('₺${f.fiyat}',
                               style: const TextStyle(
                                   fontSize: 12.5,
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w600,
                                   color: AppColors.primary)),
                         if (f.begeni > 0) ...[
                           if (f.fiyat.isNotEmpty) const SizedBox(width: 10),
@@ -607,6 +932,9 @@ class _SearchModalState extends State<_SearchModal>
     final p = r.place;
     final loc =
         [p.sehir, p.ilce].where((s) => s.trim().isNotEmpty).join(' · ');
+    // Konum verildiyse mesafe alt yazının başına eklenir.
+    final metaText =
+        [_km(r.mesafeM), loc].where((s) => s.isNotEmpty).join(' · ');
     return GestureDetector(
       onTap: () {
         _commitHistory(_query);
@@ -628,8 +956,8 @@ class _SearchModalState extends State<_SearchModal>
               child: SizedBox(
                 width: 56,
                 height: 56,
-                child: p.image.isNotEmpty
-                    ? NetImage(p.image)
+                child: p.thumb(ThumbSize.square).isNotEmpty
+                    ? NetImage(p.thumb(ThumbSize.square))
                     : Container(
                         color: AppColors.primarySoft,
                         child: const Icon(Icons.restaurant_outlined,
@@ -647,8 +975,8 @@ class _SearchModalState extends State<_SearchModal>
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                          fontSize: 14.5, fontWeight: FontWeight.w800)),
-                  if (loc.isNotEmpty) ...[
+                          fontSize: 14.5, fontWeight: FontWeight.w600)),
+                  if (metaText.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Row(
                       children: [
@@ -656,7 +984,7 @@ class _SearchModalState extends State<_SearchModal>
                             size: 13, color: AppColors.primary),
                         const SizedBox(width: 4),
                         Expanded(
-                          child: Text(loc,
+                          child: Text(metaText,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -694,7 +1022,7 @@ class _SearchModalState extends State<_SearchModal>
             children: [
               const Text('Ara',
                   style:
-                      TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                      TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
               const Spacer(),
               GestureDetector(
                 onTap: () => Navigator.pop(context),
@@ -756,12 +1084,12 @@ class _SearchModalState extends State<_SearchModal>
       children: [
         Text(t,
             style: const TextStyle(
-                fontSize: 16, fontWeight: FontWeight.w700)),
+                fontSize: 16, fontWeight: FontWeight.w600)),
         if (link)
           const Text('Tümü',
               style: TextStyle(
                   fontSize: 13,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w600,
                   color: AppColors.primary)),
       ],
     );
@@ -772,13 +1100,13 @@ class _SearchModalState extends State<_SearchModal>
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         const Text('Son Aramalar',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
         GestureDetector(
           onTap: _clearHistory,
           child: const Text('Temizle',
               style: TextStyle(
                   fontSize: 13,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w600,
                   color: AppColors.primary)),
         ),
       ],
@@ -832,7 +1160,7 @@ class _SearchModalState extends State<_SearchModal>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: const [
             Text('Kedy Tavsiyeleri',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
             Text('Sana özel akıllı öneriler',
                 style: TextStyle(fontSize: 12, color: AppColors.muted)),
           ],
@@ -888,7 +1216,7 @@ class _SearchModalState extends State<_SearchModal>
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                           fontSize: 13,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w600,
                           height: 1.2)),
                 ),
               ],

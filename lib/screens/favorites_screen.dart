@@ -221,7 +221,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           Text(title,
               textAlign: TextAlign.center,
               style:
-                  const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                  const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           Text(subtitle,
               textAlign: TextAlign.center,
@@ -239,7 +239,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                 child: Text(action,
                     style: const TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                         color: Colors.white)),
               ),
             ),
@@ -275,7 +275,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                 const Text('Favorilerim',
                     style: TextStyle(
                         fontSize: 20,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w600,
                         color: Colors.white)),
               ],
             ),
@@ -306,7 +306,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
             SizedBox(
                 width: 110,
                 height: 110,
-                child: heroImage(tag, p.image)),
+                child: heroImage(tag, p.thumb(ThumbSize.square))),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -318,7 +318,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w800)),
+                            fontSize: 15, fontWeight: FontWeight.w600)),
                     if (location.isNotEmpty) ...[
                       const SizedBox(height: 5),
                       Row(

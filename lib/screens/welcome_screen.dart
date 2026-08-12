@@ -76,7 +76,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   'Hoş geldin',
                   style: TextStyle(
                       fontSize: 30,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w600,
                       color: Colors.white,
                       letterSpacing: -0.5),
                 ),
@@ -115,7 +115,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                           )
                         : const Text('Başla',
                             style: TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.w800)),
+                                fontSize: 16, fontWeight: FontWeight.w600)),
                   ),
                 ),
                 const SizedBox(height: 12),

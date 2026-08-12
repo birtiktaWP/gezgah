@@ -3,6 +3,10 @@ import 'package:flutter/widgets.dart';
 /// Mekan açık/kapanış durumu
 enum OpenState { open, closing, closed }
 
+/// Liste/kart görsel boyutları (thumbnail-update.md). Ekranda kapladığı alana
+/// göre doğru thumbnail seçilir; yoksa `thumbnail`/`image`'a düşülür.
+enum ThumbSize { square, card, wide }
+
 class Place {
   final int id; // mekan id (`yzd_posts.id`); 0 = bilinmiyor (mock)
   final String name;
@@ -22,6 +26,13 @@ class Place {
   final List<int> filterIds; // aktif filtre id'leri (filtre_{id}=1)
   bool favorite;
 
+  // Önceden üretilmiş thumbnail'ler (thumbnail-update.md). Öne çıkan görseli
+  // olmayan mekanlarda null olabilir → `image`'a düşülür.
+  final String? thumbnail; // top-level thumbnail (kare, küçük)
+  final String? thumbSquare;
+  final String? thumbCard;
+  final String? thumbWide;
+
   Place({
     this.id = 0,
     required this.name,
@@ -40,7 +51,24 @@ class Place {
     this.date = '',
     this.filterIds = const [],
     this.favorite = false,
+    this.thumbnail,
+    this.thumbSquare,
+    this.thumbCard,
+    this.thumbWide,
   });
+
+  /// Ekran alanına göre en uygun görsel URL'i: istenen boyut → `thumbnail` →
+  /// asıl `image` (thumbnail-update.md §4 fallback zinciri).
+  String thumb(ThumbSize size) {
+    final t = switch (size) {
+      ThumbSize.square => thumbSquare,
+      ThumbSize.card => thumbCard,
+      ThumbSize.wide => thumbWide,
+    };
+    if (t != null && t.isNotEmpty) return t;
+    if (thumbnail != null && thumbnail!.isNotEmpty) return thumbnail!;
+    return image;
+  }
 }
 
 class EventItem {
@@ -674,6 +702,7 @@ class FoodResult {
   final String gorsel; // ürün görseli tam URL; yoksa ''
   final int begeni; // like_count
   final Place mekan; // ürünün ait olduğu mekan (id/ad/görsel/konum)
+  final int? mesafeM; // konum verildiyse mekanın mesafesi (metre)
 
   const FoodResult({
     required this.urunId,
@@ -682,6 +711,7 @@ class FoodResult {
     this.gorsel = '',
     this.begeni = 0,
     required this.mekan,
+    this.mesafeM,
   });
 }
 
