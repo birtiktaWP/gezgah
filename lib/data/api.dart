@@ -731,11 +731,26 @@ class HomeRepository {
   DateTime? _categoriesAt;
   static const _ttl = Duration(minutes: 12);
 
-  // Arama yanıtı kısa süreli bellek cache'i. Aynı/önek sorgular (ör. kullanıcı
-  // "kahve"den "kah"a silince) ağ turu olmadan anında döner. Sunucudaki Redis'e
-  // ek olarak istemci round-trip'ini de ortadan kaldırır.
-  final Map<String, ({DateTime at, List<SearchResult> results})> _searchCache =
-      {};
+  // Arama yanıtı kısa süreli bellek cache'i (tab + sorgu + sayfa bazlı). Aynı/
+  // önek sorgular ağ turu olmadan anında döner (sunucu Redis'ine ek).
+  final Map<
+      String,
+      ({
+        DateTime at,
+        List<SearchResult> items,
+        bool hasMore,
+        int? nextPage,
+        int total
+      })> _mekanCache = {};
+  final Map<
+      String,
+      ({
+        DateTime at,
+        List<FoodResult> items,
+        bool hasMore,
+        int? nextPage,
+        int total
+      })> _yemekCache = {};
   static const Duration _searchTtl = Duration(seconds: 90);
   static const int _searchCacheMax = 40;
 
@@ -1195,60 +1210,202 @@ class HomeRepository {
     return mekanlar(limit: limit);
   }
 
-  /// Restoran araması (ARAMA.md). Ad + menü ürünlerinde `LIKE '%q%'`.
-  /// `GET /arama?q=&page=&limit=` — en az 2 karakter gerekir.
-  Future<List<SearchResult>> arama(
+  /// Arama — "Mekanlar" sekmesi (`GET /arama?tab=mekan`, arama-yeni-3.md).
+  /// İşletme adına göre; sayfalama meta'sı (`total`/`pages`) döner. En az 2
+  /// karakter. Taze istemci cache'i varsa ağ turu yapmadan döner.
+  Future<
+      ({
+        List<SearchResult> items,
+        bool hasMore,
+        int? nextPage,
+        int total
+      })> aramaMekan(
     String q, {
     int page = 1,
     int limit = 20,
-    String? userId, // gönderilirse arama geçmişine kullanıcıyla kaydedilir
-    CancelToken? cancelToken, // yeni sorgu gelince eskisini iptal etmek için
+    String? userId,
+    CancelToken? cancelToken,
   }) async {
+    const empty = (
+      items: <SearchResult>[],
+      hasMore: false,
+      nextPage: null,
+      total: 0
+    );
     final term = q.trim();
-    if (term.length < 2) return const [];
+    if (term.length < 2) return empty;
 
-    // 1) Taze cache varsa ağ turu yapmadan anında dön.
     final key = '$term|$page|$limit';
-    final cached = _searchCache[key];
-    if (cached != null &&
-        DateTime.now().difference(cached.at) < _searchTtl) {
-      return cached.results;
+    final c = _mekanCache[key];
+    if (c != null && DateTime.now().difference(c.at) < _searchTtl) {
+      return (
+        items: c.items,
+        hasMore: c.hasMore,
+        nextPage: c.nextPage,
+        total: c.total
+      );
     }
 
     final res = await _dio.get(
       '/arama',
       queryParameters: {
         'q': term,
+        'tab': 'mekan',
         'page': page,
         'limit': limit,
         if (userId != null && userId.isNotEmpty) 'user_id': userId,
       },
       cancelToken: cancelToken,
     );
-    final body = res.data as Map<String, dynamic>;
-    if (body['success'] != true) return const [];
+    final body = res.data;
+    if (body is! Map || body['success'] != true) return empty;
     final data = body['data'];
-    if (data is! List) return const [];
-    final list = data.whereType<Map<String, dynamic>>().map((j) {
-      return SearchResult(
-        place: _parsePlace(j),
-        matchedProducts: (j['eslesen_urunler'] as List<dynamic>?)
-                ?.whereType<String>()
-                .toList() ??
-            const [],
-        matchTypes: (j['eslesme'] as List<dynamic>?)
-                ?.whereType<String>()
-                .toList() ??
-            const [],
-      );
-    }).toList();
+    final items = (data is List)
+        ? data.whereType<Map<String, dynamic>>().map((j) {
+            return SearchResult(
+              place: _parsePlace(j),
+              matchedProducts: (j['eslesen_urunler'] as List<dynamic>?)
+                      ?.whereType<String>()
+                      .toList() ??
+                  const [],
+              matchTypes: (j['eslesme'] as List<dynamic>?)
+                      ?.whereType<String>()
+                      .toList() ??
+                  const [],
+            );
+          }).toList()
+        : <SearchResult>[];
+    final meta = (body['meta'] as Map?) ?? const {};
+    final curPage = (meta['page'] as num?)?.toInt() ?? page;
+    final pages = (meta['pages'] as num?)?.toInt() ?? 1;
+    final total = (meta['total'] as num?)?.toInt() ?? items.length;
+    final hasMore = curPage < pages;
+    final nextPage = hasMore ? curPage + 1 : null;
 
-    // 2) Sonucu cache'le (basit FIFO budama ile boyut sınırla).
-    _searchCache[key] = (at: DateTime.now(), results: list);
-    if (_searchCache.length > _searchCacheMax) {
-      _searchCache.remove(_searchCache.keys.first);
+    _mekanCache[key] = (
+      at: DateTime.now(),
+      items: items,
+      hasMore: hasMore,
+      nextPage: nextPage,
+      total: total
+    );
+    if (_mekanCache.length > _searchCacheMax) {
+      _mekanCache.remove(_mekanCache.keys.first);
     }
-    return list;
+    return (items: items, hasMore: hasMore, nextPage: nextPage, total: total);
+  }
+
+  /// Arama — "Yemekler" sekmesi (`GET /arama?tab=yemek`, arama-yeni-3.md).
+  /// Menü/ürün adına göre; eşleşen ürünler + ait olduğu mekanla döner
+  /// (beğeni azalan). Kullanıcı Yemekler sekmesine geçince çağrılır.
+  Future<
+      ({
+        List<FoodResult> items,
+        bool hasMore,
+        int? nextPage,
+        int total
+      })> aramaYemek(
+    String q, {
+    int page = 1,
+    int limit = 20,
+    String? userId,
+    CancelToken? cancelToken,
+  }) async {
+    const empty = (
+      items: <FoodResult>[],
+      hasMore: false,
+      nextPage: null,
+      total: 0
+    );
+    final term = q.trim();
+    if (term.length < 2) return empty;
+
+    final key = '$term|$page|$limit';
+    final c = _yemekCache[key];
+    if (c != null && DateTime.now().difference(c.at) < _searchTtl) {
+      return (
+        items: c.items,
+        hasMore: c.hasMore,
+        nextPage: c.nextPage,
+        total: c.total
+      );
+    }
+
+    final res = await _dio.get(
+      '/arama',
+      queryParameters: {
+        'q': term,
+        'tab': 'yemek',
+        'page': page,
+        'limit': limit,
+        if (userId != null && userId.isNotEmpty) 'user_id': userId,
+      },
+      cancelToken: cancelToken,
+    );
+    final body = res.data;
+    if (body is! Map || body['success'] != true) return empty;
+    final data = body['data'];
+    final items = (data is List)
+        ? data.whereType<Map<String, dynamic>>().map(_parseFood).toList()
+        : <FoodResult>[];
+    final meta = (body['meta'] as Map?) ?? const {};
+    final curPage = (meta['page'] as num?)?.toInt() ?? page;
+    final pages = (meta['pages'] as num?)?.toInt() ?? 1;
+    final total = (meta['total'] as num?)?.toInt() ?? items.length;
+    final hasMore = curPage < pages;
+    final nextPage = hasMore ? curPage + 1 : null;
+
+    _yemekCache[key] = (
+      at: DateTime.now(),
+      items: items,
+      hasMore: hasMore,
+      nextPage: nextPage,
+      total: total
+    );
+    if (_yemekCache.length > _searchCacheMax) {
+      _yemekCache.remove(_yemekCache.keys.first);
+    }
+    return (items: items, hasMore: hasMore, nextPage: nextPage, total: total);
+  }
+
+  /// `tab=yemek` yanıtındaki bir ürünü [FoodResult]'a çevirir.
+  FoodResult _parseFood(Map<String, dynamic> j) {
+    final m = (j['mekan'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final sehir = (m['sehir'] ?? '').toString().trim();
+    final ilce = (m['ilce'] ?? '').toString().trim();
+    final loc = [sehir, ilce].where((s) => s.isNotEmpty).join(' · ');
+    final coord = _parseCoord(m['kordinat']);
+
+    String img(dynamic v) {
+      if (v is String && v.isNotEmpty) {
+        return v.startsWith('http') ? v : '$kApiHost$v';
+      }
+      return '';
+    }
+
+    final place = Place(
+      id: (m['id'] as num?)?.toInt() ?? 0,
+      name: (m['ad'] as String?)?.trim().isNotEmpty == true
+          ? m['ad'] as String
+          : 'Mekan',
+      category: 'Mekan',
+      subtitle: loc,
+      rating: 0,
+      distance: loc,
+      price: '',
+      image: img(m['image'] ?? m['thumbnail']),
+      lat: coord?.$1 ?? double.nan,
+      lng: coord?.$2 ?? double.nan,
+    );
+
+    return FoodResult(
+      urunId: (j['urun_id'] as num?)?.toInt() ?? 0,
+      urun: (j['urun'] as String?)?.trim() ?? '',
+      fiyat: j['fiyat']?.toString().trim() ?? '',
+      gorsel: img(j['gorsel']),
+      begeni: (j['begeni'] as num?)?.toInt() ?? 0,
+      mekan: place,
+    );
   }
 
   /// En çok aranan kelimeler (ARAMA_GECMISI.md).

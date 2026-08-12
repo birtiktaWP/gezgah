@@ -665,6 +665,26 @@ class RezervasyonSecenekler {
   }
 }
 
+/// Arama "Yemekler" sekmesi sonucu (`GET /arama?tab=yemek`, arama-yeni-3.md).
+/// Menüde eşleşen ürün + ait olduğu mekanın kompakt özeti.
+class FoodResult {
+  final int urunId;
+  final String urun;
+  final String fiyat; // ham metin ("550"); boşsa ''
+  final String gorsel; // ürün görseli tam URL; yoksa ''
+  final int begeni; // like_count
+  final Place mekan; // ürünün ait olduğu mekan (id/ad/görsel/konum)
+
+  const FoodResult({
+    required this.urunId,
+    this.urun = '',
+    this.fiyat = '',
+    this.gorsel = '',
+    this.begeni = 0,
+    required this.mekan,
+  });
+}
+
 /// Kedy sohbet mesajı (`/kedy/gecmis` ve yerel geçmiş için). [role] "user"
 /// veya "assistant"; [content] mesaj metni (app-kedy.md).
 class KedyMessage {

@@ -39,14 +39,32 @@ class _SearchModal extends StatefulWidget {
   State<_SearchModal> createState() => _SearchModalState();
 }
 
-class _SearchModalState extends State<_SearchModal> {
+class _SearchModalState extends State<_SearchModal>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _controller = TextEditingController();
+  late final TabController _tab;
 
   Timer? _debounce;
-  CancelToken? _searchCancel; // devam eden aramayı iptal etmek için
   String _query = '';
-  bool _searching = false;
-  List<SearchResult> _results = const [];
+
+  // "Mekanlar" sekmesi (varsayılan, tab=mekan).
+  final ScrollController _placeScroll = ScrollController();
+  CancelToken? _placeCancel;
+  List<SearchResult> _placeItems = const [];
+  bool _placeLoading = false;
+  bool _placeMoreLoading = false;
+  bool _placeHasMore = false;
+  int? _placeNextPage;
+
+  // "Yemekler" sekmesi (lazy; sekmeye geçilince tab=yemek ile yüklenir).
+  final ScrollController _foodScroll = ScrollController();
+  CancelToken? _foodCancel;
+  List<FoodResult> _foodItems = const [];
+  bool _foodLoading = false;
+  bool _foodMoreLoading = false;
+  bool _foodHasMore = false;
+  int? _foodNextPage;
+  String? _foodTerm; // yemekler'in yüklendiği terim (null = yüklenmedi)
 
   String? _userId; // arama geçmişi kaydı için (varsa gerçek, yoksa anonim)
   List<String> _popular = MockData.popularSearches; // API gelene kadar fallback
@@ -56,7 +74,31 @@ class _SearchModalState extends State<_SearchModal> {
   @override
   void initState() {
     super.initState();
+    _tab = TabController(length: 2, vsync: this);
+    _tab.addListener(_onTabChanged);
+    _placeScroll.addListener(() {
+      if (_placeScroll.position.pixels >=
+          _placeScroll.position.maxScrollExtent - 300) {
+        _loadMorePlaces();
+      }
+    });
+    _foodScroll.addListener(() {
+      if (_foodScroll.position.pixels >=
+          _foodScroll.position.maxScrollExtent - 300) {
+        _loadMoreFoods();
+      }
+    });
     _loadInitial();
+  }
+
+  /// Yemekler sekmesine geçilince aynı terimle bir kez yükler (tab=yemek).
+  void _onTabChanged() {
+    if (_tab.index == 1) {
+      final term = _query.trim();
+      if (term.length >= 2 && _foodTerm != term && !_foodLoading) {
+        _runFood(term);
+      }
+    }
   }
 
   Future<void> _loadInitial() async {
@@ -91,7 +133,12 @@ class _SearchModalState extends State<_SearchModal> {
   @override
   void dispose() {
     _debounce?.cancel();
-    _searchCancel?.cancel('modal kapandı');
+    _placeCancel?.cancel('modal kapandı');
+    _foodCancel?.cancel('modal kapandı');
+    _tab.removeListener(_onTabChanged);
+    _tab.dispose();
+    _placeScroll.dispose();
+    _foodScroll.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -101,57 +148,151 @@ class _SearchModalState extends State<_SearchModal> {
     _debounce?.cancel();
     final term = value.trim();
     if (term.length < 2) {
-      _searchCancel?.cancel('kısa sorgu'); // devam eden isteği iptal et
+      _placeCancel?.cancel('kısa sorgu');
+      _foodCancel?.cancel('kısa sorgu');
       setState(() {
-        _results = const [];
-        _searching = false;
+        _placeItems = const [];
+        _foodItems = const [];
+        _placeLoading = false;
+        _foodLoading = false;
+        _foodTerm = null;
+        _placeHasMore = false;
+        _foodHasMore = false;
       });
       return;
     }
-    setState(() => _searching = true);
-    _debounce = Timer(const Duration(milliseconds: 250), () => _runSearch(term));
+    setState(() {
+      _placeLoading = true;
+      _foodTerm = null; // yeni terim → yemekler tekrar yüklenecek
+    });
+    _debounce = Timer(const Duration(milliseconds: 250), () {
+      _runMekan(term);
+      if (_tab.index == 1) _runFood(term); // yemekler sekmesindeyken de yükle
+    });
   }
 
-  Future<void> _runSearch(String term) async {
-    // Önceki (geçersiz) aramayı iptal et; sunucu boşuna çalışmasın.
-    _searchCancel?.cancel('yeni arama');
+  /// Mekanlar sekmesi (tab=mekan). Önceki isteği iptal eder.
+  Future<void> _runMekan(String term) async {
+    _placeCancel?.cancel('yeni arama');
     final token = CancelToken();
-    _searchCancel = token;
+    _placeCancel = token;
+    if (mounted) setState(() => _placeLoading = true);
     try {
-      // İlk sonuç ekranı için 10 kayıt yeterli (daha küçük yanıt = daha hızlı);
-      // gerekirse kaydırma ile sonraki sayfalar çekilebilir.
       final r = await HomeRepository.instance
-          .arama(term, userId: _userId, limit: 10, cancelToken: token);
+          .aramaMekan(term, userId: _userId, limit: 20, cancelToken: token);
       if (!mounted || _controller.text.trim() != term) return;
       setState(() {
-        _results = r;
-        _searching = false;
+        _placeItems = r.items;
+        _placeHasMore = r.hasMore;
+        _placeNextPage = r.nextPage;
+        _placeLoading = false;
       });
     } on DioException catch (e) {
-      if (CancelToken.isCancel(e)) return; // iptal edildi → yoksay
+      if (CancelToken.isCancel(e)) return;
       if (!mounted) return;
       setState(() {
-        _results = const [];
-        _searching = false;
+        _placeItems = const [];
+        _placeLoading = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _results = const [];
-        _searching = false;
+        _placeItems = const [];
+        _placeLoading = false;
       });
+    }
+  }
+
+  /// Yemekler sekmesi (tab=yemek). Önceki isteği iptal eder.
+  Future<void> _runFood(String term) async {
+    _foodCancel?.cancel('yeni arama');
+    final token = CancelToken();
+    _foodCancel = token;
+    if (mounted) setState(() => _foodLoading = true);
+    try {
+      final r = await HomeRepository.instance
+          .aramaYemek(term, userId: _userId, limit: 20, cancelToken: token);
+      if (!mounted || _controller.text.trim() != term) return;
+      setState(() {
+        _foodItems = r.items;
+        _foodHasMore = r.hasMore;
+        _foodNextPage = r.nextPage;
+        _foodTerm = term;
+        _foodLoading = false;
+      });
+    } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) return;
+      if (!mounted) return;
+      setState(() {
+        _foodItems = const [];
+        _foodTerm = term;
+        _foodLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _foodItems = const [];
+        _foodTerm = term;
+        _foodLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadMorePlaces() async {
+    if (_placeMoreLoading || !_placeHasMore || _placeNextPage == null) return;
+    final term = _query.trim();
+    if (term.length < 2) return;
+    setState(() => _placeMoreLoading = true);
+    try {
+      final r = await HomeRepository.instance
+          .aramaMekan(term, userId: _userId, page: _placeNextPage!, limit: 20);
+      if (!mounted) return;
+      setState(() {
+        _placeItems = [..._placeItems, ...r.items];
+        _placeHasMore = r.hasMore;
+        _placeNextPage = r.nextPage;
+        _placeMoreLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _placeMoreLoading = false);
+    }
+  }
+
+  Future<void> _loadMoreFoods() async {
+    if (_foodMoreLoading || !_foodHasMore || _foodNextPage == null) return;
+    final term = _query.trim();
+    if (term.length < 2) return;
+    setState(() => _foodMoreLoading = true);
+    try {
+      final r = await HomeRepository.instance
+          .aramaYemek(term, userId: _userId, page: _foodNextPage!, limit: 20);
+      if (!mounted) return;
+      setState(() {
+        _foodItems = [..._foodItems, ...r.items];
+        _foodHasMore = r.hasMore;
+        _foodNextPage = r.nextPage;
+        _foodMoreLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _foodMoreLoading = false);
     }
   }
 
   bool get _isSearching => _query.trim().length >= 2;
 
   void _clear() {
-    _searchCancel?.cancel('temizlendi');
+    _placeCancel?.cancel('temizlendi');
+    _foodCancel?.cancel('temizlendi');
     setState(() {
       _controller.clear();
       _query = '';
-      _results = const [];
-      _searching = false;
+      _placeItems = const [];
+      _foodItems = const [];
+      _placeLoading = false;
+      _foodLoading = false;
+      _foodTerm = null;
+      _placeHasMore = false;
+      _foodHasMore = false;
     });
   }
 
@@ -254,10 +395,51 @@ class _SearchModalState extends State<_SearchModal> {
     );
   }
 
-  /// Arama sonuçları görünümü (q >= 2 karakter).
+  /// Arama sonuçları görünümü (q >= 2): iki sekme — Mekanlar / Yemekler.
   Widget _resultsView() {
-    if (_searching) {
-      return const Center(
+    return Column(
+      children: [
+        _searchTabs(),
+        Expanded(
+          child: TabBarView(
+            controller: _tab,
+            children: [_placesTab(), _foodsTab()],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Segment tarzı sekme çubuğu (kaymalı TabBarView ile senkron).
+  Widget _searchTabs() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 4, 20, 6),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF2F2F6),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: TabBar(
+        controller: _tab,
+        indicator: BoxDecoration(
+          color: AppColors.primary,
+          borderRadius: BorderRadius.circular(9),
+        ),
+        indicatorSize: TabBarIndicatorSize.tab,
+        dividerColor: Colors.transparent,
+        splashBorderRadius: BorderRadius.circular(9),
+        labelColor: Colors.white,
+        unselectedLabelColor: AppColors.ink,
+        labelStyle:
+            const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+        unselectedLabelStyle:
+            const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+        tabs: const [Tab(text: 'Mekanlar'), Tab(text: 'Yemekler')],
+      ),
+    );
+  }
+
+  Widget _searchSpinner() => const Center(
         child: SizedBox(
           width: 26,
           height: 26,
@@ -265,31 +447,159 @@ class _SearchModalState extends State<_SearchModal> {
               strokeWidth: 2.5, color: AppColors.primary),
         ),
       );
-    }
-    if (_results.isEmpty) {
-      return Center(
+
+  Widget _emptyResults() => Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.search_off,
-                  size: 44, color: AppColors.muted),
+              const Icon(Icons.search_off, size: 44, color: AppColors.muted),
               const SizedBox(height: 12),
               Text('"${_query.trim()}" için sonuç bulunamadı',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 14, color: AppColors.muted)),
+                  style:
+                      const TextStyle(fontSize: 14, color: AppColors.muted)),
             ],
           ),
         ),
       );
-    }
+
+  Widget _moreSpinner() => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(
+                strokeWidth: 2.2, color: AppColors.primary),
+          ),
+        ),
+      );
+
+  Widget _placesTab() {
+    if (_placeLoading) return _searchSpinner();
+    if (_placeItems.isEmpty) return _emptyResults();
     return ListView.separated(
+      controller: _placeScroll,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-      itemCount: _results.length,
+      itemCount: _placeItems.length + (_placeMoreLoading ? 1 : 0),
       separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (_, i) => _resultTile(_results[i]),
+      itemBuilder: (_, i) =>
+          i >= _placeItems.length ? _moreSpinner() : _resultTile(_placeItems[i]),
+    );
+  }
+
+  Widget _foodsTab() {
+    final term = _query.trim();
+    // Bu terim için yemekler henüz yüklenmediyse (sekmeye yeni geçildi) veya
+    // yükleniyorsa spinner göster — yanlış "sonuç yok" göstermemek için.
+    if (_foodLoading || (_foodTerm != term && term.length >= 2)) {
+      return _searchSpinner();
+    }
+    if (_foodItems.isEmpty) return _emptyResults();
+    return ListView.separated(
+      controller: _foodScroll,
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      itemCount: _foodItems.length + (_foodMoreLoading ? 1 : 0),
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (_, i) =>
+          i >= _foodItems.length ? _moreSpinner() : _foodTile(_foodItems[i]),
+    );
+  }
+
+  /// Yemek sonucu satırı — ürün görseli + ad + fiyat/beğeni + ait olduğu mekan.
+  /// Dokununca mekan detayına gider.
+  Widget _foodTile(FoodResult f) {
+    final p = f.mekan;
+    final loc = p.subtitle;
+    return GestureDetector(
+      onTap: () {
+        _commitHistory(_query);
+        Navigator.pop(context);
+        widget.onOpenDetail?.call(p);
+      },
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.line),
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(11),
+              child: SizedBox(
+                width: 56,
+                height: 56,
+                child: f.gorsel.isNotEmpty
+                    ? NetImage(f.gorsel)
+                    : Container(
+                        color: AppColors.primarySoft,
+                        child: const Icon(Icons.restaurant_menu,
+                            color: AppColors.primary, size: 22),
+                      ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(f.urun,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 14.5, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.storefront_outlined,
+                          size: 13, color: AppColors.primary),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                            loc.isNotEmpty ? '${p.name} · $loc' : p.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 12, color: AppColors.muted)),
+                      ),
+                    ],
+                  ),
+                  if (f.fiyat.isNotEmpty || f.begeni > 0) ...[
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        if (f.fiyat.isNotEmpty)
+                          Text('₺${f.fiyat}',
+                              style: const TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.primary)),
+                        if (f.begeni > 0) ...[
+                          if (f.fiyat.isNotEmpty) const SizedBox(width: 10),
+                          const Icon(Icons.favorite,
+                              size: 12, color: AppColors.heart),
+                          const SizedBox(width: 3),
+                          Text('${f.begeni}',
+                              style: const TextStyle(
+                                  fontSize: 12, color: AppColors.muted)),
+                        ],
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: AppColors.muted),
+          ],
+        ),
+      ),
     );
   }
 
