@@ -7,6 +7,7 @@ import '../data/mock_data.dart';
 import '../data/models.dart';
 import '../data/search_history.dart';
 import '../data/user_service.dart';
+import 'filter_sheet.dart';
 import '../screens/category_screen.dart';
 import '../theme/app_theme.dart';
 import 'common.dart';
@@ -73,6 +74,7 @@ class _SearchModalState extends State<_SearchModal>
   bool _hasCoord = false;
   String _foodSort = 'likes'; // konum gelince 'distance' olur
   final Set<int> _foodFilters = {}; // seçili filtre id'leri (yemek)
+  final Set<int> _placeFilters = {}; // seçili filtre id'leri (mekan)
   List<Filter> _allFilters = const []; // /filtreler (filtre sheet için)
 
   String? _userId; // arama geçmişi kaydı için (varsa gerçek, yoksa anonim)
@@ -222,6 +224,7 @@ class _SearchModalState extends State<_SearchModal>
         lat: _lat,
         lng: _lng,
         sort: _mekanSort,
+        filtreler: _placeFilters.toList(),
       );
       if (!mounted || _controller.text.trim() != term) return;
       setState(() {
@@ -303,6 +306,7 @@ class _SearchModalState extends State<_SearchModal>
         lat: _lat,
         lng: _lng,
         sort: _mekanSort,
+        filtreler: _placeFilters.toList(),
       );
       if (!mounted) return;
       setState(() {
@@ -473,121 +477,42 @@ class _SearchModalState extends State<_SearchModal>
       );
       return;
     }
-    final temp = Set<int>.from(_foodFilters);
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) => SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(22, 18, 22, 8),
-                child: Row(
-                  children: [
-                    const Text('Filtrele',
-                        style: TextStyle(
-                            fontSize: 17, fontWeight: FontWeight.w600)),
-                    const Spacer(),
-                    GestureDetector(
-                      onTap: () => setSheet(temp.clear),
-                      child: const Text('Temizle',
-                          style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.primary)),
-                    ),
-                  ],
-                ),
-              ),
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  children: [
-                    for (final f in _allFilters)
-                      InkWell(
-                        onTap: () => setSheet(() {
-                          if (temp.contains(f.id)) {
-                            temp.remove(f.id);
-                          } else {
-                            temp.add(f.id);
-                          }
-                        }),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 12),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(f.name,
-                                    style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: temp.contains(f.id)
-                                            ? FontWeight.w600
-                                            : FontWeight.w500,
-                                        color: temp.contains(f.id)
-                                            ? AppColors.primary
-                                            : AppColors.ink)),
-                              ),
-                              Icon(
-                                temp.contains(f.id)
-                                    ? Icons.check_box
-                                    : Icons.check_box_outline_blank,
-                                color: temp.contains(f.id)
-                                    ? AppColors.primary
-                                    : AppColors.muted,
-                                size: 22,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                    20, 8, 20, 16 + MediaQuery.of(ctx).padding.bottom),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(ctx, true),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
-                    ),
-                    child: const Text('Uygula',
-                        style: TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w600)),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ).then((applied) {
-      if (applied == true && mounted) {
-        setState(() {
-          _foodFilters
-            ..clear()
-            ..addAll(temp);
-        });
-        final term = _query.trim();
-        if (term.length >= 2) _runFood(term);
-      }
-    });
+    final result = await showFilterSheet(context,
+        filters: _allFilters, selected: _foodFilters);
+    if (result != null && mounted) {
+      setState(() {
+        _foodFilters
+          ..clear()
+          ..addAll(result);
+      });
+      final term = _query.trim();
+      if (term.length >= 2) _runFood(term);
+    }
+  }
+
+  /// Mekanlar sekmesi filtre seçimi (ortak `showFilterSheet`).
+  Future<void> _openPlaceFilter() async {
+    if (_allFilters.isEmpty) {
+      _allFilters = await HomeRepository.instance.filtreler(type: 'restoran');
+    }
+    if (!mounted) return;
+    if (_allFilters.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Filtre bulunamadı')),
+      );
+      return;
+    }
+    final result = await showFilterSheet(context,
+        filters: _allFilters, selected: _placeFilters);
+    if (result != null && mounted) {
+      setState(() {
+        _placeFilters
+          ..clear()
+          ..addAll(result);
+      });
+      final term = _query.trim();
+      if (term.length >= 2) _runMekan(term);
+    }
   }
 
   /// Kategoriye dokununca arama modalını kapatıp kategori detayını açar.
@@ -743,12 +668,42 @@ class _SearchModalState extends State<_SearchModal>
       );
 
   Widget _placesTab() {
+    return Column(
+      children: [
+        _placeToolbar(),
+        Expanded(child: _placesContent()),
+      ],
+    );
+  }
+
+  Widget _placeToolbar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 2, 20, 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(_hasCoord ? 'Yakınlığa göre' : 'İlgi düzeyine göre',
+                style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.muted)),
+          ),
+          GestureDetector(
+            onTap: _openPlaceFilter,
+            child: _sfBtn(Icons.filter_list, active: _placeFilters.isNotEmpty),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _placesContent() {
     if (_placeLoading) return _searchSpinner();
     if (_placeItems.isEmpty) return _emptyResults();
     return ListView.separated(
       controller: _placeScroll,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
       itemCount: _placeItems.length + (_placeMoreLoading ? 1 : 0),
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (_, i) =>

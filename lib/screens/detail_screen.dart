@@ -14,6 +14,7 @@ import '../widgets/confetti.dart';
 import '../widgets/kedy_chat.dart';
 import '../widgets/reservation_sheet.dart';
 import '../widgets/tabbar.dart';
+import 'event_detail_screen.dart';
 import 'login_screen.dart';
 import 'menu_screen.dart';
 
@@ -532,9 +533,13 @@ class _DetailScreenState extends State<DetailScreen> {
         const SizedBox(height: 16),
       ],
       _venueCard(d),
-      _divider(),
-      _sectionH('Etkinlikler'),
-      _eventsRail(),
+      // Etkinlikler yalnızca mekana ait aktif etkinlik varsa gösterilir
+      // (sunucu süresi geçmişleri zaten eliyor).
+      if (d.etkinlikler.isNotEmpty) ...[
+        _divider(),
+        _sectionH('Etkinlikler'),
+        _eventsRail(d.etkinlikler),
+      ],
       _divider(),
       _sectionH('Bilgiler'),
       ..._infoRows(d),
@@ -786,15 +791,18 @@ class _DetailScreenState extends State<DetailScreen> {
             Container(
               width: double.infinity,
               color: AppColors.primarySoft, // rgba(18,12,99,0.07)
-              padding:
-                  const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 14,
-                alignment: WrapAlignment.spaceAround,
-                children: [
-                  for (final o in d.ozellikler) _feat(_ozellikIcon(o), o.name),
-                ],
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              // Tek satır, yatay kaydırmalı (görünmez scrollbar) özellik şeridi.
+              child: SizedBox(
+                height: 74,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  itemCount: d.ozellikler.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (_, i) => _feat(
+                      _ozellikIcon(d.ozellikler[i]), d.ozellikler[i].name),
+                ),
               ),
             ),
         ],
@@ -833,116 +841,106 @@ class _DetailScreenState extends State<DetailScreen> {
     );
   }
 
-  // Detay etkinlikleri — şimdilik örnek (fake) veri.
-  static const List<({String image, String day, String title, String sub})>
-      _fakeEvents = [
-    (
-      image:
-          '',
-      day: '14 Haz',
-      title: 'Akustik Gece',
-      sub: 'Cumartesi · 20:00',
-    ),
-    (
-      image:
-          '',
-      day: '18 Haz',
-      title: 'Kahve Tadımı',
-      sub: 'Çarşamba · 15:00',
-    ),
-  ];
-
-  Widget _eventsRail() {
+  /// Mekana ait aktif etkinlikler (canlı: `/mekanlar/{id}` → `etkinlikler`).
+  Widget _eventsRail(List<Etkinlik> events) {
     return SizedBox(
       height: 196,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: EdgeInsets.zero,
-        itemCount: _fakeEvents.length,
+        itemCount: events.length,
         separatorBuilder: (_, __) => const SizedBox(width: 14),
-        itemBuilder: (_, i) => _eventCard(_fakeEvents[i]),
+        itemBuilder: (_, i) => _eventCard(events[i]),
       ),
     );
   }
 
-  Widget _eventCard(({String image, String day, String title, String sub}) e) {
+  Widget _eventCard(Etkinlik e) {
     return SizedBox(
       width: 190,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.line),
+      child: GestureDetector(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => EventDetailScreen(etkinlik: e)),
         ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              height: 116,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  NetImage(e.image),
-                  Positioned(
-                    left: 10,
-                    bottom: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 9, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.line),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: 116,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    NetImage(e.image),
+                    if (e.kisaTarih.isNotEmpty)
+                      Positioned(
+                        left: 10,
+                        bottom: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 9, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.calendar_today,
+                                  size: 11, color: AppColors.primary),
+                              const SizedBox(width: 5),
+                              Text(e.kisaTarih,
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.primary)),
+                            ],
+                          ),
+                        ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.calendar_today,
-                              size: 11, color: AppColors.primary),
-                          const SizedBox(width: 5),
-                          Text(e.day,
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 11, 12, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(e.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary)),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.access_time,
+                            size: 13, color: AppColors.primary),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                              e.time.isNotEmpty ? e.time : e.fiyatLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.primary)),
-                        ],
-                      ),
+                                  fontSize: 12, color: AppColors.muted)),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 11, 12, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(e.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary)),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      const Icon(Icons.access_time,
-                          size: 13, color: AppColors.primary),
-                      const SizedBox(width: 5),
-                      Expanded(
-                        child: Text(e.sub,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 12, color: AppColors.muted)),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1128,15 +1126,70 @@ class _DetailScreenState extends State<DetailScreen> {
   void _onReserveTap() {
     final rez = _rez;
     if (rez == null || !rez.aktif) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Bu işletme şu an online rezervasyona kapalı.'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      _showReservationClosed();
       return;
     }
     _openReservationSheet(rez);
+  }
+
+  /// İşletme online rezervasyona kapalıysa sayfa ortasında bilgi modalı.
+  void _showReservationClosed() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: const BoxDecoration(
+                    color: AppColors.primarySoft, shape: BoxShape.circle),
+                child: const Icon(Icons.event_busy_outlined,
+                    size: 32, color: AppColors.primary),
+              ),
+              const SizedBox(height: 16),
+              const Text('Rezervasyona kapalı',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary)),
+              const SizedBox(height: 8),
+              Text(
+                  '$_name şu an online rezervasyon almıyor. '
+                  'Dilersen işletmeyi telefonla arayabilirsin.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 13.5, color: AppColors.muted, height: 1.4)),
+              const SizedBox(height: 20),
+              GestureDetector(
+                onTap: () => Navigator.pop(ctx),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Center(
+                    child: Text('Anladım',
+                        style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   /// Rezervasyon formunu (bottom sheet) açar; başarılıysa başarı modalını

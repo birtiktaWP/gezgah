@@ -431,6 +431,7 @@ class PlaceDetail {
   final List<Filter> filtreler; // mekanda aktif filtreler (type='filtre')
   final List<GaleriItem> galeri;
   final List<MenuKategori> menu;
+  final List<Etkinlik> etkinlikler; // mekana ait aktif etkinlikler
 
   const PlaceDetail({
     required this.id,
@@ -454,6 +455,7 @@ class PlaceDetail {
     this.filtreler = const [],
     this.galeri = const [],
     this.menu = const [],
+    this.etkinlikler = const [],
   });
 
   bool get hasCoord => lat != null && lng != null;
@@ -521,6 +523,8 @@ class PlaceDetail {
       filtreler: parseList(j['filtreler'], Filter.fromJson),
       galeri: parseList(j['galeri'], (m) => GaleriItem.fromJson(m, host: host)),
       menu: parseList(j['menu'], MenuKategori.fromJson),
+      etkinlikler:
+          parseList(j['etkinlikler'], (m) => Etkinlik.fromJson(m, host: host)),
     );
   }
 }
@@ -713,6 +717,65 @@ class FoodResult {
     required this.mekan,
     this.mesafeM,
   });
+}
+
+/// Mekana ait aktif etkinlik (`/mekanlar/{id}` → `etkinlikler[]` ve
+/// `/etkinlikler/{id}`, mekan-detay-etkinlik.md).
+class Etkinlik {
+  final int id;
+  final String name;
+  final String description;
+  final String price; // ham metin; boş = ücretsiz/yok
+  final String date; // "YYYY-MM-DD"
+  final String time; // "HH:MM" (boş olabilir)
+  final String image; // tam URL; boş = yok
+
+  const Etkinlik({
+    required this.id,
+    this.name = '',
+    this.description = '',
+    this.price = '',
+    this.date = '',
+    this.time = '',
+    this.image = '',
+  });
+
+  static const List<String> _ay = [
+    '', 'Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', //
+    'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara',
+  ];
+
+  /// "20 Eyl 2026 · 21:00" (saat yoksa yalnız tarih).
+  String get tarihSaat {
+    final d = DateTime.tryParse(date);
+    if (d == null) {
+      return [date, time].where((s) => s.isNotEmpty).join(' · ');
+    }
+    final m = (d.month >= 1 && d.month <= 12) ? _ay[d.month] : '';
+    final ds = '${d.day} $m ${d.year}';
+    return time.isNotEmpty ? '$ds · $time' : ds;
+  }
+
+  /// "20 Eyl" (kart rozeti için kısa tarih).
+  String get kisaTarih {
+    final d = DateTime.tryParse(date);
+    if (d == null) return date;
+    final m = (d.month >= 1 && d.month <= 12) ? _ay[d.month] : '';
+    return '${d.day} $m';
+  }
+
+  /// "150 ₺" / boşsa "Ücretsiz".
+  String get fiyatLabel => price.trim().isEmpty ? 'Ücretsiz' : '$price ₺';
+
+  factory Etkinlik.fromJson(Map<String, dynamic> j, {String host = ''}) => Etkinlik(
+        id: (j['id'] as num?)?.toInt() ?? 0,
+        name: (j['name'] as String?)?.trim() ?? '',
+        description: (j['description'] as String?)?.trim() ?? '',
+        price: j['price']?.toString().trim() ?? '',
+        date: (j['date'] as String?)?.trim() ?? '',
+        time: (j['time'] as String?)?.trim() ?? '',
+        image: _absUrl(j['image'], host),
+      );
 }
 
 /// Kedy sohbet mesajı (`/kedy/gecmis` ve yerel geçmiş için). [role] "user"

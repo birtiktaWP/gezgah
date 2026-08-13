@@ -524,47 +524,45 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Öne Çıkan Etkinlikler — sponsorlu restoranlarla aynı büyük kart tasarımı.
   /// (home_page_settings → sponsorlu_etkinlikler)
   Widget _featuredEventsSection() {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 22),
-          child: SectionHead('Öne Çıkan Etkinlikler'),
-        ),
-        SizedBox(
-          height: 150,
-          child: FutureBuilder<List<FeaturedEvent>>(
-            future: _eventsFuture,
-            initialData: _evtInit,
-            builder: (context, snapshot) {
-              final events = snapshot.data ?? const <FeaturedEvent>[];
-              if (events.isEmpty) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: SizedBox(
-                      width: 26,
-                      height: 26,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2.5, color: AppColors.primary),
-                    ),
-                  );
-                }
-                return const Center(
-                  child: Text('Şu an öne çıkan etkinlik yok',
-                      style: TextStyle(fontSize: 13, color: AppColors.muted)),
-                );
-              }
-              return ListView.separated(
+    return FutureBuilder<List<FeaturedEvent>>(
+      future: _eventsFuture,
+      initialData: _evtInit,
+      builder: (context, snapshot) {
+        final all = snapshot.data ?? const <FeaturedEvent>[];
+        // Süresi geçmiş etkinlikleri ele; yaklaşan yoksa bölümü tamamen gizle.
+        final events = all.where(_isUpcomingEvent).toList();
+        if (events.isEmpty) return const SizedBox.shrink();
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 22),
+              child: SectionHead('Öne Çıkan Etkinlikler'),
+            ),
+            SizedBox(
+              height: 150,
+              child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 22),
                 itemCount: events.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 14),
                 itemBuilder: (_, i) => _eventCardBig(events[i]),
-              );
-            },
-          ),
-        ),
-      ],
+              ),
+            ),
+          ],
+        );
+      },
     );
+  }
+
+  /// Etkinlik süresi geçmemiş mi? Tarih ("YYYY-MM-DD") bugünden önce değilse
+  /// (veya tarih yoksa) yaklaşan sayılır.
+  bool _isUpcomingEvent(FeaturedEvent e) {
+    if (e.date.trim().isEmpty) return true;
+    final d = DateTime.tryParse(e.date.trim());
+    if (d == null) return true;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return !DateTime(d.year, d.month, d.day).isBefore(today);
   }
 
   /// Sponsorlu restoran büyük kartı.
