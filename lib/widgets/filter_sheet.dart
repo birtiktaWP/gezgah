@@ -13,6 +13,12 @@ Future<Set<int>?> showFilterSheet(
   required Set<int> selected,
 }) {
   final temp = Set<int>.from(selected);
+  // Açılışta seçili filtreleri en üste al (orijinal göreli sıra korunur).
+  // Sıra açılış anındaki seçime göre sabittir; toggle sırasında öğeler zıplamaz.
+  final ordered = <Filter>[
+    ...filters.where((f) => selected.contains(f.id)),
+    ...filters.where((f) => !selected.contains(f.id)),
+  ];
   return showModalBottomSheet<Set<int>>(
     context: context,
     isScrollControlled: true,
@@ -65,7 +71,7 @@ Future<Set<int>?> showFilterSheet(
                         padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
                         child: Column(
                           children: [
-                            for (final f in filters)
+                            for (final f in ordered)
                               FilterRow(
                                 filter: f,
                                 selected: temp.contains(f.id),
