@@ -1,13 +1,20 @@
+import 'dart:convert';
+
 import 'package:dlibphonenumber/dlibphonenumber.dart' as libphone;
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl_phone_number_input/intl_phone_number_input.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../data/api.dart';
 import '../data/auth_service.dart';
 import '../data/legal_texts.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import 'favorites_screen.dart';
+import 'login_screen.dart';
+import 'plus_screen.dart';
+import 'routes_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final VoidCallback onGoHome;
@@ -71,6 +78,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 18),
             _stats(),
             const SizedBox(height: 8),
+            _plusGroup(),
             _group('Profilim', [
               _row(Icons.person_outline, 'Profil Bilgileri',
                   'Ad, e-posta, telefon',
@@ -78,6 +86,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _row(Icons.favorite_border, 'Favorilerim',
                   'Kaydettiğin mekanlar',
                   onTap: _openFavorites),
+              _row(Icons.route_outlined, 'Gezi Rotalarım',
+                  'Sıralı mekan listelerin',
+                  onTap: _openRoutes),
               _row(Icons.lock_outline, 'Şifre Değiştir',
                   'Hesap parolanı güncelle',
                   onTap: _openPasswordChange),
@@ -216,20 +227,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       child: Row(
         children: [
-          Container(
-            width: 54,
-            height: 54,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white.withValues(alpha: 0.2),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.4)),
+          GestureDetector(
+            onTap: _user == null ? null : _changeAvatar,
+            child: Stack(
+              children: [
+                Container(
+                  width: 54,
+                  height: 54,
+                  alignment: Alignment.center,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.2),
+                    border:
+                        Border.all(color: Colors.white.withValues(alpha: 0.4)),
+                  ),
+                  child: (_user?.avatar.isNotEmpty ?? false)
+                      ? NetImage(_user!.avatar)
+                      : Text(_initials,
+                          style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white)),
+                ),
+                if (_user != null)
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppColors.primary, width: 1.5),
+                      ),
+                      child: const Icon(Icons.camera_alt,
+                          size: 11, color: AppColors.primary),
+                    ),
+                  ),
+              ],
             ),
-            child: Text(_initials,
-                style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white)),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -433,6 +471,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Future<void> _openRoutes() async {
+    if (_user == null) {
+      final ok = await openLogin(context);
+      if (ok != true || !mounted) return;
+    }
+    if (mounted) await openRoutes(context);
+  }
+
   void _openPasswordChange() {
     showModalBottomSheet(
       context: context,
@@ -440,6 +486,203 @@ class _ProfileScreenState extends State<ProfileScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => const _PasswordChangeSheet(),
     );
+  }
+
+  // ---- Gezgah Plus ----
+
+  /// Plus üyelik kartı: aktifse "Aktif" rozeti, değilse tanıtım + geçiş.
+  Widget _plusGroup() {
+    final isPlus = _user?.isPlus ?? false;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 18, 22, 0),
+      child: InkWell(
+        onTap: _openPlus,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [AppColors.primary2, AppColors.primary],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: AppShadows.listTile,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: const Icon(Icons.workspace_premium,
+                    color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Gezgah Plus',
+                        style: TextStyle(
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white)),
+                    const SizedBox(height: 3),
+                    Text(
+                      isPlus
+                          ? 'Üyeliğin aktif · avatar, gezi rotaları, Kedy'
+                          : 'Avatar, gezi rotaları ve Kedy\u2019yi aç',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          color: Colors.white.withValues(alpha: 0.85)),
+                    ),
+                  ],
+                ),
+              ),
+              if (isPlus)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Text('Aktif',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary)),
+                )
+              else
+                const Icon(Icons.chevron_right, color: Colors.white, size: 22),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openPlus() async {
+    if (_user == null) {
+      final ok = await openLogin(context);
+      if (ok != true || !mounted) return;
+    }
+    if (!mounted) return;
+    await openPlus(context);
+    if (mounted) setState(() {});
+  }
+
+  // ---- Avatar (Plus'a özel) ----
+
+  /// Avatar fotoğrafı seçip yükler (`POST /uye/avatar`). Plus değilse paywall'a
+  /// yönlendirir (UYELIK_PLUS.md §5).
+  Future<void> _changeAvatar() async {
+    final u = _user;
+    if (u == null) {
+      await openLogin(context);
+      return;
+    }
+    if (!u.isPlus) {
+      if (mounted) await openPlus(context);
+      if (mounted) setState(() {});
+      return;
+    }
+    // Mevcut avatarı olan üyeye kaldırma seçeneği de sun.
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined,
+                  color: AppColors.primary),
+              title: const Text('Galeriden seç'),
+              onTap: () => Navigator.pop(ctx, 'gallery'),
+            ),
+            ListTile(
+              leading:
+                  const Icon(Icons.camera_alt_outlined, color: AppColors.primary),
+              title: const Text('Fotoğraf çek'),
+              onTap: () => Navigator.pop(ctx, 'camera'),
+            ),
+            if (u.avatar.isNotEmpty)
+              ListTile(
+                leading:
+                    const Icon(Icons.delete_outline, color: AppColors.closing),
+                title: const Text('Avatarı kaldır',
+                    style: TextStyle(color: AppColors.closing)),
+                onTap: () => Navigator.pop(ctx, 'remove'),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (action == null || !mounted) return;
+
+    if (action == 'remove') {
+      await _runAvatar(() => AuthService.instance.avatarSil(),
+          success: 'Avatar kaldırıldı.');
+      return;
+    }
+
+    final picker = ImagePicker();
+    final source =
+        action == 'camera' ? ImageSource.camera : ImageSource.gallery;
+    final XFile? file = await picker.pickImage(
+      source: source,
+      maxWidth: 1024,
+      maxHeight: 1024,
+      imageQuality: 85,
+    );
+    if (file == null || !mounted) return;
+    final bytes = await file.readAsBytes();
+    final b64 = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+    await _runAvatar(() => AuthService.instance.avatarYukle(b64),
+        success: 'Avatar güncellendi.');
+  }
+
+  /// Avatar işlemini yükleme göstergesiyle çalıştırır; Plus hatasında paywall.
+  Future<void> _runAvatar(Future<void> Function() run,
+      {required String success}) async {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    try {
+      await run();
+      if (!mounted) return;
+      Navigator.pop(context); // yükleme
+      setState(() {});
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(success)));
+    } on PlusRequiredException {
+      if (!mounted) return;
+      Navigator.pop(context);
+      await openPlus(context);
+      if (mounted) setState(() {});
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('İşlem tamamlanamadı.')));
+    }
   }
 }
 

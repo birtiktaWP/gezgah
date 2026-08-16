@@ -9,6 +9,10 @@
 	<string>Yakınındaki mekanları ve etkinlikleri gösterebilmek için konumun kullanılır.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Sesli arama yapabilmen için mikrofona erişim gerekir.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Profil avatarını seçebilmen için fotoğraf galerine erişim gerekir.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Profil avatarı için fotoğraf çekebilmen adına kameraya erişim gerekir.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

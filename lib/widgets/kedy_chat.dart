@@ -4,6 +4,7 @@ import '../data/auth_service.dart';
 import '../data/models.dart';
 import '../data/mock_data.dart';
 import '../screens/login_screen.dart';
+import '../screens/plus_screen.dart';
 import 'common.dart';
 
 /// Kedy yapay zeka asistanı — alttan açılan tam yükseklikli sohbet paneli
@@ -67,12 +68,13 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
   @override
   void initState() {
     super.initState();
-    if (AuthService.instance.isLoggedIn) _loadHistory();
+    // Geçmiş yalnız aktif Plus üyesi için var (UYELIK_PLUS.md §7).
+    if (AuthService.instance.user.value?.isPlus ?? false) _loadHistory();
   }
 
-  /// Giriş yapmış üyenin sunucudaki Kedy geçmişini yükler (app-kedy.md).
+  /// Giriş yapmış Plus üyesinin sunucudaki Kedy geçmişini yükler (app-kedy.md).
   Future<void> _loadHistory() async {
-    if (!AuthService.instance.isLoggedIn) return;
+    if (!(AuthService.instance.user.value?.isPlus ?? false)) return;
     setState(() => _loadingHistory = true);
     final hist = await KedyRepository.instance.gecmis(days: 7);
     if (!mounted) return;
@@ -102,6 +104,15 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
       );
       if (!mounted) return;
       setState(() => _messages.add(_Message(answer, false)));
+    } on PlusRequiredException catch (e) {
+      // Plus düştü/gerekli: mesajı göster ve paywall'a yönlendir.
+      if (!mounted) return;
+      setState(() => _messages.add(_Message(e.message, false)));
+      if (e.girisGerekli) {
+        await _openLogin();
+      } else {
+        await _openPlus();
+      }
     } on RateLimitException catch (e) {
       if (!mounted) return;
       setState(() => _messages.add(_Message(e.message, false)));
@@ -161,6 +172,7 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
                 valueListenable: AuthService.instance.user,
                 builder: (_, user, __) {
                   if (user == null) return _loginGate();
+                  if (!user.isPlus) return _plusGate();
                   return _chatBody(bottomInset);
                 },
               ),
@@ -247,6 +259,66 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
   Future<void> _openLogin() async {
     final ok = await openLogin(context);
     if (ok == true && mounted && AuthService.instance.isLoggedIn) {
+      _loadHistory();
+    }
+  }
+
+  // ---- Gezgah Plus kapısı (giriş var ama Plus yok) --------------------------
+  Widget _plusGate() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.workspace_premium,
+                size: 78, color: Colors.white),
+            const SizedBox(height: 18),
+            const Text('Kedy, Gezgah Plus\u2019ta',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 21,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white)),
+            const SizedBox(height: 8),
+            const SizedBox(
+              width: 270,
+              child: Text(
+                'Kedy ile sohbet etmek, mekan önerileri almak ve rezervasyon '
+                'yapmak Gezgah Plus üyeliği gerektirir.',
+                textAlign: TextAlign.center,
+                style:
+                    TextStyle(fontSize: 13.5, height: 1.5, color: _K.muted),
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: 240,
+              height: 50,
+              child: ElevatedButton.icon(
+                onPressed: _openPlus,
+                icon: const Icon(Icons.workspace_premium, size: 19),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+                label: const Text('Gezgah Plus\u2019a Geç',
+                    style: TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w600)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openPlus() async {
+    final ok = await openPlus(context);
+    if (ok == true && mounted && (AuthService.instance.user.value?.isPlus ?? false)) {
       _loadHistory();
     }
   }

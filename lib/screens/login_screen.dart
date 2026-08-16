@@ -43,11 +43,19 @@ class _LoginScreenState extends State<LoginScreen> {
   int _cooldown = 0;
   Timer? _cooldownTimer;
 
+  // Kayıt SMS kodu için ayrı "yeniden gönder" geri sayımı (ana butonu kilitlemez).
+  int _resend = 0;
+  Timer? _resendTimer;
+
+  // Kayıtta SMS OTP: kod gönderildikten sonra kod alanı görünür (UYELIK_PLUS §2.1).
+  bool _regCodeSent = false;
+
   final _isimC = TextEditingController();
   final _soyisimC = TextEditingController();
   final _emailC = TextEditingController();
   final _telefonC = TextEditingController();
   final _parolaC = TextEditingController();
+  final _kodC = TextEditingController();
 
   String? _cinsiyet; // erkek | kadin | diger | null
   DateTime? _dogum;
@@ -132,15 +140,51 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
+  void _startResend(int seconds) {
+    _resendTimer?.cancel();
+    setState(() => _resend = seconds);
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      setState(() {
+        _resend -= 1;
+        if (_resend <= 0) t.cancel();
+      });
+    });
+  }
+
+  /// Kayıt SMS kodunu yeniden gönderir (kod alanı görünürken).
+  Future<void> _resendCode() async {
+    if (_resend > 0 || _busy) return;
+    final (ulkeKodu, ulusalTelefon) = _splitPhone();
+    setState(() => _error = null);
+    try {
+      await AuthService.instance
+          .kayitKodGonder(ulkeKodu: ulkeKodu, telefon: ulusalTelefon);
+      _startResend(60);
+    } on RateLimitException catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.message);
+      _startResend(e.retryAfter?.inSeconds ?? 60);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    }
+  }
+
   @override
   void dispose() {
     _cooldownTimer?.cancel();
+    _resendTimer?.cancel();
     _telefonC.removeListener(_enforcePhoneLimit);
     _isimC.dispose();
     _soyisimC.dispose();
     _emailC.dispose();
     _telefonC.dispose();
     _parolaC.dispose();
+    _kodC.dispose();
     super.dispose();
   }
 
@@ -148,6 +192,8 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _register = !_register;
       _error = null;
+      _regCodeSent = false; // mod değişince OTP durumunu sıfırla
+      _kodC.clear();
     });
     if (_register) _ensureIlceler();
   }
@@ -210,6 +256,10 @@ class _LoginScreenState extends State<LoginScreen> {
         setState(() => _error = 'Şifre en az 6 karakter olmalı.');
         return;
       }
+      if (_regCodeSent && _kodC.text.trim().length < 6) {
+        setState(() => _error = 'SMS ile gelen 6 haneli kodu gir.');
+        return;
+      }
     } else {
       if (digits.length < 7 || digits.length > 15) {
         setState(() => _error = 'Geçerli bir telefon numarası gir.');
@@ -228,6 +278,16 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       if (_register) {
         final (ulkeKodu, ulusalTelefon) = _splitPhone();
+        // 1. adım: kod gönderilmediyse SMS OTP iste, kod alanını aç.
+        if (!_regCodeSent) {
+          await AuthService.instance
+              .kayitKodGonder(ulkeKodu: ulkeKodu, telefon: ulusalTelefon);
+          if (!mounted) return;
+          setState(() => _regCodeSent = true);
+          _startResend(60); // numara başına 60 sn (UYELIK_PLUS §2.1)
+          return;
+        }
+        // 2. adım: kod ile kaydı tamamla.
         await AuthService.instance.kayit(
           isim: _isimC.text,
           soyisim: _soyisimC.text,
@@ -235,6 +295,7 @@ class _LoginScreenState extends State<LoginScreen> {
           telefon: ulusalTelefon,
           ulkeKodu: ulkeKodu,
           parola: parola,
+          kod: _kodC.text.trim(),
           cinsiyet: _cinsiyet,
           dogumGunu: _dogumIso,
           ilceId: _ilceId,
@@ -311,6 +372,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 14),
                   ],
                   _passwordField(),
+                  if (_register && _regCodeSent) ...[
+                    const SizedBox(height: 14),
+                    _codeField(),
+                  ],
                   if (_register) ...[
                     const SizedBox(height: 20),
                     _sectionLabel('Cinsiyet'),
@@ -534,6 +599,65 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  /// Kayıt SMS doğrulama kodu alanı (+ yeniden gönder).
+  Widget _codeField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.primary, width: 1.4),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.sms_outlined, size: 19, color: AppColors.primary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _kodC,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _submit(),
+                  decoration: const InputDecoration(
+                    hintText: 'SMS doğrulama kodu',
+                    hintStyle: TextStyle(color: AppColors.muted),
+                    border: InputBorder.none,
+                    isCollapsed: true,
+                    counterText: '',
+                    contentPadding: EdgeInsets.symmetric(vertical: 15),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            const Expanded(
+              child: Text('Telefonuna gönderilen 6 haneli kodu gir.',
+                  style: TextStyle(fontSize: 12, color: AppColors.muted)),
+            ),
+            GestureDetector(
+              onTap: _resend > 0 ? null : _resendCode,
+              child: Text(
+                  _resend > 0 ? 'Tekrar gönder ($_resend sn)' : 'Tekrar gönder',
+                  style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color:
+                          _resend > 0 ? AppColors.muted : AppColors.primary)),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _primaryButton() {
     final cooling = _cooldown > 0;
     return SizedBox(
@@ -558,7 +682,11 @@ class _LoginScreenState extends State<LoginScreen> {
             : Text(
                 cooling
                     ? 'Tekrar dene ($_cooldown sn)'
-                    : (_register ? 'Kayıt Ol' : 'Giriş Yap'),
+                    : (_register
+                        ? (_regCodeSent
+                            ? 'Kayıt Ol'
+                            : 'Doğrulama Kodu Gönder')
+                        : 'Giriş Yap'),
                 style: const TextStyle(
                     fontSize: 15.5, fontWeight: FontWeight.w600)),
       ),

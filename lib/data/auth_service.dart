@@ -48,13 +48,23 @@ class AuthService {
     return u;
   }
 
-  /// Parolalı yeni hesap oluşturur ve oturum açar. Başarısızsa [AuthException].
+  /// Kayıt öncesi telefona SMS doğrulama kodu gönderir (UYELIK_PLUS.md §2.1).
+  /// Başarıda kodun geçerlilik süresini (sn) döner; hata [AuthException].
+  Future<int> kayitKodGonder({
+    required String ulkeKodu,
+    required String telefon,
+  }) =>
+      UyeRepository.instance
+          .kayitKodGonder(ulkeKodu: ulkeKodu, telefon: telefon);
+
+  /// SMS OTP'li yeni hesap oluşturur ve oturum açar. Başarısızsa [AuthException].
   Future<AppUser> kayit({
     required String isim,
     required String soyisim,
     required String email,
     required String telefon,
     required String parola,
+    required String kod,
     String ulkeKodu = '+90',
     String? cinsiyet,
     String? dogumGunu,
@@ -66,6 +76,7 @@ class AuthService {
       email: email,
       telefon: telefon,
       parola: parola,
+      kod: kod,
       ulkeKodu: ulkeKodu,
       cinsiyet: cinsiyet,
       dogumGunu: dogumGunu,
@@ -105,6 +116,47 @@ class AuthService {
   /// Başarılıysa üye token'ı yenilenir. Başarısızsa [AuthException].
   Future<void> sifreDegistir(String eskiParola, String yeniParola) =>
       UyeRepository.instance.sifreDegistir(eskiParola, yeniParola);
+
+  /// Sunucudan güncel profili (`/uye/me`) çeker ve yerel oturumu yeniler
+  /// (Plus/avatar değişimlerinden sonra çağrılır). Token yoksa/geçersizse
+  /// mevcut kullanıcı korunur ve `null` döner.
+  Future<AppUser?> refresh() async {
+    final u = await UyeRepository.instance.me();
+    if (u != null) await _persist(u);
+    return u;
+  }
+
+  /// Plus üyesinin avatarını yükler (`POST /uye/avatar`), ardından profili
+  /// yeniler. Yeni avatar URL'ini döner. Plus yoksa [PlusRequiredException].
+  Future<String> avatarYukle(String base64) async {
+    final url = await UyeRepository.instance.avatarYukle(base64);
+    await refresh();
+    return url;
+  }
+
+  /// Avatarı kaldırır (`DELETE /uye/avatar`) ve profili yeniler.
+  Future<void> avatarSil() async {
+    await UyeRepository.instance.avatarSil();
+    await refresh();
+  }
+
+  /// Store makbuzunu doğrular (`POST /uye/plus/dogrula`); başarıda güncel
+  /// üyeyi (Plus aktif) yerel oturuma yazar. Başarısızsa [PlusException].
+  Future<AppUser> plusDogrula({
+    required String platform,
+    String? receipt,
+    String? purchaseToken,
+    String? productId,
+  }) async {
+    final u = await PlusRepository.instance.dogrula(
+      platform: platform,
+      receipt: receipt,
+      purchaseToken: purchaseToken,
+      productId: productId,
+    );
+    await _persist(u);
+    return u;
+  }
 
   /// Üye formundaki ilçe seçenekleri (`GET /ilceler`, hepsi İstanbul).
   Future<List<Ilce>> ilceler() => UyeRepository.instance.ilceler();

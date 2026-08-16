@@ -95,6 +95,28 @@ class KedyException implements Exception {
   String toString() => message;
 }
 
+/// Gezgah Plus gerektiren bir uca Plus'sız (veya giriş yapmadan) erişilince
+/// fırlatılır (UYELIK_PLUS.md §7, HTTP 403 `plus_gerekli`). [girisGerekli]
+/// true ise üye girişi de yapılmamıştır → UI önce girişe, sonra paywall'a
+/// yönlendirebilir.
+class PlusRequiredException implements Exception {
+  final String message;
+  final bool girisGerekli;
+  PlusRequiredException(this.message, {this.girisGerekli = false});
+  @override
+  String toString() => message;
+}
+
+/// Gezgah Plus satın alma / doğrulama hataları (UYELIK_PLUS.md §4). [detail]
+/// sunucunun döndüğü hata kodu; 402 makbuz doğrulanamadı, 401 üye değil.
+class PlusException implements Exception {
+  final String message;
+  final String? detail;
+  PlusException(this.message, {this.detail});
+  @override
+  String toString() => message;
+}
+
 /// Her isteğe güvenlik başlıklarını ekler (bkz. GUVENLIK.md §4).
 class _SecurityInterceptor extends Interceptor {
   @override
@@ -271,12 +293,34 @@ class UyeRepository {
   /// telefon, parola (≥6). E-posta zaten kayıtlıysa 409 → [AuthException].
   /// Cihaz token'ı Bearer olarak interceptor'dan eklenir; `device_token`
   /// body'ye de eklenerek cihaz üye ile ilişkilendirilir.
+  /// `POST /uye/kayit-kod-gonder` — kayıt öncesi telefona 6 haneli SMS kodu
+  /// (UYELIK_PLUS.md §2.1). Başarıda kod geçerlilik süresini (sn) döner.
+  /// 409 (telefon kayıtlı) / 429 / 503 durumlarında [AuthException].
+  Future<int> kayitKodGonder({
+    required String ulkeKodu,
+    required String telefon,
+  }) async {
+    final res = await _guard(() => _dio.post('/uye/kayit-kod-gonder', data: {
+          'ulke_kodu': ulkeKodu,
+          'telefon': telefon.trim(),
+        }));
+    final body = res.data;
+    if (body is Map && body['success'] == true) {
+      final meta = (body['meta'] as Map?) ?? const {};
+      return (meta['gecerlilik_sn'] as num?)?.toInt() ?? 300;
+    }
+    throw AuthException(_errorMessage(body) ?? 'Doğrulama kodu gönderilemedi.');
+  }
+
+  /// `POST /uye/kayit` — SMS OTP'li yeni hesap. Zorunlu: isim, soyisim, email,
+  /// telefon, parola (≥6), **kod** (SMS). E-posta/telefon kayıtlıysa 409.
   Future<AppUser> kayit({
     required String isim,
     required String soyisim,
     required String email,
     required String telefon,
     required String parola,
+    required String kod,
     String ulkeKodu = '+90',
     String? cinsiyet,
     String? dogumGunu,
@@ -289,6 +333,7 @@ class UyeRepository {
           'email': email.trim(),
           'telefon': telefon.trim(),
           'parola': parola,
+          'kod': kod.trim(),
           'ulke_kodu': ulkeKodu,
           if (cinsiyet != null && cinsiyet.isNotEmpty) 'cinsiyet': cinsiyet,
           if (dogumGunu != null && dogumGunu.isNotEmpty) 'dogum_gunu': dogumGunu,
@@ -432,6 +477,73 @@ class UyeRepository {
     if (newToken != null && newToken.isNotEmpty) {
       await Api.instance.saveUyeToken(newToken);
     }
+  }
+
+  /// `POST /uye/avatar` — Plus üyesinin avatarını yükler (UYELIK_PLUS.md §5).
+  /// [base64] çıplak base64 veya `data:image/...;base64,...` olabilir; sunucu
+  /// 512×512 merkez-kare JPEG'e dönüştürür. Yeni avatar tam URL'ini döner.
+  /// Plus yoksa 403 → [PlusRequiredException]; diğer hatalarda [AuthException].
+  Future<String> avatarYukle(String base64) async {
+    final token = await Api.instance.uyeToken;
+    if (token == null || token.isEmpty) {
+      throw PlusRequiredException('Bu özellik için giriş yapmalısın.',
+          girisGerekli: true);
+    }
+    try {
+      final res = await _dio.post(
+        '/uye/avatar',
+        data: {'avatar': base64},
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+      final body = res.data;
+      if (res.statusCode == 403 || _detail(body) == 'plus_gerekli') {
+        throw PlusRequiredException(
+            _errorMessage(body) ?? 'Bu özellik Gezgah Plus üyeliği gerektirir.');
+      }
+      if (body is! Map || body['success'] != true) {
+        throw AuthException(_errorMessage(body) ?? 'Avatar yüklenemedi.');
+      }
+      final data = body['data'];
+      final url = data is Map ? (data['avatar'] as String?) : null;
+      return url ?? '';
+    } on PlusRequiredException {
+      rethrow;
+    } on AuthException {
+      rethrow;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 403) {
+        throw PlusRequiredException(
+            _errorMessage(e.response?.data) ??
+                'Bu özellik Gezgah Plus üyeliği gerektirir.');
+      }
+      throw AuthException(_dioMessage(e));
+    }
+  }
+
+  /// `DELETE /uye/avatar` — avatarı kaldırır (Plus şartı yok). Hatalıysa
+  /// [AuthException].
+  Future<void> avatarSil() async {
+    final token = await Api.instance.uyeToken;
+    if (token == null || token.isEmpty) return;
+    final res = await _guard(() => _dio.delete(
+          '/uye/avatar',
+          options: Options(headers: {'Authorization': 'Bearer $token'}),
+        ));
+    final body = res.data;
+    if (body is! Map || body['success'] != true) {
+      throw AuthException(_errorMessage(body) ?? 'Avatar kaldırılamadı.');
+    }
+  }
+
+  /// Yanıt zarfındaki `error.details` kodunu (varsa) döndürür.
+  String? _detail(dynamic body) {
+    if (body is! Map) return null;
+    final err = body['error'];
+    if (err is! Map) return null;
+    final d = err['details'];
+    if (d is String && d.trim().isNotEmpty) return d;
+    if (d is Map && d['code'] is String) return d['code'] as String;
+    return null;
   }
 
   /// Yanıttan üye + token çıkarır; token'ı saklar, [AppUser] döner.
@@ -2130,7 +2242,16 @@ class KedyRepository {
         if (answer != null && answer.trim().isNotEmpty) return answer.trim();
         return 'Şu an yanıt veremedim. Biraz sonra tekrar dener misin?';
       }
+      // Plus gerektiren erişim (UYELIK_PLUS.md §7): 403 → paywall'a yönlendir.
+      if (res.statusCode == 403 || _kedyDetail(body) == 'plus_gerekli') {
+        throw PlusRequiredException(
+            _kedyMessage(body) ?? 'Kedy, Gezgah Plus üyeliği gerektirir.',
+            girisGerekli: _kedyDetail(body) == 'giris_gerekli' ||
+                (await Api.instance.uyeToken)?.isEmpty != false);
+      }
       throw KedyException(_kedyMessage(body) ?? 'Kedy yanıt veremedi.');
+    } on PlusRequiredException {
+      rethrow;
     } on KedyException {
       rethrow;
     } on DioException catch (e) {
@@ -2141,8 +2262,27 @@ class KedyRepository {
             _kedyMessage(e.response?.data) ??
                 'Kedy şu an çok yoğun. Biraz sonra tekrar dene.');
       }
+      if (e.response?.statusCode == 403) {
+        throw PlusRequiredException(
+            _kedyMessage(e.response?.data) ??
+                'Kedy, Gezgah Plus üyeliği gerektirir.');
+      }
       throw KedyException('Kedy\'ye ulaşılamadı. İnternet bağlantını kontrol et.');
     }
+  }
+
+  String? _kedyDetail(dynamic body) {
+    if (body is! Map) return null;
+    final err = body['error'];
+    if (err is! Map) return null;
+    final d = err['details'];
+    if (d is String && d.trim().isNotEmpty) return d;
+    if (d is Map) {
+      if (d['plus_gerekli'] == true) return 'plus_gerekli';
+      if (d['giris_gerekli'] == true) return 'giris_gerekli';
+      if (d['code'] is String) return d['code'] as String;
+    }
+    return null;
   }
 
   /// `GET /kedy/gecmis?days=` — giriş yapmış üyenin son N günlük geçmişi.
@@ -2184,6 +2324,334 @@ class KedyRepository {
       final msg = err['message'];
       if (msg is String && msg.trim().isNotEmpty) return msg;
     }
+    return null;
+  }
+}
+
+/// Gezgah Plus (IAP) — `/uye/plus/*` (UYELIK_PLUS.md §4). Durum sorgusu ve
+/// store makbuzu doğrulama. Kimlik üye token'ıyla gönderilir (KedyRepository
+/// `_uyeAuth` deseni); üye değilse durum anonim sorgulanır, doğrulama 401 verir.
+class PlusRepository {
+  PlusRepository._();
+  static final PlusRepository instance = PlusRepository._();
+
+  Dio get _dio => Api.instance.dio;
+
+  /// `GET /uye/plus/durum` — üyenin Plus durumu + ürün bilgisi (fiyat/store id).
+  /// Hata/oturumsuz durumda varsayılan (pasif) [PlusDurum] döner.
+  Future<PlusDurum> durum() async {
+    try {
+      final res = await _dio.get(
+        '/uye/plus/durum',
+        options: await _uyeAuth(),
+      );
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return const PlusDurum();
+      final data = body['data'];
+      final plus = data is Map ? data['plus'] : null;
+      return plus is Map<String, dynamic>
+          ? PlusDurum.fromJson(plus)
+          : const PlusDurum();
+    } catch (_) {
+      return const PlusDurum();
+    }
+  }
+
+  /// `POST /uye/plus/dogrula` — store makbuzunu backend'e doğrulatır. Başarıda
+  /// güncel [AppUser] (plus dahil) döner. 402'de (makbuz doğrulanamadı) veya
+  /// 401'de (üye değil) [PlusException] fırlatır (UYELIK_PLUS.md §4.2).
+  Future<AppUser> dogrula({
+    required String platform, // "ios" | "android"
+    String? receipt, // iOS: base64 appStoreReceipt
+    String? purchaseToken, // Android: purchase token
+    String? productId, // Android: ürün kimliği
+  }) async {
+    final token = await Api.instance.uyeToken;
+    if (token == null || token.isEmpty) {
+      throw PlusException('Satın alma için giriş yapmalısın.', detail: 'giris');
+    }
+    try {
+      final res = await _dio.post(
+        '/uye/plus/dogrula',
+        data: {
+          'platform': platform,
+          if (receipt != null && receipt.isNotEmpty) 'receipt': receipt,
+          if (purchaseToken != null && purchaseToken.isNotEmpty)
+            'purchase_token': purchaseToken,
+          if (productId != null && productId.isNotEmpty) 'product_id': productId,
+        },
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+      final body = res.data;
+      if (body is! Map || body['success'] != true) {
+        throw PlusException(
+            _plusMessage(body) ?? 'Satın alma doğrulanamadı.',
+            detail: _plusDetail(body));
+      }
+      final data = body['data'];
+      final uye = data is Map ? data['uye'] : null;
+      if (uye is Map<String, dynamic>) return AppUser.fromJson(uye);
+      throw PlusException('Satın alma doğrulandı ancak profil alınamadı.');
+    } on PlusException {
+      rethrow;
+    } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      if (code == 401) {
+        throw PlusException('Satın alma için giriş yapmalısın.',
+            detail: 'giris');
+      }
+      throw PlusException(
+          _plusMessage(e.response?.data) ?? 'Satın alma doğrulanamadı.',
+          detail: _plusDetail(e.response?.data));
+    }
+  }
+
+  /// Üye token'ı varsa Authorization başlığını döndürür; yoksa null (anonim →
+  /// interceptor cihaz token'ını ekler).
+  Future<Options?> _uyeAuth() async {
+    final token = await Api.instance.uyeToken;
+    if (token == null || token.isEmpty) return null;
+    return Options(headers: {'Authorization': 'Bearer $token'});
+  }
+
+  String? _plusMessage(dynamic body) {
+    if (body is! Map) return null;
+    final err = body['error'];
+    if (err is! Map) return null;
+    final msg = err['message'];
+    return (msg is String && msg.trim().isNotEmpty) ? msg : null;
+  }
+
+  String? _plusDetail(dynamic body) {
+    if (body is! Map) return null;
+    final err = body['error'];
+    if (err is! Map) return null;
+    final d = err['details'];
+    if (d is String && d.trim().isNotEmpty) return d;
+    if (d is Map && d['code'] is String) return d['code'] as String;
+    return null;
+  }
+}
+
+/// Gezi rotaları hataları (UYELIK_PLUS.md §6). Kullanıcıya gösterilebilir mesaj.
+class RotaException implements Exception {
+  final String message;
+  RotaException(this.message);
+  @override
+  String toString() => message;
+}
+
+/// Gezi rotaları — `/uye/rotalar/*` (UYELIK_PLUS.md §6). Okuma serbest;
+/// oluşturma/düzenleme Plus ister (403 → [PlusRequiredException]). Kimlik üye
+/// token'ıyla gönderilir (KedyRepository `_uyeAuth` deseni).
+class RotaRepository {
+  RotaRepository._();
+  static final RotaRepository instance = RotaRepository._();
+
+  Dio get _dio => Api.instance.dio;
+
+  /// `GET /uye/rotalar` — üyenin rotaları (durak sayısıyla). Hatada boş liste.
+  Future<List<GeziRota>> rotalar() async {
+    try {
+      final res =
+          await _dio.get('/uye/rotalar', options: await _uyeAuth());
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return const [];
+      final data = body['data'];
+      final list = data is Map ? (data['rotalar'] ?? data['items']) : data;
+      if (list is! List) return const [];
+      return list
+          .whereType<Map<String, dynamic>>()
+          .map((j) => GeziRota.fromJson(j, host: kApiHost))
+          .where((r) => r.id > 0)
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// `GET /uye/rotalar/{id}` — rota detayı (sıralı duraklar + yorumlar).
+  Future<GeziRota?> detay(int id) async {
+    if (id <= 0) return null;
+    try {
+      final res =
+          await _dio.get('/uye/rotalar/$id', options: await _uyeAuth());
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return null;
+      final data = body['data'];
+      final rota = data is Map ? (data['rota'] ?? data) : null;
+      return rota is Map<String, dynamic>
+          ? GeziRota.fromJson(rota, host: kApiHost)
+          : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// `POST /uye/rotalar` — rota oluştur (Plus gerekli). Oluşan rotayı döner.
+  Future<GeziRota> olustur({
+    required String baslik,
+    String? aciklama,
+    String gorunurluk = 'gizli',
+  }) async {
+    final res = await _post('/uye/rotalar', {
+      'baslik': baslik.trim(),
+      if (aciklama != null && aciklama.trim().isNotEmpty)
+        'aciklama': aciklama.trim(),
+      'gorunurluk': gorunurluk,
+    });
+    final data = res is Map ? (res['rota'] ?? res) : null;
+    if (data is Map<String, dynamic>) {
+      return GeziRota.fromJson(data, host: kApiHost);
+    }
+    throw RotaException('Rota oluşturulamadı.');
+  }
+
+  /// `POST /uye/rotalar/{id}/guncelle` — rota bilgisi güncelle (Plus gerekli).
+  Future<void> guncelle(
+    int id, {
+    required String baslik,
+    String? aciklama,
+    String gorunurluk = 'gizli',
+  }) async {
+    await _post('/uye/rotalar/$id/guncelle', {
+      'baslik': baslik.trim(),
+      'aciklama': aciklama?.trim() ?? '',
+      'gorunurluk': gorunurluk,
+    });
+  }
+
+  /// `DELETE /uye/rotalar/{id}` — rota sil (Plus şartı yok).
+  Future<void> sil(int id) async {
+    await _send(() async =>
+        _dio.delete('/uye/rotalar/$id', options: await _uyeAuth()));
+  }
+
+  /// `POST /uye/rotalar/{id}/mekan` — sona mekan ekle (Plus gerekli). Yeni
+  /// durak id'sini döner.
+  Future<int> mekanEkle(int id, {required int postId, String? yorum}) async {
+    final res = await _post('/uye/rotalar/$id/mekan', {
+      'post_id': postId,
+      if (yorum != null && yorum.trim().isNotEmpty) 'yorum': yorum.trim(),
+    });
+    final d = res is Map ? res : const {};
+    return (d['durak_id'] as num?)?.toInt() ?? 0;
+  }
+
+  /// `POST /uye/rotalar/{id}/mekan/guncelle` — durak yorumu güncelle (Plus).
+  Future<void> durakGuncelle(int id,
+      {required int durakId, required String yorum}) async {
+    await _post('/uye/rotalar/$id/mekan/guncelle', {
+      'durak_id': durakId,
+      'yorum': yorum.trim(),
+    });
+  }
+
+  /// `DELETE /uye/rotalar/{id}/mekan` — durak sil (Plus şartı yok).
+  Future<void> durakSil(int id, {required int durakId}) async {
+    await _send(() async => _dio.delete('/uye/rotalar/$id/mekan',
+        data: {'durak_id': durakId}, options: await _uyeAuth()));
+  }
+
+  /// `POST /uye/rotalar/{id}/sirala` — durakları sırala (Plus gerekli).
+  Future<void> sirala(int id, {required List<int> sira}) async {
+    await _post('/uye/rotalar/$id/sirala', {'sira': sira});
+  }
+
+  // ---- Yardımcılar ----------------------------------------------------------
+
+  /// Üye token'lı POST; başarıda `data`'yı döner, 403'te [PlusRequiredException],
+  /// diğer hatalarda [RotaException].
+  Future<dynamic> _post(String path, Map<String, dynamic> data) async {
+    final token = await Api.instance.uyeToken;
+    if (token == null || token.isEmpty) {
+      throw PlusRequiredException('Bu işlem için giriş yapmalısın.',
+          girisGerekli: true);
+    }
+    try {
+      final res = await _dio.post(
+        path,
+        data: data,
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+      final body = res.data;
+      if (res.statusCode == 403 || _rotaDetail(body) == 'plus_gerekli') {
+        throw PlusRequiredException(
+            _rotaMessage(body) ?? 'Bu işlem Gezgah Plus üyeliği gerektirir.');
+      }
+      if (body is! Map || body['success'] != true) {
+        throw RotaException(_rotaMessage(body) ?? 'İşlem tamamlanamadı.');
+      }
+      return body['data'];
+    } on PlusRequiredException {
+      rethrow;
+    } on RotaException {
+      rethrow;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 403) {
+        throw PlusRequiredException(
+            _rotaMessage(e.response?.data) ??
+                'Bu işlem Gezgah Plus üyeliği gerektirir.');
+      }
+      throw RotaException(_rotaMessage(e.response?.data) ??
+          'Sunucuya ulaşılamadı. Lütfen tekrar dene.');
+    }
+  }
+
+  /// Üye token'lı isteği çalıştırır (DELETE gibi); zarf/403 kontrolü yapar.
+  Future<void> _send(Future<Response> Function() run) async {
+    final token = await Api.instance.uyeToken;
+    if (token == null || token.isEmpty) {
+      throw PlusRequiredException('Bu işlem için giriş yapmalısın.',
+          girisGerekli: true);
+    }
+    try {
+      final res = await run();
+      final body = res.data;
+      if (res.statusCode == 403 || _rotaDetail(body) == 'plus_gerekli') {
+        throw PlusRequiredException(
+            _rotaMessage(body) ?? 'Bu işlem Gezgah Plus üyeliği gerektirir.');
+      }
+      if (body is! Map || body['success'] != true) {
+        throw RotaException(_rotaMessage(body) ?? 'İşlem tamamlanamadı.');
+      }
+    } on PlusRequiredException {
+      rethrow;
+    } on RotaException {
+      rethrow;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 403) {
+        throw PlusRequiredException(
+            _rotaMessage(e.response?.data) ??
+                'Bu işlem Gezgah Plus üyeliği gerektirir.');
+      }
+      throw RotaException(_rotaMessage(e.response?.data) ??
+          'Sunucuya ulaşılamadı. Lütfen tekrar dene.');
+    }
+  }
+
+  Future<Options?> _uyeAuth() async {
+    final token = await Api.instance.uyeToken;
+    if (token == null || token.isEmpty) return null;
+    return Options(headers: {'Authorization': 'Bearer $token'});
+  }
+
+  String? _rotaMessage(dynamic body) {
+    if (body is! Map) return null;
+    final err = body['error'];
+    if (err is! Map) return null;
+    final msg = err['message'];
+    return (msg is String && msg.trim().isNotEmpty) ? msg : null;
+  }
+
+  String? _rotaDetail(dynamic body) {
+    if (body is! Map) return null;
+    final err = body['error'];
+    if (err is! Map) return null;
+    final d = err['details'];
+    if (d is String && d.trim().isNotEmpty) return d;
+    if (d is Map && d['plus_gerekli'] == true) return 'plus_gerekli';
+    if (d is Map && d['code'] is String) return d['code'] as String;
     return null;
   }
 }
