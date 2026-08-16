@@ -175,15 +175,22 @@ class _PlusScreenState extends State<PlusScreen> {
           break;
         case PurchaseStatus.purchased:
         case PurchaseStatus.restored:
-          await _verify(p);
-          if (p.pendingCompletePurchase) await _iap.completePurchase(p);
+          // completePurchase YALNIZCA backend doğrulaması başarılıysa çağrılır
+          // (MOBIL_IAP_PLUS.md §5). Aksi halde kullanıcı tekrar deneyebilir /
+          // geri yükleyebilir; iOS tekrar sorar, Android ~3 günde iade eder.
+          final ok = await _verify(p);
+          if (ok && p.pendingCompletePurchase) {
+            await _iap.completePurchase(p);
+          }
           break;
       }
     }
   }
 
-  /// Makbuzu backend'e doğrulatır; başarıda Plus aktif olarak kapanır.
-  Future<void> _verify(PurchaseDetails p) async {
+  /// Makbuzu backend'e doğrulatır; başarıda Plus aktif olur, başarı modalı
+  /// gösterilir ve `true` döner. Doğrulama başarısızsa `false` (satın alma
+  /// tamamlanmaz).
+  Future<bool> _verify(PurchaseDetails p) async {
     try {
       final token = p.verificationData.serverVerificationData;
       if (Platform.isIOS) {
@@ -195,17 +202,20 @@ class _PlusScreenState extends State<PlusScreen> {
           productId: p.productID,
         );
       }
-      if (!mounted) return;
+      if (!mounted) return true;
       setState(() => _busy = false);
       _showSuccess();
+      return true;
     } on PlusException catch (e) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() => _busy = false);
       _snack(e.message);
+      return false;
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() => _busy = false);
       _snack('Satın alma doğrulanamadı. Lütfen tekrar dene.');
+      return false;
     }
   }
 

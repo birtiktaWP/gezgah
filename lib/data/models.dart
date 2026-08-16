@@ -435,16 +435,16 @@ class PlusUrun {
     this.fiyat = '199.99',
     this.para = 'TRY',
     this.periyot = 'yillik',
-    this.iosId = 'gezgah_plus_yillik',
-    this.androidId = 'gezgah_plus_yillik',
+    this.iosId = 'plus',
+    this.androidId = 'plus',
   });
 
   factory PlusUrun.fromJson(Map<String, dynamic> j) => PlusUrun(
         fiyat: j['fiyat']?.toString() ?? '199.99',
         para: (j['para'] as String?) ?? 'TRY',
         periyot: (j['periyot'] as String?) ?? 'yillik',
-        iosId: (j['ios'] as String?) ?? 'gezgah_plus_yillik',
-        androidId: (j['android'] as String?) ?? 'gezgah_plus_yillik',
+        iosId: (j['ios'] as String?) ?? 'plus',
+        androidId: (j['android'] as String?) ?? 'plus',
       );
 }
 
