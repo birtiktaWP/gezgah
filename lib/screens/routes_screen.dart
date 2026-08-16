@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../data/api.dart';
 import '../data/auth_service.dart';
@@ -318,17 +320,12 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
   }
 
   Future<void> _addStop() async {
-    final picked = await _showPlacePicker(context);
-    if (picked == null || !mounted) return;
-    final res = await _showStopSheet(context,
-        postId: picked.id, title: picked.name);
-    if (res == null || !mounted) return;
-    await _guard(() => RotaRepository.instance.mekanEkle(
-          widget.rotaId,
-          postId: picked.id,
-          yorum: res.yorum,
-          qrId: res.urun?.qrId,
-        ));
+    // Çoklu mekan/ürün ekleme kompozitörü (rota-coklu-mekan-ekleme.md).
+    final added = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => _AddStopsScreen(rotaId: widget.rotaId)),
+    );
+    if (added == true && mounted) _load();
   }
 
   /// Kapak görseli seç/kaldır (`/uye/rotalar/{id}/kapak`, Plus gerekli).
@@ -546,6 +543,7 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
       begendim: r.begendim,
       rotaFiyat: r.rotaFiyat,
       mesafeM: r.mesafeM,
+      haritaLink: r.haritaLink,
       duraklar: r.duraklar,
       sahip: RotaSahip(
         uyeId: s.uyeId,
@@ -554,6 +552,83 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
         avatar: s.avatar,
         takipEdiyorum: follow,
       ),
+    );
+  }
+
+  /// Sağ üst paylaş butonu → alttan modal: Haritada aç + Paylaş
+  /// (rota-harita-link.md).
+  Future<void> _openShareSheet(GeziRota r) async {
+    final harita = r.haritaLink;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 6),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: AppColors.line, borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(height: 10),
+            if (harita.isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.map_outlined,
+                    color: AppColors.primary),
+                title: const Text('Haritada Aç'),
+                subtitle: const Text('Rotayı Google Haritalar\u2019da gör',
+                    style: TextStyle(fontSize: 12.5)),
+                onTap: () => Navigator.pop(ctx, 'map'),
+              ),
+            ListTile(
+              leading:
+                  const Icon(Icons.ios_share, color: AppColors.primary),
+              title: const Text('Paylaş'),
+              subtitle: const Text('Rota bağlantısını uygulamalarla paylaş',
+                  style: TextStyle(fontSize: 12.5)),
+              onTap: () => Navigator.pop(ctx, 'share'),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (action == null || !mounted) return;
+    if (action == 'map') {
+      await _openMaps(harita);
+    } else if (action == 'share') {
+      await _shareRoute(r);
+    }
+  }
+
+  Future<void> _openMaps(String url) async {
+    if (url.isEmpty) return;
+    try {
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (_) {
+      if (mounted) _snack('Harita açılamadı.');
+    }
+  }
+
+  Future<void> _shareRoute(GeziRota r) async {
+    final baslik = r.baslik.isEmpty ? 'Gezi rotası' : r.baslik;
+    final text = r.haritaLink.isNotEmpty
+        ? 'Gezgah\u2019ta "$baslik" rotasına göz at:\n${r.haritaLink}'
+        : 'Gezgah\u2019ta "$baslik" rotasına göz at.';
+    // iPad'de paylaşım popover'ının konumlanması için origin gerekir.
+    final box = context.findRenderObject() as RenderBox?;
+    await Share.share(
+      text,
+      subject: baslik,
+      sharePositionOrigin:
+          box != null ? box.localToGlobal(Offset.zero) & box.size : null,
     );
   }
 
@@ -588,26 +663,34 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
         children: [
           PageHeader(
             title: 'Rota Detayı',
-            actions: owner
-                ? [
-                    IconButton(
-                      tooltip: 'Kapak görseli',
-                      onPressed: _changeCover,
-                      icon: const Icon(Icons.image_outlined,
-                          color: AppColors.primary),
-                    ),
-                    IconButton(
-                      onPressed: _editRoute,
-                      icon: const Icon(Icons.edit_outlined,
-                          color: AppColors.primary),
-                    ),
-                    IconButton(
-                      onPressed: _deleteRoute,
-                      icon: const Icon(Icons.delete_outline,
-                          color: AppColors.closing),
-                    ),
-                  ]
-                : const [],
+            actions: [
+              // Paylaş — herkeste görünür.
+              if (r != null)
+                IconButton(
+                  tooltip: 'Paylaş',
+                  onPressed: () => _openShareSheet(r),
+                  icon: const Icon(Icons.ios_share, color: AppColors.primary),
+                ),
+              // Kapak/düzenle/sil yalnız sahibe.
+              if (owner) ...[
+                IconButton(
+                  tooltip: 'Kapak görseli',
+                  onPressed: _changeCover,
+                  icon: const Icon(Icons.image_outlined,
+                      color: AppColors.primary),
+                ),
+                IconButton(
+                  onPressed: _editRoute,
+                  icon: const Icon(Icons.edit_outlined,
+                      color: AppColors.primary),
+                ),
+                IconButton(
+                  onPressed: _deleteRoute,
+                  icon: const Icon(Icons.delete_outline,
+                      color: AppColors.closing),
+                ),
+              ],
+            ],
           ),
           Expanded(
             child: _loading
@@ -1042,6 +1125,15 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                   ],
                 ),
               ),
+              // Durağı haritada aç (koordinatı varsa) — herkeste görünür.
+              if (d.haritaLink.isNotEmpty)
+                IconButton(
+                  tooltip: 'Haritada aç',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _openMaps(d.haritaLink),
+                  icon: const Icon(Icons.place_outlined,
+                      color: AppColors.primary),
+                ),
               if (owner) ...[
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, color: AppColors.muted),
@@ -1666,6 +1758,474 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
 }
 
 
+/// Rotaya eklenmek üzere hazırlanan bir durak (mekan + opsiyonel ürün + not).
+class _StagedStop {
+  final Place place;
+  RotaUrun? urun;
+  String yorum;
+  _StagedStop({required this.place, this.urun, this.yorum = ''});
+}
+
+/// Çoklu mekan/ürün ekleme ekranı (rota-coklu-mekan-ekleme.md). Kullanıcı
+/// birden çok durağı hazırlar, tek istekte `duraklar` dizisiyle gönderir.
+class _AddStopsScreen extends StatefulWidget {
+  final int rotaId;
+  const _AddStopsScreen({required this.rotaId});
+
+  @override
+  State<_AddStopsScreen> createState() => _AddStopsScreenState();
+}
+
+class _AddStopsScreenState extends State<_AddStopsScreen> {
+  final List<_StagedStop> _staged = [];
+  bool _busy = false;
+
+  Future<void> _pickAndAdd() async {
+    final place = await _showPlacePicker(context);
+    if (place == null || !mounted) return;
+    final res =
+        await _showStopSheet(context, postId: place.id, title: place.name);
+    if (res == null || !mounted) return;
+    setState(() =>
+        _staged.add(_StagedStop(place: place, urun: res.urun, yorum: res.yorum)));
+  }
+
+  Future<void> _edit(int index) async {
+    final s = _staged[index];
+    final res = await _showStopSheet(
+      context,
+      postId: s.place.id,
+      title: s.place.name,
+      initialYorum: s.yorum,
+      initialUrun: s.urun,
+    );
+    if (res == null || !mounted) return;
+    setState(() {
+      s.urun = res.urun;
+      s.yorum = res.yorum;
+    });
+  }
+
+  Future<void> _submit() async {
+    if (_staged.isEmpty || _busy) return;
+    setState(() => _busy = true);
+    try {
+      final res = await RotaRepository.instance.mekanlarEkle(
+        widget.rotaId,
+        _staged
+            .map((s) =>
+                (postId: s.place.id, qrId: s.urun?.qrId, yorum: s.yorum))
+            .toList(),
+      );
+      if (!mounted) return;
+      if (res.atlanan.isNotEmpty) {
+        await _showAtlanan(res.eklenen, res.atlanan);
+      }
+      if (mounted) Navigator.pop(context, res.eklenen > 0);
+    } on PlusRequiredException catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      await _handlePlus(context, e);
+    } on RotaException catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _showAtlanan(int eklenen, List<Map<String, dynamic>> atlanan) {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Text(eklenen > 0
+            ? '$eklenen durak eklendi'
+            : 'Durak eklenemedi'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Şunlar eklenemedi:',
+                style: TextStyle(fontSize: 13.5)),
+            const SizedBox(height: 8),
+            for (final a in atlanan)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                    '• ${a['neden'] ?? 'eklenemedi'}',
+                    style:
+                        const TextStyle(fontSize: 13, color: AppColors.muted)),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Tamam')),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: Column(
+        children: [
+          const PageHeader(title: 'Mekan Ekle'),
+          Expanded(
+            child: _staged.isEmpty
+                ? _empty()
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                    itemCount: _staged.length,
+                    itemBuilder: (_, i) => _stagedTile(i),
+                  ),
+          ),
+          _bottomBar(),
+        ],
+      ),
+    );
+  }
+
+  Widget _empty() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.add_location_alt_outlined,
+                size: 56, color: AppColors.muted),
+            const SizedBox(height: 14),
+            const Text('Rotaya mekan ekle',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            const Text(
+              'Birden çok mekan ve ürün ekleyebilirsin. Aşağıdaki butonla '
+              'mekan aramaya başla.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13.5, color: AppColors.muted),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _stagedTile(int i) {
+    final s = _staged[i];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: AppShadows.listTile,
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: SizedBox(
+                width: 52,
+                height: 52,
+                child: NetImage(s.place.thumb(ThumbSize.square)),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(s.place.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 14.5, fontWeight: FontWeight.w600)),
+                  if (s.urun != null || s.yorum.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      [
+                        if (s.urun != null)
+                          s.urun!.fiyatLabel.isEmpty
+                              ? s.urun!.ad
+                              : '${s.urun!.ad} · ${s.urun!.fiyatLabel}',
+                        if (s.yorum.isNotEmpty) s.yorum,
+                      ].join('  ·  '),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 12.5, color: AppColors.muted),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: 'Düzenle',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _edit(i),
+              icon: const Icon(Icons.edit_outlined,
+                  size: 19, color: AppColors.primary),
+            ),
+            IconButton(
+              tooltip: 'Çıkar',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => setState(() => _staged.removeAt(i)),
+              icon: const Icon(Icons.close, size: 19, color: AppColors.muted),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _bottomBar() {
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+          16, 12, 16, 12 + MediaQuery.of(context).viewPadding.bottom),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: AppColors.line)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: _busy ? null : _pickAndAdd,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Mekan Ekle',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                minimumSize: const Size(0, 50),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: (_staged.isEmpty || _busy) ? null : _submit,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                minimumSize: const Size(0, 50),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
+              child: _busy
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.4, color: Colors.white),
+                    )
+                  : Text(
+                      _staged.isEmpty
+                          ? 'Rotaya Ekle'
+                          : 'Rotaya Ekle (${_staged.length})',
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Keşfet filtre sheet'i: tür (restoran/mesire/plaj) + ilçe. "Uygula" veya
+/// "Temizle" ile `(tip, ilce, ilceAd)` döner; iptalde null (KESFET_SIRALAMA).
+class _FilterSheet extends StatefulWidget {
+  final String? tip;
+  final int? ilce;
+  final String? ilceAd;
+  const _FilterSheet({this.tip, this.ilce, this.ilceAd});
+
+  @override
+  State<_FilterSheet> createState() => _FilterSheetState();
+}
+
+class _FilterSheetState extends State<_FilterSheet> {
+  String? _tip;
+  int? _ilce;
+  String? _ilceAd;
+  List<Ilce> _ilceler = const [];
+  bool _loadingIlce = true;
+
+  static const List<(String, String)> _tipler = [
+    ('restoran', 'Restoran'),
+    ('mesire', 'Mesire'),
+    ('plaj', 'Plaj'),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _tip = widget.tip;
+    _ilce = widget.ilce;
+    _ilceAd = widget.ilceAd;
+    _loadIlce();
+  }
+
+  Future<void> _loadIlce() async {
+    final list = await UyeRepository.instance.ilceler();
+    if (!mounted) return;
+    setState(() {
+      _ilceler = list;
+      _loadingIlce = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      padding: const EdgeInsets.fromLTRB(22, 14, 22, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: AppColors.line,
+                  borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text('Filtrele',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 18),
+          const Text('Tür',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final t in _tipler)
+                _choice(t.$2, _tip == t.$1,
+                    () => setState(() => _tip = _tip == t.$1 ? null : t.$1)),
+            ],
+          ),
+          const SizedBox(height: 20),
+          const Text('İlçe',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 10),
+          if (_loadingIlce)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: SizedBox(
+                  height: 22,
+                  width: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2.4)),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: AppColors.primarySoft,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int?>(
+                  isExpanded: true,
+                  value: _ilce,
+                  hint: const Text('Tüm ilçeler'),
+                  items: [
+                    const DropdownMenuItem<int?>(
+                        value: null, child: Text('Tüm ilçeler')),
+                    for (final i in _ilceler)
+                      DropdownMenuItem<int?>(value: i.id, child: Text(i.ad)),
+                  ],
+                  onChanged: (v) => setState(() {
+                    _ilce = v;
+                    _ilceAd = v == null
+                        ? null
+                        : _ilceler
+                            .firstWhere((e) => e.id == v,
+                                orElse: () => const Ilce(id: 0, ad: ''))
+                            .ad;
+                  }),
+                ),
+              ),
+            ),
+          const SizedBox(height: 22),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(
+                      context, (tip: null, ilce: null, ilceAd: null)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.ink,
+                    side: const BorderSide(color: AppColors.line),
+                    minimumSize: const Size(0, 50),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: const Text('Temizle',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context,
+                      (tip: _tip, ilce: _ilce, ilceAd: _ilceAd)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    minimumSize: const Size(0, 50),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: const Text('Uygula',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _choice(String label, bool active, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: active ? AppColors.primary : Colors.white,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+              color: active ? AppColors.primary : AppColors.line),
+        ),
+        child: Text(label,
+            style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+                color: active ? Colors.white : AppColors.ink)),
+      ),
+    );
+  }
+}
+
 /// Keşfet: herkese açık gezi rotaları akışı (`GET /rotalar`). Tekli, tam
 /// genişlikte satırlar — solda kapak görseli, sağda rota adı + sahip + durak
 /// sayısı. Sonsuz kaydırmayla sayfalanır (UYELIK_PLUS.md §6.1).
@@ -1679,16 +2239,15 @@ class DiscoverRoutesScreen extends StatelessWidget {
       child: Scaffold(
         backgroundColor: AppColors.bg,
         body: Column(
-          children: const [
-            PageHeader(title: 'Gezi Rotaları'),
-            TabBar(
-              labelColor: AppColors.primary,
-              unselectedLabelColor: AppColors.muted,
-              indicatorColor: AppColors.primary,
-              labelStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-              tabs: [Tab(text: 'Keşfet'), Tab(text: 'Takip')],
+          children: [
+            const PageHeader(title: 'Gezi Rotaları'),
+            Builder(
+              builder: (ctx) => _PillTabs(
+                controller: DefaultTabController.of(ctx),
+                labels: const ['Keşfet', 'Takip'],
+              ),
             ),
-            Expanded(
+            const Expanded(
               child: TabBarView(
                 children: [
                   _RouteFeed(follow: false),
@@ -1699,6 +2258,68 @@ class DiscoverRoutesScreen extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Segment (pill) sekme seçici — TabController'ı sürer, içerik TabBarView ile
+/// kayar. Aktif sekme beyaz-yuvarlak, pasif gri (tasarım referansı).
+class _PillTabs extends StatelessWidget {
+  final TabController controller;
+  final List<String> labels;
+  const _PillTabs({required this.controller, required this.labels});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final active = controller.index;
+        return Container(
+          margin: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1F1F5),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            children: [
+              for (var i = 0; i < labels.length; i++)
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => controller.animateTo(i),
+                    behavior: HitTestBehavior.opaque,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOut,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: active == i ? Colors.white : Colors.transparent,
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: active == i
+                            ? const [
+                                BoxShadow(
+                                    color: Color(0x14000000),
+                                    blurRadius: 6,
+                                    offset: Offset(0, 2))
+                              ]
+                            : null,
+                      ),
+                      child: Text(labels[i],
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: active == i
+                                  ? AppColors.ink
+                                  : AppColors.muted)),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -1833,106 +2454,71 @@ class _RouteFeedState extends State<_RouteFeed>
   // ---- Sıralama + filtre çubuğu ---------------------------------------------
 
   Widget _controls() {
-    return SizedBox(
-      height: 46,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+    final filterCount = (_tip != null ? 1 : 0) + (_ilce != null ? 1 : 0);
+    final sortActive = _sort != 'yeni';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+      child: Row(
         children: [
-          _chip(
-            icon: Icons.swap_vert,
-            label: _sortLabels[_sort] ?? 'Sırala',
-            active: _sort != 'yeni',
+          // Filtre — butonlu; bottom sheet ile seçilir.
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: _openFilter,
+              icon: const Icon(Icons.tune, size: 18),
+              label: Text(
+                  filterCount > 0 ? 'Filtrele ($filterCount)' : 'Filtrele',
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor:
+                    filterCount > 0 ? AppColors.primary : AppColors.ink,
+                side: BorderSide(
+                    color: filterCount > 0
+                        ? AppColors.primary
+                        : AppColors.line),
+                minimumSize: const Size(0, 44),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Sıralama — sadece ikon.
+          GestureDetector(
             onTap: _openSort,
-          ),
-          const SizedBox(width: 8),
-          _chip(
-            label: 'Restoran',
-            active: _tip == 'restoran',
-            onTap: () => _toggleTip('restoran'),
-          ),
-          const SizedBox(width: 8),
-          _chip(
-            label: 'Mesire',
-            active: _tip == 'mesire',
-            onTap: () => _toggleTip('mesire'),
-          ),
-          const SizedBox(width: 8),
-          _chip(
-            label: 'Plaj',
-            active: _tip == 'plaj',
-            onTap: () => _toggleTip('plaj'),
-          ),
-          const SizedBox(width: 8),
-          _chip(
-            icon: Icons.place_outlined,
-            label: _ilceAd ?? 'İlçe',
-            active: _ilce != null,
-            onTap: _openIlce,
-            onClear: _ilce != null
-                ? () {
-                    setState(() {
-                      _ilce = null;
-                      _ilceAd = null;
-                    });
-                    _applyChange();
-                  }
-                : null,
+            child: Container(
+              width: 44,
+              height: 44,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: sortActive ? AppColors.primary : Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: sortActive ? AppColors.primary : AppColors.line),
+              ),
+              child: Icon(Icons.swap_vert,
+                  color: sortActive ? Colors.white : AppColors.primary),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _chip({
-    required String label,
-    required bool active,
-    required VoidCallback onTap,
-    IconData? icon,
-    VoidCallback? onClear,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.fromLTRB(icon != null ? 10 : 14, 0, 12, 0),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: active ? AppColors.primary : Colors.white,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-              color: active ? AppColors.primary : AppColors.line),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(icon,
-                  size: 15,
-                  color: active ? Colors.white : AppColors.primary),
-              const SizedBox(width: 5),
-            ],
-            Text(label,
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: active ? Colors.white : AppColors.ink)),
-            if (onClear != null) ...[
-              const SizedBox(width: 4),
-              GestureDetector(
-                onTap: onClear,
-                child: Icon(Icons.close,
-                    size: 15,
-                    color: active ? Colors.white : AppColors.muted),
-              ),
-            ],
-          ],
-        ),
-      ),
+  Future<void> _openFilter() async {
+    final res =
+        await showModalBottomSheet<({String? tip, int? ilce, String? ilceAd})>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) =>
+          _FilterSheet(tip: _tip, ilce: _ilce, ilceAd: _ilceAd),
     );
-  }
-
-  void _toggleTip(String tip) {
-    setState(() => _tip = _tip == tip ? null : tip);
+    if (res == null || !mounted) return;
+    setState(() {
+      _tip = res.tip;
+      _ilce = res.ilce;
+      _ilceAd = res.ilceAd;
+    });
     _applyChange();
   }
 
@@ -1979,64 +2565,6 @@ class _RouteFeedState extends State<_RouteFeed>
       _lng = loc.lng;
     }
     setState(() => _sort = secili);
-    _applyChange();
-  }
-
-  Future<void> _openIlce() async {
-    final ilceler = await UyeRepository.instance.ilceler();
-    if (!mounted) return;
-    if (ilceler.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('İlçe listesi alınamadı.')));
-      return;
-    }
-    final secili = await showModalBottomSheet<Ilce>(
-      context: context,
-      backgroundColor: Colors.white,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        top: false,
-        child: SizedBox(
-          height: MediaQuery.of(ctx).size.height * 0.7,
-          child: Column(
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(20, 16, 20, 6),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('İlçe seç',
-                      style: TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w600)),
-                ),
-              ),
-              Expanded(
-                child: ListView(
-                  children: [
-                    for (final i in ilceler)
-                      ListTile(
-                        title: Text(i.ad),
-                        trailing: _ilce == i.id
-                            ? const Icon(Icons.check,
-                                color: AppColors.primary)
-                            : null,
-                        onTap: () => Navigator.pop(ctx, i),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (secili == null || !mounted) return;
-    setState(() {
-      _ilce = secili.id;
-      _ilceAd = secili.ad;
-    });
     _applyChange();
   }
 

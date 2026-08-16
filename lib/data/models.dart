@@ -499,6 +499,7 @@ class GeziRota {
   final bool begendim; // isteği yapan üye bu rotayı beğendi mi
   final double? rotaFiyat; // seçili ürünlerin fiyat toplamı (yoksa null)
   final int? mesafeM; // ilk durağa mesafe (metre); konum verildiyse
+  final String haritaLink; // tüm rotayı gezen Google Maps yol tarifi (yoksa '')
   final List<RotaDurak> duraklar; // yalnız detay yanıtında dolu
 
   const GeziRota({
@@ -514,6 +515,7 @@ class GeziRota {
     this.begendim = false,
     this.rotaFiyat,
     this.mesafeM,
+    this.haritaLink = '',
     this.duraklar = const [],
   });
 
@@ -549,6 +551,7 @@ class GeziRota {
         begendim: begendim,
         rotaFiyat: rotaFiyat,
         mesafeM: mesafeM,
+        haritaLink: haritaLink,
         duraklar: duraklar,
       );
 
@@ -577,6 +580,7 @@ class GeziRota {
       begendim: j['begendim'] == true,
       rotaFiyat: (j['rota_fiyat'] as num?)?.toDouble(),
       mesafeM: (j['mesafe_m'] as num?)?.toInt(),
+      haritaLink: (j['harita_link'] as String?)?.trim() ?? '',
       duraklar: duraklar,
     );
   }
@@ -658,6 +662,7 @@ class RotaDurak {
   final RotaMekan? mekan;
   final bool silinmis;
   final RotaUrun? seciliUrun;
+  final String haritaLink; // durağı haritada açan Google Maps linki (yoksa '')
 
   const RotaDurak({
     required this.durakId,
@@ -666,6 +671,7 @@ class RotaDurak {
     this.mekan,
     this.silinmis = false,
     this.seciliUrun,
+    this.haritaLink = '',
   });
 
   factory RotaDurak.fromJson(Map<String, dynamic> j, {String host = ''}) {
@@ -684,6 +690,7 @@ class RotaDurak {
       seciliUrun: j['secili_urun'] is Map<String, dynamic>
           ? RotaUrun.fromJson(j['secili_urun'] as Map<String, dynamic>)
           : null,
+      haritaLink: (j['harita_link'] as String?)?.trim() ?? '',
     );
   }
 }

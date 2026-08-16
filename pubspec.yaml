@@ -1,7 +1,7 @@
 name: gezgah
 description: "Gezgah - yakınındaki en iyi yerleri keşfet."
 publish_to: 'none'
-version: 1.0.0+17
+version: 1.0.0+18
 
 environment:
   sdk: ^3.11.4
@@ -23,6 +23,7 @@ dependencies:
   device_info_plus: ^11.1.0
   package_info_plus: ^8.1.0
   url_launcher: ^6.3.1
+  share_plus: ^10.0.0 # rota paylaşımı (native share sheet)
   intl_phone_number_input: ^0.7.5
   dlibphonenumber: ^1.1.67
   in_app_purchase: ^3.2.0

@@ -2649,6 +2649,37 @@ class RotaRepository {
     return (d['durak_id'] as num?)?.toInt() ?? 0;
   }
 
+  /// `POST /uye/rotalar/{id}/mekan` — **çoklu** durak ekle (Plus,
+  /// rota-coklu-mekan-ekleme.md). Kısmi başarı olabilir: [eklenen] eklenen
+  /// sayısı, [atlanan] eklenemeyenler (`{post_id, neden}`). Hiçbiri eklenemezse
+  /// [RotaException]. Aynı `post_id` birden çok kez (farklı ürünlerle) verilebilir.
+  Future<({int eklenen, List<Map<String, dynamic>> atlanan})> mekanlarEkle(
+    int id,
+    List<({int postId, int? qrId, String? yorum})> duraklar,
+  ) async {
+    final res = await _post('/uye/rotalar/$id/mekan', {
+      'duraklar': [
+        for (final d in duraklar)
+          {
+            'post_id': d.postId,
+            if (d.qrId != null && d.qrId! > 0) 'qr_id': d.qrId,
+            if (d.yorum != null && d.yorum!.trim().isNotEmpty)
+              'yorum': d.yorum!.trim(),
+          }
+      ],
+    });
+    final data = res is Map ? res : const {};
+    final atlanan = (data['atlanan'] is List)
+        ? (data['atlanan'] as List)
+            .whereType<Map<String, dynamic>>()
+            .toList()
+        : <Map<String, dynamic>>[];
+    return (
+      eklenen: (data['eklenen_sayisi'] as num?)?.toInt() ?? 0,
+      atlanan: atlanan,
+    );
+  }
+
   /// `POST /uye/rotalar/{id}/mekan/guncelle` — durak yorumu ve/veya ürününü
   /// güncelle (Plus). [qrId] `0` → ürün seçimini temizler; null → dokunma.
   Future<void> durakGuncelle(int id,
