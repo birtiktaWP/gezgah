@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 
 import '../data/api.dart';
@@ -9,6 +10,11 @@ import '../data/auth_service.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
 import 'login_screen.dart';
+
+/// Geliştirme sırasında IAP akışını ekranda izlemek için debug konsolunu açar.
+/// Yayına çıkarken `false` yap (TestFlight/Release'te de görünür, kDebugMode'a
+/// bağlı değildir — çünkü TestFlight release moddadır).
+const bool kIapDebug = true;
 
 /// Gezgah Plus satın alma (paywall) sayfasını **alttan açılan sheet** olarak
 /// gösterir. Kullanıcı Plus üyesi olursa (satın alma / geri yükleme başarılı)
@@ -43,15 +49,38 @@ class _PlusScreenState extends State<PlusScreen> {
   bool _loading = true;
   bool _busy = false; // satın alma/doğrulama sürüyor
   bool _storeAvailable = true;
+  String? _storeNotice; // ürün/mağaza sorunlarını kullanıcıya açıklayan not
+
+  // IAP debug günlüğü (geliştirme). En yeni satırlar sona eklenir.
+  final List<String> _debug = [];
+
+  /// Debug konsoluna zaman damgalı satır ekler (kIapDebug açıkken görünür).
+  void _log(String msg) {
+    // ignore: avoid_print
+    print('[IAP] $msg');
+    if (!kIapDebug) return;
+    final now = DateTime.now();
+    final ts =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
+    if (mounted) {
+      setState(() => _debug.add('$ts  $msg'));
+    } else {
+      _debug.add('$ts  $msg');
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    _log('Paywall açıldı · platform=${Platform.operatingSystem}');
     // Satın alma güncellemelerini dinle (satın al + geri yükle aynı akış).
     _sub = _iap.purchaseStream.listen(
       _onPurchaseUpdates,
-      onDone: () => _sub?.cancel(),
-      onError: (_) {},
+      onDone: () {
+        _log('purchaseStream kapandı (onDone)');
+        _sub?.cancel();
+      },
+      onError: (e) => _log('purchaseStream HATA: $e'),
     );
     _init();
   }
@@ -64,27 +93,50 @@ class _PlusScreenState extends State<PlusScreen> {
 
   Future<void> _init() async {
     // 1) Backend'ten güncel durum + ürün bilgisi (fiyat/store id).
+    _log('Backend /uye/plus/durum çağrılıyor…');
     final durum = await PlusRepository.instance.durum();
+    _log('durum: aktif=${durum.aktif} · store id=ios:${durum.urun.iosId}/'
+        'android:${durum.urun.androidId} · fiyat=${durum.urun.fiyat}');
     // 2) Store'dan ürün ayrıntısı (yerel para birimiyle biçimli fiyat).
     ProductDetails? product;
     var available = true;
+    String? notice;
     try {
       available = await _iap.isAvailable();
-      if (available) {
+      _log('InAppPurchase.isAvailable() = $available');
+      if (!available) {
+        notice = 'Bu cihazda uygulama içi satın alma kullanılamıyor.';
+      } else {
         final id = _productId(durum);
+        _log('queryProductDetails({"$id"}) çağrılıyor…');
         final resp = await _iap.queryProductDetails({id});
-        if (resp.productDetails.isNotEmpty) {
+        _log('yanıt: bulunan=${resp.productDetails.length} · '
+            'bulunamayan=${resp.notFoundIDs} · '
+            'error=${resp.error?.code}/${resp.error?.message}');
+        if (resp.error != null) {
+          notice = 'Mağaza yanıtı alınamadı: ${resp.error!.message}';
+        } else if (resp.productDetails.isEmpty) {
+          // Ürün mağazada tanımlı/onaylı değil ya da sandbox oturumu yok.
+          notice = 'Abonelik ürünü ("$id") mağazada bulunamadı. Mağaza '
+              'kurulumu (ürün onayı / sandbox oturumu) tamamlanınca etkinleşir.';
+        } else {
           product = resp.productDetails.first;
+          _log('ürün OK: id=${product.id} · title=${product.title} · '
+              'price=${product.price} (${product.rawPrice} ${product.currencyCode})');
         }
       }
-    } catch (_) {
+    } catch (e, st) {
       available = false;
+      notice = 'Mağazaya bağlanılamadı: $e';
+      _log('queryProductDetails İSTİSNA: $e');
+      _log('stack: ${st.toString().split('\n').take(3).join(' | ')}');
     }
     if (!mounted) return;
     setState(() {
       _durum = durum;
       _product = product;
       _storeAvailable = available;
+      _storeNotice = product == null ? notice : null;
       _loading = false;
     });
   }
@@ -102,35 +154,51 @@ class _PlusScreenState extends State<PlusScreen> {
   // ---- Satın alma akışı -----------------------------------------------------
 
   Future<void> _buy() async {
-    if (_busy) return;
+    _log('“Satın Al” tıklandı · girişli=${AuthService.instance.isLoggedIn} · '
+        'ürün=${_product?.id ?? "null"}');
+    if (_busy) {
+      _log('iptal: zaten işlem sürüyor (_busy)');
+      return;
+    }
     // Önce giriş şartı (Plus üyeye bağlanır).
     if (!AuthService.instance.isLoggedIn) {
+      _log('giriş yok → login açılıyor');
       final ok = await openLogin(context);
-      if (ok != true || !AuthService.instance.isLoggedIn) return;
+      if (ok != true || !AuthService.instance.isLoggedIn) {
+        _log('login iptal/başarısız → satın alma durdu');
+        return;
+      }
     }
     if (!_storeAvailable) {
+      _log('durdu: mağaza kullanılamıyor');
       _snack('Mağazaya ulaşılamıyor. Lütfen daha sonra tekrar dene.');
       return;
     }
     final product = _product;
     if (product == null) {
+      _log('durdu: ürün null');
       _snack('Ürün bilgisi alınamadı. Lütfen daha sonra tekrar dene.');
       return;
     }
     setState(() => _busy = true);
     try {
       final param = PurchaseParam(productDetails: product);
+      _log('buyNonConsumable çağrılıyor (id=${product.id})…');
       // Abonelik → non-consumable olarak başlatılır.
-      await _iap.buyNonConsumable(purchaseParam: param);
+      final started = await _iap.buyNonConsumable(purchaseParam: param);
+      _log('buyNonConsumable döndü: started=$started '
+          '(sonuç purchaseStream ile gelecek)');
       // Sonuç purchaseStream üzerinden _onPurchaseUpdates'e düşer.
-    } catch (_) {
+    } catch (e) {
+      _log('buyNonConsumable İSTİSNA: $e');
       if (!mounted) return;
       setState(() => _busy = false);
-      _snack('Satın alma başlatılamadı. Lütfen tekrar dene.');
+      _snack('Satın alma başlatılamadı: $e');
     }
   }
 
   Future<void> _restore() async {
+    _log('“Geri Yükle” tıklandı');
     if (_busy) return;
     if (!AuthService.instance.isLoggedIn) {
       final ok = await openLogin(context);
@@ -138,6 +206,7 @@ class _PlusScreenState extends State<PlusScreen> {
     }
     setState(() => _busy = true);
     try {
+      _log('restorePurchases çağrılıyor…');
       await _iap.restorePurchases();
       // Geri yüklenen satın almalar purchaseStream'e düşer. Kısa bir süre sonra
       // hiçbir şey gelmezse "bulunamadı" mesajı ver.
@@ -145,19 +214,24 @@ class _PlusScreenState extends State<PlusScreen> {
         if (mounted &&
             _busy &&
             !(AuthService.instance.user.value?.isPlus ?? false)) {
+          _log('restore: 4sn içinde satın alma gelmedi');
           setState(() => _busy = false);
           _snack('Geri yüklenecek aktif abonelik bulunamadı.');
         }
       });
-    } catch (_) {
+    } catch (e) {
+      _log('restorePurchases İSTİSNA: $e');
       if (!mounted) return;
       setState(() => _busy = false);
-      _snack('Geri yükleme yapılamadı. Lütfen tekrar dene.');
+      _snack('Geri yükleme yapılamadı: $e');
     }
   }
 
   Future<void> _onPurchaseUpdates(List<PurchaseDetails> purchases) async {
+    _log('purchaseStream: ${purchases.length} güncelleme geldi');
     for (final p in purchases) {
+      _log('durum=${p.status.name} · id=${p.productID} · '
+          'pendingComplete=${p.pendingCompletePurchase} · err=${p.error?.message ?? "-"}');
       switch (p.status) {
         case PurchaseStatus.pending:
           if (mounted) setState(() => _busy = true);
@@ -165,11 +239,13 @@ class _PlusScreenState extends State<PlusScreen> {
         case PurchaseStatus.error:
           if (mounted) {
             setState(() => _busy = false);
-            _snack('Satın alma tamamlanamadı. Lütfen tekrar dene.');
+            _snack('Satın alma tamamlanamadı: '
+                '${p.error?.message ?? "bilinmeyen hata"}');
           }
           if (p.pendingCompletePurchase) await _iap.completePurchase(p);
           break;
         case PurchaseStatus.canceled:
+          _log('kullanıcı iptal etti');
           if (mounted) setState(() => _busy = false);
           if (p.pendingCompletePurchase) await _iap.completePurchase(p);
           break;
@@ -180,7 +256,10 @@ class _PlusScreenState extends State<PlusScreen> {
           // geri yükleyebilir; iOS tekrar sorar, Android ~3 günde iade eder.
           final ok = await _verify(p);
           if (ok && p.pendingCompletePurchase) {
+            _log('doğrulama OK → completePurchase çağrılıyor');
             await _iap.completePurchase(p);
+          } else if (!ok) {
+            _log('doğrulama BAŞARISIZ → completePurchase ÇAĞRILMADI');
           }
           break;
       }
@@ -193,6 +272,8 @@ class _PlusScreenState extends State<PlusScreen> {
   Future<bool> _verify(PurchaseDetails p) async {
     try {
       final token = p.verificationData.serverVerificationData;
+      _log('POST /uye/plus/dogrula · platform=${Platform.operatingSystem} · '
+          'token.len=${token.length} · source=${p.verificationData.source}');
       if (Platform.isIOS) {
         await AuthService.instance.plusDogrula(platform: 'ios', receipt: token);
       } else {
@@ -202,26 +283,44 @@ class _PlusScreenState extends State<PlusScreen> {
           productId: p.productID,
         );
       }
+      _log('doğrulama BAŞARILI · plus aktif');
       if (!mounted) return true;
       setState(() => _busy = false);
       _showSuccess();
       return true;
     } on PlusException catch (e) {
+      _log('doğrulama PlusException: ${e.message} (detail=${e.detail})');
       if (!mounted) return false;
       setState(() => _busy = false);
-      _snack(e.message);
+      _snack('Doğrulama başarısız: ${e.message}'
+          '${e.detail != null ? " [${e.detail}]" : ""}');
       return false;
-    } catch (_) {
+    } catch (e) {
+      _log('doğrulama İSTİSNA: $e');
       if (!mounted) return false;
       setState(() => _busy = false);
-      _snack('Satın alma doğrulanamadı. Lütfen tekrar dene.');
+      _snack('Satın alma doğrulanamadı: $e');
       return false;
     }
   }
 
+  /// Bilgi/hata mesajını **sheet'in üzerinde görünür** bir dialog ile gösterir.
+  /// (SnackBar bottom sheet'in arkasında kalıp görünmediği için kullanılmaz.)
   void _snack(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        content: Text(msg, style: const TextStyle(fontSize: 14, height: 1.4)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Tamam'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Başarılı satın alma modalı; kapatınca ekran `true` ile kapanır.
@@ -368,7 +467,89 @@ class _PlusScreenState extends State<PlusScreen> {
         ),
         const SizedBox(height: 26),
         if (active) _activeCard() else ..._featureCards(),
+        if (kIapDebug) _debugPanel(),
       ],
+    );
+  }
+
+  /// Geliştirme debug konsolu: IAP akışının tüm adımlarını ekranda gösterir.
+  Widget _debugPanel() {
+    return Container(
+      margin: const EdgeInsets.only(top: 20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B1020),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 6, 6),
+            child: Row(
+              children: [
+                const Icon(Icons.bug_report_outlined,
+                    size: 18, color: Color(0xFF7DB7FF)),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('IAP Debug',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white)),
+                ),
+                IconButton(
+                  tooltip: 'Kopyala',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    Clipboard.setData(
+                        ClipboardData(text: _debug.join('\n')));
+                    _snack('Debug günlüğü panoya kopyalandı.');
+                  },
+                  icon: const Icon(Icons.copy,
+                      size: 16, color: Colors.white70),
+                ),
+                IconButton(
+                  tooltip: 'Temizle',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => setState(() => _debug.clear()),
+                  icon: const Icon(Icons.delete_outline,
+                      size: 18, color: Colors.white70),
+                ),
+                IconButton(
+                  tooltip: 'Ürünü yeniden sorgula',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    setState(() => _loading = true);
+                    _init();
+                  },
+                  icon: const Icon(Icons.refresh,
+                      size: 18, color: Colors.white70),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 240),
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+            child: _debug.isEmpty
+                ? const Text('— henüz kayıt yok —',
+                    style: TextStyle(fontSize: 11.5, color: Colors.white38))
+                : SingleChildScrollView(
+                    reverse: true,
+                    child: SelectableText(
+                      _debug.join('\n'),
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        height: 1.5,
+                        color: Color(0xFFB9C4E0),
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -511,12 +692,37 @@ class _PlusScreenState extends State<PlusScreen> {
                         style: TextStyle(fontSize: 14, color: AppColors.muted)),
                   ],
                 ),
+                if (_storeNotice != null) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0x14E0533D),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline,
+                            size: 18, color: AppColors.closing),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(_storeNotice!,
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  height: 1.4,
+                                  color: AppColors.closing)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
                   height: 54,
                   child: ElevatedButton(
-                    onPressed: _busy ? null : _buy,
+                    onPressed: (_busy || _product == null) ? null : _buy,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
