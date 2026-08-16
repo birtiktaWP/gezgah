@@ -138,6 +138,60 @@ class GlassButton extends StatelessWidget {
   }
 }
 
+/// İkincil sayfa başlığı — kategori/favoriler sayfalarıyla aynı stil: beyaz
+/// zemin, alt çizgi, SafeArea içeride (üstte gereksiz boşluk olmaz), geri
+/// butonu + ortalı başlık + sağda aksiyonlar.
+class PageHeader extends StatelessWidget {
+  final String title;
+  final List<Widget> actions;
+  final VoidCallback? onBack;
+  const PageHeader({
+    super.key,
+    required this.title,
+    this.actions = const [],
+    this.onBack,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        border: Border(bottom: BorderSide(color: AppColors.line)),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Row(
+          children: [
+            GlassButton(
+              icon: Icons.chevron_left,
+              flat: true,
+              onTap: onBack ?? () => Navigator.of(context).maybePop(),
+            ),
+            Expanded(
+              child: Center(
+                child: Text(title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary)),
+              ),
+            ),
+            // Başlığı ortalı tutmak için: aksiyon yoksa sol butona denk boşluk.
+            if (actions.isEmpty)
+              const SizedBox(width: 40)
+            else
+              ...actions,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Bölüm başlığı + "Tümü >" bağlantısı.
 class SectionHead extends StatelessWidget {
   final String title;

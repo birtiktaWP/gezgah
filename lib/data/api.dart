@@ -2474,7 +2474,17 @@ class RotaRepository {
   /// en yeni üstte. Üye olmak şart değil (cihaz token'ı yeterli). [uyeId]
   /// verilirse yalnız o üyenin herkese açık rotaları (UYELIK_PLUS.md §6.1).
   Future<({List<GeziRota> items, bool hasMore, int? nextPage, int total})>
-      kesfet({int? uyeId, int page = 1, int limit = 20}) async {
+      kesfet({
+    int? uyeId,
+    int page = 1,
+    int limit = 20,
+    String? sort, // yeni | begeni | fiyat_artan | fiyat_azalan | mesafe
+    String? tip, // restoran | mesire | plaj
+    int? ilce, // ilçe id
+    double? lat,
+    double? lng,
+    int? mesafeM,
+  }) async {
     const empty =
         (items: <GeziRota>[], hasMore: false, nextPage: null, total: 0);
     try {
@@ -2482,6 +2492,12 @@ class RotaRepository {
         if (uyeId != null && uyeId > 0) 'uye_id': uyeId,
         'page': page,
         'limit': limit,
+        if (sort != null && sort.isNotEmpty && sort != 'yeni') 'sort': sort,
+        if (tip != null && tip.isNotEmpty) 'tip': tip,
+        if (ilce != null && ilce > 0) 'ilce': ilce,
+        if (lat != null && lng != null) 'lat': lat,
+        if (lat != null && lng != null) 'lng': lng,
+        if (mesafeM != null && mesafeM > 0) 'mesafe_m': mesafeM,
       });
       final body = res.data;
       if (body is! Map || body['success'] != true) return empty;
@@ -2502,6 +2518,41 @@ class RotaRepository {
       );
     } catch (_) {
       return empty;
+    }
+  }
+
+  /// `GET /uye/profil/{id}` — üyenin herkese açık profili + rotaları (sayfalı,
+  /// PROFIL_VE_ROTA_URUN.md §2). Cihaz/üye token'ı yeterli; hata/boşta null.
+  Future<({UyeProfil profil, List<GeziRota> rotalar, bool hasMore, int? nextPage, int total})?>
+      profil(int uyeId, {int page = 1, int limit = 20}) async {
+    if (uyeId <= 0) return null;
+    try {
+      final res = await _dio.get('/uye/profil/$uyeId',
+          queryParameters: {'page': page, 'limit': limit},
+          options: await _uyeAuth());
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return null;
+      final data = body['data'];
+      if (data is! Map) return null;
+      final p = data['profil'];
+      if (p is! Map<String, dynamic>) return null;
+      final list = (data['rotalar'] is List)
+          ? (data['rotalar'] as List)
+              .whereType<Map<String, dynamic>>()
+              .map((j) => GeziRota.fromJson(j, host: kApiHost))
+              .where((r) => r.id > 0)
+              .toList()
+          : <GeziRota>[];
+      final meta = (body['meta'] as Map?) ?? const {};
+      return (
+        profil: UyeProfil.fromJson(p, host: kApiHost),
+        rotalar: list,
+        hasMore: meta['has_more'] == true,
+        nextPage: (meta['next_page'] as num?)?.toInt(),
+        total: (meta['total'] as num?)?.toInt() ?? list.length,
+      );
+    } catch (_) {
+      return null;
     }
   }
 
@@ -2562,23 +2613,50 @@ class RotaRepository {
         _dio.delete('/uye/rotalar/$id', options: await _uyeAuth()));
   }
 
-  /// `POST /uye/rotalar/{id}/mekan` — sona mekan ekle (Plus gerekli). Yeni
-  /// durak id'sini döner.
-  Future<int> mekanEkle(int id, {required int postId, String? yorum}) async {
+  /// `GET /uye/rotalar/mekan-menu?post_id=` — mekanın QR menüsü (durağa ürün
+  /// bağlamak için seçici). Cihaz/üye token'ı yeterli; menü yoksa boş liste
+  /// (PROFIL_VE_ROTA_URUN.md §1.1).
+  Future<List<MekanMenuKategori>> mekanMenu(int postId) async {
+    if (postId <= 0) return const [];
+    try {
+      final res = await _dio.get('/uye/rotalar/mekan-menu',
+          queryParameters: {'post_id': postId}, options: await _uyeAuth());
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return const [];
+      final data = body['data'];
+      final menu = data is Map ? data['menu'] : null;
+      if (menu is! List) return const [];
+      return menu
+          .whereType<Map<String, dynamic>>()
+          .map(MekanMenuKategori.fromJson)
+          .where((k) => k.urunler.isNotEmpty)
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// `POST /uye/rotalar/{id}/mekan` — sona mekan ekle (Plus gerekli). [qrId]
+  /// verilirse durağa QR menü ürünü bağlanır. Yeni durak id'sini döner.
+  Future<int> mekanEkle(int id,
+      {required int postId, String? yorum, int? qrId}) async {
     final res = await _post('/uye/rotalar/$id/mekan', {
       'post_id': postId,
       if (yorum != null && yorum.trim().isNotEmpty) 'yorum': yorum.trim(),
+      if (qrId != null && qrId > 0) 'qr_id': qrId,
     });
     final d = res is Map ? res : const {};
     return (d['durak_id'] as num?)?.toInt() ?? 0;
   }
 
-  /// `POST /uye/rotalar/{id}/mekan/guncelle` — durak yorumu güncelle (Plus).
+  /// `POST /uye/rotalar/{id}/mekan/guncelle` — durak yorumu ve/veya ürününü
+  /// güncelle (Plus). [qrId] `0` → ürün seçimini temizler; null → dokunma.
   Future<void> durakGuncelle(int id,
-      {required int durakId, required String yorum}) async {
+      {required int durakId, String? yorum, int? qrId}) async {
     await _post('/uye/rotalar/$id/mekan/guncelle', {
       'durak_id': durakId,
-      'yorum': yorum.trim(),
+      if (yorum != null) 'yorum': yorum.trim(),
+      'qr_id': ?qrId,
     });
   }
 

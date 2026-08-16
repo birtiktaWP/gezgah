@@ -7,11 +7,13 @@ import 'package:image_picker/image_picker.dart';
 
 import '../data/api.dart';
 import '../data/auth_service.dart';
+import '../data/location_service.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import 'detail_screen.dart';
 import 'login_screen.dart';
+import 'member_profile_screen.dart';
 import 'plus_screen.dart';
 
 /// "Gezi Rotalarım" ekranını açar (UYELIK_PLUS.md §6).
@@ -95,19 +97,16 @@ class _RoutesScreenState extends State<RoutesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.pageBg,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            _topBar(),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : (_rotalar.isEmpty ? _empty() : _list()),
-            ),
-          ],
-        ),
+      backgroundColor: AppColors.bg,
+      body: Column(
+        children: [
+          const PageHeader(title: 'Gezi Rotalarım'),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : (_rotalar.isEmpty ? _empty() : _list()),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _create,
@@ -115,22 +114,6 @@ class _RoutesScreenState extends State<RoutesScreen> {
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: const Text('Yeni Rota'),
-      ),
-    );
-  }
-
-  Widget _topBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 6, 16, 6),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.chevron_left, color: AppColors.ink),
-          ),
-          const Text('Gezi Rotalarım',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-        ],
       ),
     );
   }
@@ -222,6 +205,15 @@ class _RoutesScreenState extends State<RoutesScreen> {
                         Text('${r.durakSayisi} durak',
                             style: const TextStyle(
                                 fontSize: 12.5, color: AppColors.muted)),
+                        if (r.fiyatLabel.isNotEmpty) ...[
+                          const Text('  ·  ',
+                              style: TextStyle(color: AppColors.muted)),
+                          Text(r.fiyatLabel,
+                              style: const TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primary)),
+                        ],
                         if (r.herkeseAcik) ...[
                           const Text('  ·  ',
                               style: TextStyle(color: AppColors.muted)),
@@ -328,10 +320,15 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
   Future<void> _addStop() async {
     final picked = await _showPlacePicker(context);
     if (picked == null || !mounted) return;
-    final yorum = await _showCommentDialog(context, title: picked.name);
-    if (!mounted) return;
-    await _guard(() => RotaRepository.instance
-        .mekanEkle(widget.rotaId, postId: picked.id, yorum: yorum));
+    final res = await _showStopSheet(context,
+        postId: picked.id, title: picked.name);
+    if (res == null || !mounted) return;
+    await _guard(() => RotaRepository.instance.mekanEkle(
+          widget.rotaId,
+          postId: picked.id,
+          yorum: res.yorum,
+          qrId: res.urun?.qrId,
+        ));
   }
 
   /// Kapak görseli seç/kaldır (`/uye/rotalar/{id}/kapak`, Plus gerekli).
@@ -425,11 +422,21 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
   }
 
   Future<void> _editStop(RotaDurak d) async {
-    final yorum = await _showCommentDialog(context,
-        title: d.mekan?.name ?? 'Durak', initial: d.yorum);
-    if (yorum == null || !mounted) return;
-    await _guard(() => RotaRepository.instance
-        .durakGuncelle(widget.rotaId, durakId: d.durakId, yorum: yorum));
+    final res = await _showStopSheet(
+      context,
+      postId: d.mekan?.id ?? 0,
+      title: d.mekan?.name ?? 'Durak',
+      initialYorum: d.yorum,
+      initialUrun: d.seciliUrun,
+    );
+    if (res == null || !mounted) return;
+    // qr_id: seçili ürün varsa qrId, yoksa 0 (ürünü temizle).
+    await _guard(() => RotaRepository.instance.durakGuncelle(
+          widget.rotaId,
+          durakId: d.durakId,
+          yorum: res.yorum,
+          qrId: res.urun?.qrId ?? 0,
+        ));
   }
 
   Future<void> _deleteStop(RotaDurak d) async {
@@ -537,6 +544,8 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
       benim: r.benim,
       begeniSayisi: r.begeniSayisi,
       begendim: r.begendim,
+      rotaFiyat: r.rotaFiyat,
+      mesafeM: r.mesafeM,
       duraklar: r.duraklar,
       sahip: RotaSahip(
         uyeId: s.uyeId,
@@ -572,20 +581,45 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final r = _rota;
+    final owner = r != null && r.benim;
     return Scaffold(
-      backgroundColor: AppColors.pageBg,
-      body: SafeArea(
-        bottom: false,
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : r == null
-                ? _notFound()
-                : Column(
-                    children: [
-                      _topBar(r),
-                      Expanded(child: _body(r)),
-                    ],
-                  ),
+      backgroundColor: AppColors.bg,
+      body: Column(
+        children: [
+          PageHeader(
+            title: 'Rota Detayı',
+            actions: owner
+                ? [
+                    IconButton(
+                      tooltip: 'Kapak görseli',
+                      onPressed: _changeCover,
+                      icon: const Icon(Icons.image_outlined,
+                          color: AppColors.primary),
+                    ),
+                    IconButton(
+                      onPressed: _editRoute,
+                      icon: const Icon(Icons.edit_outlined,
+                          color: AppColors.primary),
+                    ),
+                    IconButton(
+                      onPressed: _deleteRoute,
+                      icon: const Icon(Icons.delete_outline,
+                          color: AppColors.closing),
+                    ),
+                  ]
+                : const [],
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : r == null
+                    ? const Center(
+                        child: Text('Rota bulunamadı.',
+                            style: TextStyle(color: AppColors.muted)),
+                      )
+                    : _body(r),
+          ),
+        ],
       ),
       // Durak ekleme yalnız rota sahibine (UYELIK_PLUS.md §6 — Plus yazma).
       floatingActionButton: (!_loading && r != null && r.benim)
@@ -597,54 +631,6 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
               label: const Text('Durak Ekle'),
             )
           : null,
-    );
-  }
-
-  Widget _notFound() {
-    return Column(
-      children: [
-        _topBar(null),
-        const Expanded(
-          child: Center(
-            child: Text('Rota bulunamadı.',
-                style: TextStyle(color: AppColors.muted)),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _topBar(GeziRota? r) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.chevron_left, color: AppColors.ink),
-          ),
-          const Expanded(
-            child: Text('Rota Detayı',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-          ),
-          // Düzenle/sil/kapak yalnız rota sahibine.
-          if (r != null && r.benim) ...[
-            IconButton(
-              tooltip: 'Kapak görseli',
-              onPressed: _changeCover,
-              icon: const Icon(Icons.image_outlined, color: AppColors.primary),
-            ),
-            IconButton(
-              onPressed: _editRoute,
-              icon: const Icon(Icons.edit_outlined, color: AppColors.primary),
-            ),
-            IconButton(
-              onPressed: _deleteRoute,
-              icon: const Icon(Icons.delete_outline, color: AppColors.closing),
-            ),
-          ],
-        ],
-      ),
     );
   }
 
@@ -737,27 +723,29 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                     style: const TextStyle(
                         fontSize: 19, fontWeight: FontWeight.w600)),
               ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: AppColors.primarySoft,
-                  borderRadius: BorderRadius.circular(999),
+              // Yalnız "Gizli" rozeti gösterilir; herkese açık rozetine gerek yok.
+              if (!r.herkeseAcik)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: AppColors.primarySoft,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.lock_outline,
+                          size: 13, color: AppColors.primary),
+                      SizedBox(width: 4),
+                      Text('Gizli',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary)),
+                    ],
+                  ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(r.herkeseAcik ? Icons.public : Icons.lock_outline,
-                        size: 13, color: AppColors.primary),
-                    const SizedBox(width: 4),
-                    Text(r.herkeseAcik ? 'Herkese açık' : 'Gizli',
-                        style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.primary)),
-                  ],
-                ),
-              ),
             ],
           ),
           if (r.aciklama.isNotEmpty) ...[
@@ -774,18 +762,46 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
                       color: AppColors.ink)),
-              // Başkasının rotasıysa sahip bilgisini göster.
+              // Rota toplam fiyatı (seçili ürünler) — varsa göster.
+              if (r.fiyatLabel.isNotEmpty) ...[
+                const Text('  ·  ', style: TextStyle(color: AppColors.muted)),
+                Text(r.fiyatLabel,
+                    style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary)),
+              ],
+              // Başkasının rotasıysa sahip bilgisi — profiline tıklanabilir.
               if (!r.benim && r.sahip != null) ...[
                 const Text('  ·  ', style: TextStyle(color: AppColors.muted)),
-                _ownerAvatar(r.sahip!.avatar, 18),
-                const SizedBox(width: 6),
                 Flexible(
-                  child: Text(
-                    r.sahip!.adSoyad.isEmpty ? 'Üye' : r.sahip!.adSoyad,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 12.5, color: AppColors.muted),
+                  child: GestureDetector(
+                    onTap: () => openMemberProfile(
+                      context,
+                      uyeId: r.sahip!.uyeId,
+                      isim: r.sahip!.isim,
+                      soyisim: r.sahip!.soyisim,
+                      avatar: r.sahip!.avatar,
+                      takipEdiyorum: r.sahip!.takipEdiyorum,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _ownerAvatar(r.sahip!.avatar, 18),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            r.sahip!.adSoyad.isEmpty ? 'Üye' : r.sahip!.adSoyad,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -840,7 +856,9 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
         ? OutlinedButton.icon(
             onPressed: _toggleFollow,
             icon: const Icon(Icons.check, size: 18),
-            label: const Text('Takip ediliyor',
+            label: const Text('Takipte',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontWeight: FontWeight.w600)),
             style: OutlinedButton.styleFrom(
               foregroundColor: AppColors.primary,
@@ -853,6 +871,8 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
             onPressed: _toggleFollow,
             icon: const Icon(Icons.person_add_alt, size: 18),
             label: const Text('Takip Et',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontWeight: FontWeight.w600)),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
@@ -862,6 +882,48 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                   borderRadius: BorderRadius.circular(12)),
             ),
           );
+  }
+
+  /// Durağa bağlı QR menü ürünü rozeti (küçük görsel + ad + fiyat).
+  Widget _urunRozet(RotaUrun u) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(4, 4, 10, 4),
+      decoration: BoxDecoration(
+        color: AppColors.primarySoft,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: SizedBox(
+              width: 22,
+              height: 22,
+              child: u.gorsel.isNotEmpty
+                  ? NetImage(u.gorsel)
+                  : Container(
+                      color: Colors.white,
+                      child: const Icon(Icons.restaurant_menu,
+                          size: 13, color: AppColors.primary),
+                    ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              u.fiyatLabel.isEmpty ? u.ad : '${u.ad} · ${u.fiyatLabel}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Küçük yuvarlak sahip avatarı (yoksa baş harf yerine kişi ikonu).
@@ -971,6 +1033,11 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                               fontSize: 12.5,
                               height: 1.4,
                               color: AppColors.muted)),
+                    ],
+                    // Durağa bağlı QR menü ürünü (PROFIL_VE_ROTA_URUN.md §1.4).
+                    if (d.seciliUrun != null) ...[
+                      const SizedBox(height: 6),
+                      _urunRozet(d.seciliUrun!),
                     ],
                   ],
                 ),
@@ -1128,34 +1195,330 @@ Widget _field(TextEditingController c, String label, String hint,
 }
 
 /// Durak yorumu giriş dialogu. Kaydedilirse metni (boş olabilir) döner.
-Future<String?> _showCommentDialog(BuildContext context,
-    {required String title, String? initial}) {
-  final c = TextEditingController(text: initial ?? '');
-  return showDialog<String>(
+/// Durak düzenleme sheet'i: not + (opsiyonel) QR menü ürünü seçimi. Kaydedilirse
+/// `(yorum, urun)` döner (urun null → ürün yok/temizlendi); iptalde null.
+Future<({String yorum, RotaUrun? urun})?> _showStopSheet(
+  BuildContext context, {
+  required int postId,
+  required String title,
+  String initialYorum = '',
+  RotaUrun? initialUrun,
+}) {
+  return showModalBottomSheet<({String yorum, RotaUrun? urun})>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-      content: TextField(
-        controller: c,
-        maxLines: 3,
-        autofocus: true,
-        decoration: const InputDecoration(
-          hintText: 'Bu durak için notun (opsiyonel)',
-          border: OutlineInputBorder(),
-        ),
-      ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(ctx), child: const Text('Vazgeç')),
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, c.text.trim()),
-          child: const Text('Kaydet',
-              style: TextStyle(fontWeight: FontWeight.w600)),
-        ),
-      ],
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _StopSheet(
+      postId: postId,
+      title: title,
+      initialYorum: initialYorum,
+      initialUrun: initialUrun,
     ),
   );
+}
+
+class _StopSheet extends StatefulWidget {
+  final int postId;
+  final String title;
+  final String initialYorum;
+  final RotaUrun? initialUrun;
+  const _StopSheet({
+    required this.postId,
+    required this.title,
+    this.initialYorum = '',
+    this.initialUrun,
+  });
+
+  @override
+  State<_StopSheet> createState() => _StopSheetState();
+}
+
+class _StopSheetState extends State<_StopSheet> {
+  late final TextEditingController _yorumC =
+      TextEditingController(text: widget.initialYorum);
+  late RotaUrun? _urun = widget.initialUrun;
+
+  @override
+  void dispose() {
+    _yorumC.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickProduct() async {
+    final urun = await _showMenuPicker(context, widget.postId);
+    if (urun != null && mounted) setState(() => _urun = urun);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: AppColors.bg,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: AppColors.line,
+                    borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(widget.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 16),
+            _field(_yorumC, 'Not (opsiyonel)', 'Bu durak için notun',
+                maxLines: 3),
+            const SizedBox(height: 16),
+            const Text('Menüden ürün (opsiyonel)',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            if (_urun != null)
+              _selectedProduct(_urun!)
+            else
+              OutlinedButton.icon(
+                onPressed: widget.postId > 0 ? _pickProduct : null,
+                icon: const Icon(Icons.restaurant_menu, size: 18),
+                label: const Text('Menüden ürün seç'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.line),
+                  minimumSize: const Size(double.infinity, 48),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(
+                    context, (yorum: _yorumC.text.trim(), urun: _urun)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+                child: const Text('Kaydet',
+                    style:
+                        TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _selectedProduct(RotaUrun u) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: AppColors.primarySoft,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: u.gorsel.isNotEmpty
+                  ? NetImage(u.gorsel)
+                  : Container(
+                      color: Colors.white,
+                      child: const Icon(Icons.restaurant_menu,
+                          color: AppColors.primary)),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(u.ad,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w600)),
+                if (u.fiyatLabel.isNotEmpty)
+                  Text(u.fiyatLabel,
+                      style: const TextStyle(
+                          fontSize: 12.5, color: AppColors.muted)),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Değiştir',
+            onPressed: widget.postId > 0 ? _pickProduct : null,
+            icon: const Icon(Icons.swap_horiz, color: AppColors.primary),
+          ),
+          IconButton(
+            tooltip: 'Kaldır',
+            onPressed: () => setState(() => _urun = null),
+            icon: const Icon(Icons.close, color: AppColors.muted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Mekanın QR menüsünden ürün seçici (`/uye/rotalar/mekan-menu`). Seçilen
+/// ürünü döner; iptalde null.
+Future<RotaUrun?> _showMenuPicker(BuildContext context, int postId) {
+  return showModalBottomSheet<RotaUrun>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _MenuPickerSheet(postId: postId),
+  );
+}
+
+class _MenuPickerSheet extends StatefulWidget {
+  final int postId;
+  const _MenuPickerSheet({required this.postId});
+
+  @override
+  State<_MenuPickerSheet> createState() => _MenuPickerSheetState();
+}
+
+class _MenuPickerSheetState extends State<_MenuPickerSheet> {
+  List<MekanMenuKategori> _menu = const [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final m = await RotaRepository.instance.mekanMenu(widget.postId);
+    if (!mounted) return;
+    setState(() {
+      _menu = m;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.8,
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Row(
+              children: [
+                const Text('Menüden Ürün Seç',
+                    style:
+                        TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close, color: AppColors.ink),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _menu.isEmpty
+                    ? const Center(
+                        child: Text('Bu mekanın menüsü yok.',
+                            style: TextStyle(color: AppColors.muted)),
+                      )
+                    : ListView(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                        children: [
+                          for (final k in _menu) ...[
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+                              child: Text(k.kategori,
+                                  style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.ink)),
+                            ),
+                            for (final u in k.urunler) _urunTile(u),
+                          ],
+                        ],
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _urunTile(RotaUrun u) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => Navigator.pop(context, u),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: AppShadows.listTile,
+          ),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: u.gorsel.isNotEmpty
+                      ? NetImage(u.gorsel)
+                      : Container(
+                          color: AppColors.primarySoft,
+                          child: const Icon(Icons.restaurant_menu,
+                              color: AppColors.primary)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(u.ad,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w600)),
+              ),
+              if (u.fiyatLabel.isNotEmpty)
+                Text(u.fiyatLabel,
+                    style: const TextStyle(
+                        fontSize: 13, color: AppColors.muted)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Mekan arama seçici (durak eklemek için). Seçilen mekanı döner.
@@ -1306,21 +1669,77 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
 /// Keşfet: herkese açık gezi rotaları akışı (`GET /rotalar`). Tekli, tam
 /// genişlikte satırlar — solda kapak görseli, sağda rota adı + sahip + durak
 /// sayısı. Sonsuz kaydırmayla sayfalanır (UYELIK_PLUS.md §6.1).
-class DiscoverRoutesScreen extends StatefulWidget {
+class DiscoverRoutesScreen extends StatelessWidget {
   const DiscoverRoutesScreen({super.key});
 
   @override
-  State<DiscoverRoutesScreen> createState() => _DiscoverRoutesScreenState();
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: AppColors.bg,
+        body: Column(
+          children: const [
+            PageHeader(title: 'Gezi Rotaları'),
+            TabBar(
+              labelColor: AppColors.primary,
+              unselectedLabelColor: AppColors.muted,
+              indicatorColor: AppColors.primary,
+              labelStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              tabs: [Tab(text: 'Keşfet'), Tab(text: 'Takip')],
+            ),
+            Expanded(
+              child: TabBarView(
+                children: [
+                  _RouteFeed(follow: false),
+                  _RouteFeed(follow: true),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen> {
+/// Tek bir rota akışı: Keşfet (herkese açık) ya da Takip (takip edilenler).
+/// Kaymalı sekmeler (TabBarView) içinde kullanılır; kendi durumunu korur.
+class _RouteFeed extends StatefulWidget {
+  final bool follow;
+  const _RouteFeed({required this.follow});
+
+  @override
+  State<_RouteFeed> createState() => _RouteFeedState();
+}
+
+class _RouteFeedState extends State<_RouteFeed>
+    with AutomaticKeepAliveClientMixin {
   final ScrollController _scroll = ScrollController();
   final List<GeziRota> _items = [];
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = false;
   int _nextPage = 2;
-  int _mode = 0; // 0: Keşfet (herkese açık) · 1: Takip (takip edilenler)
+
+  // Sıralama + filtre (yalnız Keşfet sekmesi, KESFET_SIRALAMA_FILTRE.md).
+  String _sort = 'yeni'; // yeni | begeni | fiyat_artan | fiyat_azalan | mesafe
+  String? _tip; // restoran | mesire | plaj
+  int? _ilce; // ilçe id
+  String? _ilceAd;
+  double? _lat;
+  double? _lng;
+
+  static const Map<String, String> _sortLabels = {
+    'yeni': 'En yeni',
+    'begeni': 'En beğenilen',
+    'fiyat_artan': 'Fiyat (artan)',
+    'fiyat_azalan': 'Fiyat (azalan)',
+    'mesafe': 'Bana en yakın',
+  };
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -1337,9 +1756,27 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen> {
 
   Future<({List<GeziRota> items, bool hasMore, int? nextPage, int total})>
       _fetch(int page) {
-    return _mode == 1
-        ? RotaRepository.instance.takipAkisi(page: page, limit: 20)
-        : RotaRepository.instance.kesfet(page: page, limit: 20);
+    if (widget.follow) {
+      return RotaRepository.instance.takipAkisi(page: page, limit: 20);
+    }
+    return RotaRepository.instance.kesfet(
+      page: page,
+      limit: 20,
+      sort: _sort,
+      tip: _tip,
+      ilce: _ilce,
+      lat: _sort == 'mesafe' ? _lat : null,
+      lng: _sort == 'mesafe' ? _lng : null,
+    );
+  }
+
+  /// Sıralama/filtre değişince listeyi baştan yükler.
+  void _applyChange() {
+    setState(() {
+      _items.clear();
+      _loading = true;
+    });
+    _load();
   }
 
   Future<void> _load() async {
@@ -1358,8 +1795,7 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen> {
 
   void _onScroll() {
     if (!_hasMore || _loadingMore) return;
-    if (_scroll.position.pixels >=
-        _scroll.position.maxScrollExtent - 400) {
+    if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 400) {
       _loadMore();
     }
   }
@@ -1377,80 +1813,231 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen> {
     });
   }
 
-  void _setMode(int m) {
-    if (_mode == m) return;
-    setState(() {
-      _mode = m;
-      _items.clear();
-    });
-    _load();
-  }
-
   @override
   Widget build(BuildContext context) {
-    final needsLogin = _mode == 1 && !AuthService.instance.isLoggedIn;
-    return Scaffold(
-      backgroundColor: AppColors.pageBg,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            _topBar(),
-            _segmented(),
-            Expanded(
-              child: needsLogin
-                  ? _loginGate()
-                  : _loading
-                      ? const Center(child: CircularProgressIndicator())
-                      : (_items.isEmpty ? _empty() : _list()),
-            ),
-          ],
-        ),
+    super.build(context);
+    if (widget.follow && !AuthService.instance.isLoggedIn) return _loginGate();
+    final content = _loading
+        ? const Center(child: CircularProgressIndicator())
+        : (_items.isEmpty ? _empty() : _list());
+    if (widget.follow) return content;
+    // Keşfet: üstte sıralama + filtre çubuğu.
+    return Column(
+      children: [
+        _controls(),
+        Expanded(child: content),
+      ],
+    );
+  }
+
+  // ---- Sıralama + filtre çubuğu ---------------------------------------------
+
+  Widget _controls() {
+    return SizedBox(
+      height: 46,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        children: [
+          _chip(
+            icon: Icons.swap_vert,
+            label: _sortLabels[_sort] ?? 'Sırala',
+            active: _sort != 'yeni',
+            onTap: _openSort,
+          ),
+          const SizedBox(width: 8),
+          _chip(
+            label: 'Restoran',
+            active: _tip == 'restoran',
+            onTap: () => _toggleTip('restoran'),
+          ),
+          const SizedBox(width: 8),
+          _chip(
+            label: 'Mesire',
+            active: _tip == 'mesire',
+            onTap: () => _toggleTip('mesire'),
+          ),
+          const SizedBox(width: 8),
+          _chip(
+            label: 'Plaj',
+            active: _tip == 'plaj',
+            onTap: () => _toggleTip('plaj'),
+          ),
+          const SizedBox(width: 8),
+          _chip(
+            icon: Icons.place_outlined,
+            label: _ilceAd ?? 'İlçe',
+            active: _ilce != null,
+            onTap: _openIlce,
+            onClear: _ilce != null
+                ? () {
+                    setState(() {
+                      _ilce = null;
+                      _ilceAd = null;
+                    });
+                    _applyChange();
+                  }
+                : null,
+          ),
+        ],
       ),
     );
   }
 
-  Widget _segmented() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+  Widget _chip({
+    required String label,
+    required bool active,
+    required VoidCallback onTap,
+    IconData? icon,
+    VoidCallback? onClear,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(4),
+        padding: EdgeInsets.fromLTRB(icon != null ? 10 : 14, 0, 12, 0),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: AppColors.primarySoft,
-          borderRadius: BorderRadius.circular(12),
+          color: active ? AppColors.primary : Colors.white,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+              color: active ? AppColors.primary : AppColors.line),
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            _segTab('Keşfet', 0),
-            _segTab('Takip', 1),
+            if (icon != null) ...[
+              Icon(icon,
+                  size: 15,
+                  color: active ? Colors.white : AppColors.primary),
+              const SizedBox(width: 5),
+            ],
+            Text(label,
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: active ? Colors.white : AppColors.ink)),
+            if (onClear != null) ...[
+              const SizedBox(width: 4),
+              GestureDetector(
+                onTap: onClear,
+                child: Icon(Icons.close,
+                    size: 15,
+                    color: active ? Colors.white : AppColors.muted),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _segTab(String label, int m) {
-    final active = _mode == m;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => _setMode(m),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(vertical: 9),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: active ? Colors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(9),
-            boxShadow: active ? AppShadows.listTile : null,
-          ),
-          child: Text(label,
-              style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w600,
-                  color: active ? AppColors.primary : AppColors.muted)),
+  void _toggleTip(String tip) {
+    setState(() => _tip = _tip == tip ? null : tip);
+    _applyChange();
+  }
+
+  Future<void> _openSort() async {
+    final secili = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 6),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Sırala',
+                    style: TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w600)),
+              ),
+            ),
+            for (final e in _sortLabels.entries)
+              ListTile(
+                title: Text(e.value),
+                trailing: _sort == e.key
+                    ? const Icon(Icons.check, color: AppColors.primary)
+                    : null,
+                onTap: () => Navigator.pop(ctx, e.key),
+              ),
+            const SizedBox(height: 8),
+          ],
         ),
       ),
     );
+    if (secili == null || secili == _sort) return;
+    // "Mesafe" için konum çöz.
+    if (secili == 'mesafe') {
+      final loc = await LocationService.resolve();
+      if (!mounted) return;
+      _lat = loc.lat;
+      _lng = loc.lng;
+    }
+    setState(() => _sort = secili);
+    _applyChange();
+  }
+
+  Future<void> _openIlce() async {
+    final ilceler = await UyeRepository.instance.ilceler();
+    if (!mounted) return;
+    if (ilceler.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('İlçe listesi alınamadı.')));
+      return;
+    }
+    final secili = await showModalBottomSheet<Ilce>(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: SizedBox(
+          height: MediaQuery.of(ctx).size.height * 0.7,
+          child: Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 16, 20, 6),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('İlçe seç',
+                      style: TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w600)),
+                ),
+              ),
+              Expanded(
+                child: ListView(
+                  children: [
+                    for (final i in ilceler)
+                      ListTile(
+                        title: Text(i.ad),
+                        trailing: _ilce == i.id
+                            ? const Icon(Icons.check,
+                                color: AppColors.primary)
+                            : null,
+                        onTap: () => Navigator.pop(ctx, i),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (secili == null || !mounted) return;
+    setState(() {
+      _ilce = secili.id;
+      _ilceAd = secili.ad;
+    });
+    _applyChange();
   }
 
   Widget _loginGate() {
@@ -1493,24 +2080,6 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _topBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 6, 16, 6),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.chevron_left, color: AppColors.ink),
-          ),
-          const ShipWheelIcon(size: 20),
-          const SizedBox(width: 8),
-          const Text('Gezi Rotaları',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-        ],
       ),
     );
   }
@@ -1653,6 +2222,20 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen> {
                                 fontSize: 12.5, color: AppColors.muted)),
                       ],
                     ),
+                    // Fiyat / mesafe rozetleri (varsa) — sıralamaya göre dolar.
+                    if (r.fiyatLabel.isNotEmpty || r.mesafeLabel.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          if (r.fiyatLabel.isNotEmpty)
+                            _badge(Icons.payments_outlined, r.fiyatLabel),
+                          if (r.mesafeLabel.isNotEmpty)
+                            _badge(Icons.near_me_outlined, r.mesafeLabel),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1661,6 +2244,28 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _badge(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.primarySoft,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: AppColors.primary),
+          const SizedBox(width: 4),
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary)),
+        ],
       ),
     );
   }

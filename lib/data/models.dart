@@ -497,6 +497,8 @@ class GeziRota {
   final bool benim; // detayda: rota oturumdaki üyeye mi ait
   final int begeniSayisi; // rotanın toplam beğeni sayısı
   final bool begendim; // isteği yapan üye bu rotayı beğendi mi
+  final double? rotaFiyat; // seçili ürünlerin fiyat toplamı (yoksa null)
+  final int? mesafeM; // ilk durağa mesafe (metre); konum verildiyse
   final List<RotaDurak> duraklar; // yalnız detay yanıtında dolu
 
   const GeziRota({
@@ -510,10 +512,27 @@ class GeziRota {
     this.benim = false,
     this.begeniSayisi = 0,
     this.begendim = false,
+    this.rotaFiyat,
+    this.mesafeM,
     this.duraklar = const [],
   });
 
   bool get herkeseAcik => gorunurluk == 'herkese_acik';
+
+  /// "₺450" — seçili ürünler fiyat toplamı (yoksa '').
+  String get fiyatLabel {
+    final f = rotaFiyat;
+    if (f == null || f <= 0) return '';
+    final s = f == f.roundToDouble() ? f.toInt().toString() : f.toStringAsFixed(2);
+    return '₺$s';
+  }
+
+  /// "3.5 km" / "450 m" — ilk durağa mesafe (yoksa '').
+  String get mesafeLabel {
+    final m = mesafeM;
+    if (m == null) return '';
+    return m >= 1000 ? '${(m / 1000).toStringAsFixed(1)} km' : '$m m';
+  }
 
   /// Beğeni sayısı/durumu güncellenmiş kopya (optimistic UI için).
   GeziRota copyWithBegeni({required bool begendim, required int begeniSayisi}) =>
@@ -528,6 +547,8 @@ class GeziRota {
         benim: benim,
         begeniSayisi: begeniSayisi,
         begendim: begendim,
+        rotaFiyat: rotaFiyat,
+        mesafeM: mesafeM,
         duraklar: duraklar,
       );
 
@@ -554,6 +575,8 @@ class GeziRota {
       benim: j['benim'] == true,
       begeniSayisi: (j['begeni_sayisi'] as num?)?.toInt() ?? 0,
       begendim: j['begendim'] == true,
+      rotaFiyat: (j['rota_fiyat'] as num?)?.toDouble(),
+      mesafeM: (j['mesafe_m'] as num?)?.toInt(),
       duraklar: duraklar,
     );
   }
@@ -626,13 +649,15 @@ class TakipUye {
 }
 
 /// Rota durağı (`/uye/rotalar/{id}` → `duraklar[]`). Silinmiş mekan
-/// [silinmis]=true ve [mekan]=null olur.
+/// [silinmis]=true ve [mekan]=null olur. [seciliUrun] durağa bağlı QR menü
+/// ürünü (PROFIL_VE_ROTA_URUN.md §1); yoksa null.
 class RotaDurak {
   final int durakId;
   final int sira;
   final String yorum;
   final RotaMekan? mekan;
   final bool silinmis;
+  final RotaUrun? seciliUrun;
 
   const RotaDurak({
     required this.durakId,
@@ -640,6 +665,7 @@ class RotaDurak {
     this.yorum = '',
     this.mekan,
     this.silinmis = false,
+    this.seciliUrun,
   });
 
   factory RotaDurak.fromJson(Map<String, dynamic> j, {String host = ''}) {
@@ -655,8 +681,121 @@ class RotaDurak {
           ? RotaMekan.fromJson(m, host: host)
           : null,
       silinmis: silinmis,
+      seciliUrun: j['secili_urun'] is Map<String, dynamic>
+          ? RotaUrun.fromJson(j['secili_urun'] as Map<String, dynamic>)
+          : null,
     );
   }
+}
+
+/// Rota durağına bağlanabilen QR menü ürünü (PROFIL_VE_ROTA_URUN.md §1).
+/// [gorsel] QR menü `img.php` proxy tam URL'idir.
+class RotaUrun {
+  final int qrId;
+  final String ad;
+  final String fiyat; // ham metin
+  final String gorsel; // tam URL; yoksa ''
+  const RotaUrun({
+    required this.qrId,
+    this.ad = '',
+    this.fiyat = '',
+    this.gorsel = '',
+  });
+
+  /// "350 ₺" / fiyat yoksa ''.
+  String get fiyatLabel => fiyat.trim().isEmpty ? '' : '$fiyat ₺';
+
+  factory RotaUrun.fromJson(Map<String, dynamic> j) => RotaUrun(
+        qrId: (j['qr_id'] as num?)?.toInt() ?? 0,
+        ad: (j['ad'] as String?)?.trim() ?? '',
+        fiyat: j['fiyat']?.toString().trim() ?? '',
+        gorsel: (j['gorsel'] as String?)?.trim() ?? '',
+      );
+}
+
+/// Mekan QR menüsü kategorisi (ürün seçici, `/uye/rotalar/mekan-menu`).
+class MekanMenuKategori {
+  final int kategoriId;
+  final String kategori;
+  final List<RotaUrun> urunler;
+  const MekanMenuKategori({
+    this.kategoriId = 0,
+    this.kategori = '',
+    this.urunler = const [],
+  });
+
+  factory MekanMenuKategori.fromJson(Map<String, dynamic> j) =>
+      MekanMenuKategori(
+        kategoriId: (j['kategori_id'] as num?)?.toInt() ?? 0,
+        kategori: (j['kategori'] as String?)?.trim() ?? '',
+        urunler: (j['urunler'] is List)
+            ? (j['urunler'] as List)
+                .whereType<Map<String, dynamic>>()
+                .map(RotaUrun.fromJson)
+                .where((u) => u.qrId > 0)
+                .toList()
+            : const <RotaUrun>[],
+      );
+}
+
+/// Üye herkese açık profili (`GET /uye/profil/{id}`, PROFIL_VE_ROTA_URUN.md §2).
+class UyeProfil {
+  final int uyeId;
+  final String isim;
+  final String soyisim;
+  final String avatar;
+  final int rotaSayisi;
+  final int takipciSayisi;
+  final int takipEdilenSayisi;
+  final int toplamBegeni;
+  final bool? takipEdiyorum; // kendi/anonim → null
+  final bool benim;
+
+  const UyeProfil({
+    required this.uyeId,
+    this.isim = '',
+    this.soyisim = '',
+    this.avatar = '',
+    this.rotaSayisi = 0,
+    this.takipciSayisi = 0,
+    this.takipEdilenSayisi = 0,
+    this.toplamBegeni = 0,
+    this.takipEdiyorum,
+    this.benim = false,
+  });
+
+  String get adSoyad {
+    final n = [isim, soyisim].where((s) => s.trim().isNotEmpty).join(' ').trim();
+    return n.isEmpty ? 'Üye' : n;
+  }
+
+  UyeProfil copyWith({bool? takipEdiyorum, int? takipciSayisi}) => UyeProfil(
+        uyeId: uyeId,
+        isim: isim,
+        soyisim: soyisim,
+        avatar: avatar,
+        rotaSayisi: rotaSayisi,
+        takipciSayisi: takipciSayisi ?? this.takipciSayisi,
+        takipEdilenSayisi: takipEdilenSayisi,
+        toplamBegeni: toplamBegeni,
+        takipEdiyorum: takipEdiyorum ?? this.takipEdiyorum,
+        benim: benim,
+      );
+
+  factory UyeProfil.fromJson(Map<String, dynamic> j, {String host = ''}) =>
+      UyeProfil(
+        uyeId: (j['uye_id'] as num?)?.toInt() ?? 0,
+        isim: (j['isim'] as String?)?.trim() ?? '',
+        soyisim: (j['soyisim'] as String?)?.trim() ?? '',
+        avatar: _absUrl(j['avatar'], host),
+        rotaSayisi: (j['rota_sayisi'] as num?)?.toInt() ?? 0,
+        takipciSayisi: (j['takipci_sayisi'] as num?)?.toInt() ?? 0,
+        takipEdilenSayisi: (j['takip_edilen_sayisi'] as num?)?.toInt() ?? 0,
+        toplamBegeni: (j['toplam_begeni'] as num?)?.toInt() ?? 0,
+        takipEdiyorum:
+            j['takip_ediyorum'] is bool ? j['takip_ediyorum'] as bool : null,
+        benim: j['benim'] == true,
+      );
 }
 
 /// Rota durağındaki mekan özeti (`duraklar[].mekan`).
