@@ -12,6 +12,7 @@ import '../widgets/typewriter.dart';
 import 'category_screen.dart';
 import 'detail_screen.dart';
 import 'map_screen.dart';
+import 'routes_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback onOpenSearch;
@@ -390,14 +391,23 @@ class _HomeScreenState extends State<HomeScreen> {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 22),
-        itemCount: HomeConfig.tumu.length,
+        // 0: Gezi Rotaları (keşfet) kısayolu; sonrası "Tümü" post type'ları.
+        itemCount: HomeConfig.tumu.length + 1,
         separatorBuilder: (_, __) => const SizedBox(width: 10),
         itemBuilder: (_, i) {
-          final s = HomeConfig.tumu[i];
+          if (i == 0) {
+            return CategoryPill(
+              icon: Icons.explore, // yedek; asıl ikon iconWidget ile çizilir
+              iconWidget: const ShipWheelIcon(size: 16),
+              label: 'Gezi Rotaları',
+              onTap: () => openDiscoverRoutes(context),
+            );
+          }
+          final s = HomeConfig.tumu[i - 1];
           return CategoryPill(
             icon: HomeConfig.iconFor(s.id),
             label: s.name,
-            active: _activeShortcut == i,
+            active: _activeShortcut == (i - 1),
             // Bunlar kategori değil post type — type bazlı liste ekranını aç.
             onTap: s.type.isNotEmpty ? () => _openType(s.type, s.name) : null,
           );

@@ -2470,7 +2470,42 @@ class RotaRepository {
     }
   }
 
-  /// `GET /uye/rotalar/{id}` — rota detayı (sıralı duraklar + yorumlar).
+  /// `GET /rotalar` — keşfet akışı: herkese açık rotalar (sahip bilgisiyle),
+  /// en yeni üstte. Üye olmak şart değil (cihaz token'ı yeterli). [uyeId]
+  /// verilirse yalnız o üyenin herkese açık rotaları (UYELIK_PLUS.md §6.1).
+  Future<({List<GeziRota> items, bool hasMore, int? nextPage, int total})>
+      kesfet({int? uyeId, int page = 1, int limit = 20}) async {
+    const empty =
+        (items: <GeziRota>[], hasMore: false, nextPage: null, total: 0);
+    try {
+      final res = await _dio.get('/rotalar', queryParameters: {
+        if (uyeId != null && uyeId > 0) 'uye_id': uyeId,
+        'page': page,
+        'limit': limit,
+      });
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return empty;
+      final data = body['data'];
+      final list = (data is List)
+          ? data
+              .whereType<Map<String, dynamic>>()
+              .map((j) => GeziRota.fromJson(j, host: kApiHost))
+              .where((r) => r.id > 0)
+              .toList()
+          : <GeziRota>[];
+      final meta = (body['meta'] as Map?) ?? const {};
+      return (
+        items: list,
+        hasMore: meta['has_more'] == true,
+        nextPage: (meta['next_page'] as num?)?.toInt(),
+        total: (meta['total'] as num?)?.toInt() ?? list.length,
+      );
+    } catch (_) {
+      return empty;
+    }
+  }
+
+  /// `GET /uye/rotalar/{id}` — rota detayı (sıralı duraklar + yorumlar + sahip).
   Future<GeziRota?> detay(int id) async {
     if (id <= 0) return null;
     try {
@@ -2556,6 +2591,97 @@ class RotaRepository {
   /// `POST /uye/rotalar/{id}/sirala` — durakları sırala (Plus gerekli).
   Future<void> sirala(int id, {required List<int> sira}) async {
     await _post('/uye/rotalar/$id/sirala', {'sira': sira});
+  }
+
+  /// `POST /uye/rotalar/{id}/kapak` — kapak görseli yükle (Plus gerekli).
+  /// [base64] çıplak base64 veya `data:image/...;base64,...`. Yeni kapak
+  /// görselinin tam URL'ini döner (UYELIK_PLUS.md §6.2).
+  Future<String> kapakYukle(int id, String base64) async {
+    final res = await _post('/uye/rotalar/$id/kapak', {'kapak': base64});
+    final d = res is Map ? res : const {};
+    return (d['kapak_gorsel'] as String?) ?? '';
+  }
+
+  /// `DELETE /uye/rotalar/{id}/kapak` — kapak görselini kaldır (Plus şartı yok).
+  Future<void> kapakSil(int id) async {
+    await _send(() async => _dio.delete('/uye/rotalar/$id/kapak',
+        options: await _uyeAuth()));
+  }
+
+  // ---- Beğeni (SOSYAL_BEGENI_TAKIP.md §1) — giriş gerekir, Plus GEREKMEZ ----
+
+  /// `POST /uye/rotalar/{id}/begen` — rotayı beğen (idempotent). Güncel
+  /// `begendim` + `begeni_sayisi` döner. Giriş yoksa [AuthException],
+  /// gizli/başkası rotasında 403 → [RotaException].
+  Future<({bool begendim, int begeniSayisi})> begen(int id) async {
+    final token = await _requireUyeToken();
+    final res = await _dio.post('/uye/rotalar/$id/begen',
+        options: Options(headers: {'Authorization': 'Bearer $token'}));
+    return _parseBegeni(res);
+  }
+
+  /// `DELETE /uye/rotalar/{id}/begen` — beğeniyi kaldır.
+  Future<({bool begendim, int begeniSayisi})> begeniKaldir(int id) async {
+    final token = await _requireUyeToken();
+    final res = await _dio.delete('/uye/rotalar/$id/begen',
+        options: Options(headers: {'Authorization': 'Bearer $token'}));
+    return _parseBegeni(res);
+  }
+
+  /// `GET /uye/rotalar/takip-akisi` — takip edilenlerin herkese açık rotaları,
+  /// en yeni üstte. Giriş yoksa boş döner (UI giriş kapısı gösterir).
+  Future<({List<GeziRota> items, bool hasMore, int? nextPage, int total})>
+      takipAkisi({int page = 1, int limit = 20}) async {
+    const empty =
+        (items: <GeziRota>[], hasMore: false, nextPage: null, total: 0);
+    final token = await Api.instance.uyeToken;
+    if (token == null || token.isEmpty) return empty;
+    try {
+      final res = await _dio.get('/uye/rotalar/takip-akisi',
+          queryParameters: {'page': page, 'limit': limit},
+          options: Options(headers: {'Authorization': 'Bearer $token'}));
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return empty;
+      final data = body['data'];
+      final list = (data is List)
+          ? data
+              .whereType<Map<String, dynamic>>()
+              .map((j) => GeziRota.fromJson(j, host: kApiHost))
+              .where((r) => r.id > 0)
+              .toList()
+          : <GeziRota>[];
+      final meta = (body['meta'] as Map?) ?? const {};
+      return (
+        items: list,
+        hasMore: meta['has_more'] == true,
+        nextPage: (meta['next_page'] as num?)?.toInt(),
+        total: (meta['total'] as num?)?.toInt() ?? list.length,
+      );
+    } catch (_) {
+      return empty;
+    }
+  }
+
+  Future<String> _requireUyeToken() async {
+    final t = await Api.instance.uyeToken;
+    if (t == null || t.isEmpty) {
+      throw AuthException('Bu işlem için giriş yapmalısın.');
+    }
+    return t;
+  }
+
+  ({bool begendim, int begeniSayisi}) _parseBegeni(Response res) {
+    final body = res.data;
+    if (body is Map && body['success'] == true) {
+      final d = body['data'];
+      if (d is Map) {
+        return (
+          begendim: d['begendim'] == true,
+          begeniSayisi: (d['begeni_sayisi'] as num?)?.toInt() ?? 0,
+        );
+      }
+    }
+    throw RotaException(_rotaMessage(body) ?? 'Beğeni güncellenemedi.');
   }
 
   // ---- Yardımcılar ----------------------------------------------------------
@@ -2653,5 +2779,110 @@ class RotaRepository {
     if (d is Map && d['plus_gerekli'] == true) return 'plus_gerekli';
     if (d is Map && d['code'] is String) return d['code'] as String;
     return null;
+  }
+}
+
+/// Takip (üye) — `/uye/takip*` (SOSYAL_BEGENI_TAKIP.md §2). Giriş gerekir,
+/// Plus gerekmez. Kimlik üye token'ıyla gönderilir.
+class TakipRepository {
+  TakipRepository._();
+  static final TakipRepository instance = TakipRepository._();
+
+  Dio get _dio => Api.instance.dio;
+
+  /// `POST /uye/takip` `{uye_id}` — takip et. Güncel `takip_ediyorum` +
+  /// `takipci_sayisi` döner. Giriş yoksa [AuthException]; kendini takip (422)
+  /// / bulunamadı (404) → [AuthException] (sunucu mesajıyla).
+  Future<({bool takipEdiyorum, int takipciSayisi})> takipEt(int uyeId) async {
+    final token = await _requireToken();
+    final res = await _dio.post('/uye/takip',
+        data: {'uye_id': uyeId},
+        options: Options(headers: {'Authorization': 'Bearer $token'}));
+    return _parseTakip(res);
+  }
+
+  /// `DELETE /uye/takip` `{uye_id}` — takibi bırak.
+  Future<({bool takipEdiyorum, int takipciSayisi})> takipBirak(int uyeId) async {
+    final token = await _requireToken();
+    final res = await _dio.delete('/uye/takip',
+        data: {'uye_id': uyeId},
+        options: Options(headers: {'Authorization': 'Bearer $token'}));
+    return _parseTakip(res);
+  }
+
+  /// `GET /uye/takip/edilenler` — [uyeId]'nin (yoksa giriş yapan üyenin) takip
+  /// ETTİĞİ kişiler.
+  Future<({List<TakipUye> items, bool hasMore, int? nextPage, int total})>
+      edilenler({int? uyeId, int page = 1, int limit = 20}) =>
+          _liste('/uye/takip/edilenler', uyeId: uyeId, page: page, limit: limit);
+
+  /// `GET /uye/takip/edenler` — [uyeId]'nin (yoksa giriş yapan üyenin)
+  /// takipçileri.
+  Future<({List<TakipUye> items, bool hasMore, int? nextPage, int total})>
+      edenler({int? uyeId, int page = 1, int limit = 20}) =>
+          _liste('/uye/takip/edenler', uyeId: uyeId, page: page, limit: limit);
+
+  Future<({List<TakipUye> items, bool hasMore, int? nextPage, int total})>
+      _liste(String path,
+          {int? uyeId, int page = 1, int limit = 20}) async {
+    const empty =
+        (items: <TakipUye>[], hasMore: false, nextPage: null, total: 0);
+    final token = await Api.instance.uyeToken;
+    try {
+      final res = await _dio.get(path,
+          queryParameters: {
+            if (uyeId != null && uyeId > 0) 'uye_id': uyeId,
+            'page': page,
+            'limit': limit,
+          },
+          options: (token != null && token.isNotEmpty)
+              ? Options(headers: {'Authorization': 'Bearer $token'})
+              : null);
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return empty;
+      final data = body['data'];
+      final list = (data is List)
+          ? data
+              .whereType<Map<String, dynamic>>()
+              .map((j) => TakipUye.fromJson(j, host: kApiHost))
+              .where((u) => u.uyeId > 0)
+              .toList()
+          : <TakipUye>[];
+      final meta = (body['meta'] as Map?) ?? const {};
+      return (
+        items: list,
+        hasMore: meta['has_more'] == true,
+        nextPage: (meta['next_page'] as num?)?.toInt(),
+        total: (meta['total'] as num?)?.toInt() ?? list.length,
+      );
+    } catch (_) {
+      return empty;
+    }
+  }
+
+  Future<String> _requireToken() async {
+    final t = await Api.instance.uyeToken;
+    if (t == null || t.isEmpty) {
+      throw AuthException('Bu işlem için giriş yapmalısın.');
+    }
+    return t;
+  }
+
+  ({bool takipEdiyorum, int takipciSayisi}) _parseTakip(Response res) {
+    final body = res.data;
+    if (body is Map && body['success'] == true) {
+      final d = body['data'];
+      if (d is Map) {
+        return (
+          takipEdiyorum: d['takip_ediyorum'] == true,
+          takipciSayisi: (d['takipci_sayisi'] as num?)?.toInt() ?? 0,
+        );
+      }
+    }
+    // 422/404 gibi durumlarda sunucu mesajını yükselt.
+    final err = (body is Map ? body['error'] : null);
+    final msg = (err is Map ? err['message'] : null);
+    throw AuthException(
+        (msg is String && msg.trim().isNotEmpty) ? msg : 'Takip güncellenemedi.');
   }
 }

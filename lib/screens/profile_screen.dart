@@ -12,6 +12,7 @@ import '../data/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import 'favorites_screen.dart';
+import 'follow_screen.dart';
 import 'login_screen.dart';
 import 'plus_screen.dart';
 import 'routes_screen.dart';
@@ -92,6 +93,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _row(Icons.lock_outline, 'Şifre Değiştir',
                   'Hesap parolanı güncelle',
                   onTap: _openPasswordChange),
+            ]),
+            _group('Sosyal', [
+              _row(Icons.group_outlined, 'Takipçiler',
+                  'Seni takip edenler',
+                  onTap: () => _openFollows(0)),
+              _row(Icons.person_add_alt_1_outlined, 'Takip Edilenler',
+                  'Takip ettiğin kişiler',
+                  onTap: () => _openFollows(1)),
             ]),
             _group('Sözleşmeler', [
               for (final title in _legalDocs)
@@ -477,6 +486,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (ok != true || !mounted) return;
     }
     if (mounted) await openRoutes(context);
+  }
+
+  Future<void> _openFollows(int tab) async {
+    if (_user == null) {
+      final ok = await openLogin(context);
+      if (ok != true || !mounted) return;
+    }
+    // uyeId vermiyoruz → giriş yapan üyenin kendi listeleri gelir.
+    if (mounted) await openFollows(context, initialTab: tab);
   }
 
   void _openPasswordChange() {

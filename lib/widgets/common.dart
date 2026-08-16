@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -186,12 +188,17 @@ class CategoryPill extends StatelessWidget {
   final bool active;
   final VoidCallback? onTap;
 
+  /// Verilirse [icon] yerine bu widget çizilir (ör. özel gemi dümeni ikonu).
+  /// Renk, [active] durumuna göre çağıran tarafından ayarlanmalıdır.
+  final Widget? iconWidget;
+
   const CategoryPill({
     super.key,
     required this.icon,
     required this.label,
     this.active = false,
     this.onTap,
+    this.iconWidget,
   });
 
   @override
@@ -219,8 +226,10 @@ class CategoryPill extends StatelessWidget {
                     ? Colors.white.withValues(alpha: 0.2)
                     : AppColors.primarySoft,
               ),
-              child: Icon(icon,
-                  size: 15, color: active ? Colors.white : AppColors.primary),
+              child: iconWidget ??
+                  Icon(icon,
+                      size: 15,
+                      color: active ? Colors.white : AppColors.primary),
             ),
             const SizedBox(width: 7),
             Text(label,
@@ -576,4 +585,60 @@ class CategoryIcon extends StatelessWidget {
     }
     return Icon(HomeConfig.iconFor(id), size: size, color: color);
   }
+}
+
+/// Gemi dümeni (ship's wheel) ikonu — Material'da karşılığı olmadığı için
+/// CustomPainter ile çizilir. Gezi Rotaları kısayolunda kullanılır.
+class ShipWheelIcon extends StatelessWidget {
+  final double size;
+  final Color color;
+  const ShipWheelIcon({super.key, this.size = 18, this.color = AppColors.primary});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(painter: _ShipWheelPainter(color)),
+    );
+  }
+}
+
+class _ShipWheelPainter extends CustomPainter {
+  final Color color;
+  _ShipWheelPainter(this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = Offset(size.width / 2, size.height / 2);
+    final r = size.width / 2;
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.width * 0.09
+      ..strokeCap = StrokeCap.round;
+    final fill = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    // Dış çember (jant).
+    canvas.drawCircle(c, r * 0.72, stroke);
+    // Göbek (merkez).
+    canvas.drawCircle(c, r * 0.16, fill);
+
+    // 8 kol + uçlarda tutamak topuzları (jantın dışına taşar).
+    for (var i = 0; i < 8; i++) {
+      final a = i * math.pi / 4;
+      final dir = Offset(math.cos(a), math.sin(a));
+      final inner = c + dir * (r * 0.16);
+      final outer = c + dir * (r * 0.98);
+      canvas.drawLine(inner, c + dir * (r * 0.72), stroke);
+      // Jant dışındaki kısa tutamak.
+      canvas.drawLine(c + dir * (r * 0.72), outer, stroke);
+      canvas.drawCircle(outer, r * 0.08, fill);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ShipWheelPainter old) => old.color != color;
 }

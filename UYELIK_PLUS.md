@@ -199,29 +199,70 @@ doğrulaması yapılmadan istemcinin verdiği `expires_at` kabul edilir — **ya
 
 ## 6. Gezi Rotaları (Plus'a özel yazma)
 
-Sıralı mekan listesi + her durakta yorum. Okuma serbest; **oluşturma/düzenleme Plus ister**.
+Sıralı mekan listesi + her durakta yorum + **kapak görseli**. Okuma serbest; **oluşturma/düzenleme Plus ister**.
 
 | Metot | Uç | Açıklama |
 |------|----|----------|
-| GET | `/uye/rotalar` | Üyenin rotaları (durak sayısıyla) |
+| GET | `/rotalar` | **Keşfet akışı** — herkese açık rotalar (sahip bilgisiyle) |
+| GET | `/uye/rotalar` | Üyenin KENDİ rotaları (gizli dahil) |
 | POST | `/uye/rotalar` | Rota oluştur `{baslik, aciklama?, gorunurluk?}` **[Plus]** |
-| GET | `/uye/rotalar/{id}` | Rota detayı (sıralı mekanlar + yorumlar) |
+| GET | `/uye/rotalar/{id}` | Rota detayı (sıralı mekanlar + yorumlar + sahip) |
 | POST | `/uye/rotalar/{id}/guncelle` | Rota bilgisi güncelle **[Plus]** |
 | DELETE | `/uye/rotalar/{id}` | Rota sil |
 | POST | `/uye/rotalar/{id}/mekan` | Sona mekan ekle `{post_id, yorum?}` **[Plus]** |
 | POST | `/uye/rotalar/{id}/mekan/guncelle` | Durak yorumu güncelle `{durak_id, yorum}` **[Plus]** |
 | DELETE | `/uye/rotalar/{id}/mekan` | Durak sil `{durak_id}` |
 | POST | `/uye/rotalar/{id}/sirala` | Durakları sırala `{sira:[durak_id,...]}` **[Plus]** |
+| POST | `/uye/rotalar/{id}/kapak` | **Kapak görseli yükle** (base64/multipart) **[Plus]** |
+| DELETE | `/uye/rotalar/{id}/kapak` | Kapak görselini kaldır |
 
-- `gorunurluk`: `gizli` (varsayılan) veya `herkese_acik`. Herkese açık rotayı başka üye de görebilir.
-- Rota detayında her durak: `{ durak_id, sira, yorum, mekan: {ozet} }`. Silinmiş mekan `{silinmis:true}`.
+- `gorunurluk`: `gizli` (varsayılan) veya `herkese_acik`.
+- Rota özetinde `kapak_gorsel` (URL veya null) döner. Detayda her durak: `{ durak_id, sira, yorum, mekan: {ozet} }`; silinmiş mekan `{silinmis:true}`. Detayda ayrıca `sahip` ve `benim` (bool) döner.
 
-Örnek — rota oluştur + iki durak:
+### 6.1. Keşfet akışı — `GET /rotalar`
+Herkese açık (`gorunurluk=herkese_acik`) rotaları listeler. **En yeni en üstte** (created_at DESC).
+
+Query: `?uye_id=` (opsiyonel — sadece o üyeninkiler) · `?page=` · `?limit=` (1-50, vars. 20).
+Görünürlük farkı: **yalnız `herkese_acik` rotalar** bu akışta görünür; `gizli` rotalar yalnız sahibinin
+`/uye/rotalar` listesinde görünür.
+
+Yanıt (her öğe rota özeti + **sahip** bilgisi):
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 5, "baslik": "Kadıköy Turu", "aciklama": "...",
+      "gorunurluk": "herkese_acik",
+      "kapak_gorsel": "https://gezgah.com/uploads/app-rotalar/5-ab12cd34ef.jpg",
+      "durak_sayisi": 4,
+      "created_at": "2026-08-16 21:10:00", "updated_at": "...",
+      "sahip": { "uye_id": 12, "isim": "Ada", "soyisim": "Yılmaz",
+                 "avatar": "https://gezgah.com/uploads/app-avatars/12-....jpg" }
+    }
+  ],
+  "meta": { "page":1, "limit":20, "total":37, "pages":2, "has_more":true, "next_page":2, "uye_id":null }
+}
 ```
-POST /uye/rotalar            { "baslik": "Kadıköy Turu" }         -> { rota: { id: 5 } }
-POST /uye/rotalar/5/mekan    { "post_id": 1064, "yorum": "Kahve" } -> { durak_id: 11 }
+- Belirli üyenin herkese açık rotaları: `GET /rotalar?uye_id=12`.
+- Tümü (akış): `GET /rotalar`.
+- Kimlik: cihaz **veya** üye token'ı yeterli (üye olmak şart değil; içerik herkese açık).
+
+### 6.2. Kapak görseli — `POST /uye/rotalar/{id}/kapak`  [Plus]
+Body: `{ "kapak": "data:image/jpeg;base64,..." }` (veya çıplak base64) ya da multipart `kapak` dosyası.
+Görsel **1200×750 (16:10)** merkez-kırpma ile JPEG'e dönüştürülüp saklanır.
+Yanıt: `{ "durum":"yuklendi", "kapak_gorsel":"https://gezgah.com/uploads/app-rotalar/5-....jpg" }`.
+Kısıt: JPEG/PNG/WEBP, ≤6MB. Kaldırma: `DELETE /uye/rotalar/{id}/kapak`.
+Depolama: `/home/gezgah/public_html/uploads/app-rotalar` → `https://gezgah.com/uploads/app-rotalar`.
+
+Örnek — rota oluştur + kapak + iki durak:
+```
+POST /uye/rotalar            { "baslik": "Kadıköy Turu", "gorunurluk": "herkese_acik" }  -> { rota: { id: 5 } }
+POST /uye/rotalar/5/kapak    { "kapak": "data:image/jpeg;base64,..." }                    -> { kapak_gorsel: "..." }
+POST /uye/rotalar/5/mekan    { "post_id": 1064, "yorum": "Kahve" }                        -> { durak_id: 11 }
 POST /uye/rotalar/5/mekan    { "post_id": 2091, "yorum": "Akşam yemeği" }
 POST /uye/rotalar/5/sirala   { "sira": [12, 11] }
+GET  /rotalar                                                                             -> keşfet akışında görünür
 ```
 
 ---
@@ -238,10 +279,12 @@ POST /uye/rotalar/5/sirala   { "sira": [12, 11] }
 
 Migration: `php rest/tools/migrate_plus_uyelik.php` (idempotent).
 
+> Medya (avatar + rota kapak) dizin/URL ayarları `config/uploads.php`'dedir (IAP'tan ayrı, deploy edilebilir).
+
 - `app_uyeler` (+ eklenenler): `avatar`, `plus_expires_at`, `plus_platform`, `plus_product_id`, `plus_last_verified_at`.
 - `app_uye_tokenlari`: `id, uye_id, token(uniq), created_at, last_seen_at`.
 - `app_plus_abonelikler`: `id, uye_id, platform, product_id, transaction_id, expires_at, status, environment, raw, created_at, updated_at` — UNIQUE(platform, transaction_id).
-- `app_gezi_rotalari`: `id, uye_id, baslik, aciklama, gorunurluk, kapak_post_id, created_at, updated_at`.
+- `app_gezi_rotalari`: `id, uye_id, baslik, aciklama, gorunurluk, kapak_post_id, kapak_gorsel, created_at, updated_at`.
 - `app_gezi_rota_mekanlari`: `id, rota_id, post_id, sira, yorum, created_at`.
 
 ---

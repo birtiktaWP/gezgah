@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'data/auth_service.dart';
 import 'data/device_service.dart';
@@ -16,6 +18,21 @@ const _kWelcomeSeenKey = 'welcome_seen';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // IAP: iOS'ta StoreKit 1'i zorla (platform kaydından ÖNCE). in_app_purchase
+  // varsayılanı StoreKit 2'dir ve `serverVerificationData` olarak bir JWS token
+  // (eyJ...) döndürür; backend ise `verifyReceipt` için base64 App Store makbuzu
+  // bekler (aksi halde 21002 "malformed receipt"). StoreKit 1 modunda
+  // `serverVerificationData` base64 makbuz olur ve doğrulama çalışır
+  // (MOBIL_IAP_PLUS.md — Seçenek A).
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+    // NOT: `enableStoreKit1` deprecated'tir (Apple ileride SK1'i kaldıracak).
+    // Backend `verifyReceipt` yerine App Store Server API (JWS) doğrulamasına
+    // geçtiğinde bu satır kaldırılıp StoreKit 2 varsayılanına dönülmeli.
+    // ignore: deprecated_member_use
+    InAppPurchaseStoreKitPlatform.enableStoreKit1();
+  }
+
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,

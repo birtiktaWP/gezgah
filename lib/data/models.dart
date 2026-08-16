@@ -492,6 +492,11 @@ class GeziRota {
   final String aciklama;
   final String gorunurluk; // 'gizli' | 'herkese_acik'
   final int durakSayisi;
+  final String kapakGorsel; // kapak görseli tam URL; yoksa ''
+  final RotaSahip? sahip; // keşfet/detay yanıtında rotanın sahibi
+  final bool benim; // detayda: rota oturumdaki üyeye mi ait
+  final int begeniSayisi; // rotanın toplam beğeni sayısı
+  final bool begendim; // isteği yapan üye bu rotayı beğendi mi
   final List<RotaDurak> duraklar; // yalnız detay yanıtında dolu
 
   const GeziRota({
@@ -500,10 +505,31 @@ class GeziRota {
     this.aciklama = '',
     this.gorunurluk = 'gizli',
     this.durakSayisi = 0,
+    this.kapakGorsel = '',
+    this.sahip,
+    this.benim = false,
+    this.begeniSayisi = 0,
+    this.begendim = false,
     this.duraklar = const [],
   });
 
   bool get herkeseAcik => gorunurluk == 'herkese_acik';
+
+  /// Beğeni sayısı/durumu güncellenmiş kopya (optimistic UI için).
+  GeziRota copyWithBegeni({required bool begendim, required int begeniSayisi}) =>
+      GeziRota(
+        id: id,
+        baslik: baslik,
+        aciklama: aciklama,
+        gorunurluk: gorunurluk,
+        durakSayisi: durakSayisi,
+        kapakGorsel: kapakGorsel,
+        sahip: sahip,
+        benim: benim,
+        begeniSayisi: begeniSayisi,
+        begendim: begendim,
+        duraklar: duraklar,
+      );
 
   factory GeziRota.fromJson(Map<String, dynamic> j, {String host = ''}) {
     final raw = j['duraklar'] ?? j['mekanlar'];
@@ -521,9 +547,82 @@ class GeziRota {
           ? (j['gorunurluk'] as String).trim()
           : 'gizli',
       durakSayisi: (j['durak_sayisi'] as num?)?.toInt() ?? duraklar.length,
+      kapakGorsel: _absUrl(j['kapak_gorsel'], host),
+      sahip: j['sahip'] is Map<String, dynamic>
+          ? RotaSahip.fromJson(j['sahip'] as Map<String, dynamic>, host: host)
+          : null,
+      benim: j['benim'] == true,
+      begeniSayisi: (j['begeni_sayisi'] as num?)?.toInt() ?? 0,
+      begendim: j['begendim'] == true,
       duraklar: duraklar,
     );
   }
+}
+
+/// Rota sahibi özeti (`/rotalar` keşfet + detay `sahip`, SOSYAL_BEGENI_TAKIP.md).
+class RotaSahip {
+  final int uyeId;
+  final String isim;
+  final String soyisim;
+  final String avatar; // tam URL; yoksa ''
+  final bool? takipEdiyorum; // isteği yapan üye takip ediyor mu (kendisi: null)
+  const RotaSahip({
+    required this.uyeId,
+    this.isim = '',
+    this.soyisim = '',
+    this.avatar = '',
+    this.takipEdiyorum,
+  });
+
+  String get adSoyad =>
+      [isim, soyisim].where((s) => s.trim().isNotEmpty).join(' ').trim();
+
+  factory RotaSahip.fromJson(Map<String, dynamic> j, {String host = ''}) =>
+      RotaSahip(
+        uyeId: (j['uye_id'] as num?)?.toInt() ?? (j['id'] as num?)?.toInt() ?? 0,
+        isim: (j['isim'] as String?)?.trim() ?? '',
+        soyisim: (j['soyisim'] as String?)?.trim() ?? '',
+        avatar: _absUrl(j['avatar'], host),
+        takipEdiyorum:
+            j['takip_ediyorum'] is bool ? j['takip_ediyorum'] as bool : null,
+      );
+}
+
+/// Takip listesi öğesi (`/uye/takip/edenler|edilenler`, SOSYAL_BEGENI_TAKIP.md).
+class TakipUye {
+  final int uyeId;
+  final String isim;
+  final String soyisim;
+  final String avatar;
+  final bool? takipEdiyorum; // isteği yapan üye bu kişiyi takip ediyor mu
+  const TakipUye({
+    required this.uyeId,
+    this.isim = '',
+    this.soyisim = '',
+    this.avatar = '',
+    this.takipEdiyorum,
+  });
+
+  String get adSoyad =>
+      [isim, soyisim].where((s) => s.trim().isNotEmpty).join(' ').trim();
+
+  TakipUye copyWith({bool? takipEdiyorum}) => TakipUye(
+        uyeId: uyeId,
+        isim: isim,
+        soyisim: soyisim,
+        avatar: avatar,
+        takipEdiyorum: takipEdiyorum ?? this.takipEdiyorum,
+      );
+
+  factory TakipUye.fromJson(Map<String, dynamic> j, {String host = ''}) =>
+      TakipUye(
+        uyeId: (j['uye_id'] as num?)?.toInt() ?? (j['id'] as num?)?.toInt() ?? 0,
+        isim: (j['isim'] as String?)?.trim() ?? '',
+        soyisim: (j['soyisim'] as String?)?.trim() ?? '',
+        avatar: _absUrl(j['avatar'], host),
+        takipEdiyorum:
+            j['takip_ediyorum'] is bool ? j['takip_ediyorum'] as bool : null,
+      );
 }
 
 /// Rota durağı (`/uye/rotalar/{id}` → `duraklar[]`). Silinmiş mekan

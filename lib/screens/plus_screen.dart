@@ -272,8 +272,11 @@ class _PlusScreenState extends State<PlusScreen> {
   Future<bool> _verify(PurchaseDetails p) async {
     try {
       final token = p.verificationData.serverVerificationData;
+      final pref = token.length > 8 ? token.substring(0, 8) : token;
+      // 'MII...' → base64 makbuz (StoreKit 1, doğru). 'eyJ...' → JWS (StoreKit 2).
       _log('POST /uye/plus/dogrula · platform=${Platform.operatingSystem} · '
-          'token.len=${token.length} · source=${p.verificationData.source}');
+          'token.len=${token.length} · önek="$pref…" · '
+          'source=${p.verificationData.source}');
       if (Platform.isIOS) {
         await AuthService.instance.plusDogrula(platform: 'ios', receipt: token);
       } else {
