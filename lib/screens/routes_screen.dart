@@ -2421,7 +2421,47 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen>
           ),
         ],
       ),
+      // Plus üyelere: sağ altta rota oluşturma butonu.
+      floatingActionButton: ValueListenableBuilder<AppUser?>(
+        valueListenable: AuthService.instance.user,
+        builder: (_, user, __) {
+          if (!(user?.isPlus ?? false)) return const SizedBox.shrink();
+          return FloatingActionButton(
+            onPressed: _createRoute,
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+            shape: const CircleBorder(),
+            tooltip: 'Yeni Rota',
+            child: const Icon(Icons.add),
+          );
+        },
+      ),
     );
+  }
+
+  /// Yeni rota oluştur (Plus) → oluşunca detayını aç.
+  Future<void> _createRoute() async {
+    final data = await _showRouteForm(context);
+    if (data == null || !mounted) return;
+    try {
+      final rota = await RotaRepository.instance.olustur(
+        baslik: data.$1,
+        aciklama: data.$2,
+        gorunurluk: data.$3,
+      );
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => RouteDetailScreen(rotaId: rota.id)),
+      );
+    } on PlusRequiredException catch (e) {
+      if (!mounted) return;
+      await _handlePlus(context, e);
+    } on RotaException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
   /// Header'daki ikon aksiyonu; aktifse primary + küçük nokta rozeti.
