@@ -500,6 +500,12 @@ class GeziRota {
   final double? rotaFiyat; // seçili ürünlerin fiyat toplamı (yoksa null)
   final int? mesafeM; // ilk durağa mesafe (metre); konum verildiyse
   final String haritaLink; // tüm rotayı gezen Google Maps yol tarifi (yoksa '')
+  // Uygulama içi harita (rota-app-ici-harita.md): sıralı koordinatlar + yol
+  // çizgisi (encoded polyline) + toplam mesafe/süre. Yalnız detayda dolu.
+  final List<RotaNokta> koordinatlar;
+  final String polyline; // Google encoded polyline (yoksa '')
+  final int? toplamMesafeM;
+  final int? toplamSureSn;
   final List<RotaDurak> duraklar; // yalnız detay yanıtında dolu
 
   const GeziRota({
@@ -516,8 +522,15 @@ class GeziRota {
     this.rotaFiyat,
     this.mesafeM,
     this.haritaLink = '',
+    this.koordinatlar = const [],
+    this.polyline = '',
+    this.toplamMesafeM,
+    this.toplamSureSn,
     this.duraklar = const [],
   });
+
+  /// Uygulama içi haritada gösterilebilir mi (en az bir koordinat var mı).
+  bool get haritadaGosterilebilir => koordinatlar.isNotEmpty;
 
   bool get herkeseAcik => gorunurluk == 'herkese_acik';
 
@@ -552,6 +565,10 @@ class GeziRota {
         rotaFiyat: rotaFiyat,
         mesafeM: mesafeM,
         haritaLink: haritaLink,
+        koordinatlar: koordinatlar,
+        polyline: polyline,
+        toplamMesafeM: toplamMesafeM,
+        toplamSureSn: toplamSureSn,
         duraklar: duraklar,
       );
 
@@ -581,9 +598,48 @@ class GeziRota {
       rotaFiyat: (j['rota_fiyat'] as num?)?.toDouble(),
       mesafeM: (j['mesafe_m'] as num?)?.toInt(),
       haritaLink: (j['harita_link'] as String?)?.trim() ?? '',
+      koordinatlar: (j['koordinatlar'] is List)
+          ? (j['koordinatlar'] as List)
+              .whereType<Map<String, dynamic>>()
+              .map(RotaNokta.fromJson)
+              .where((n) => n.hasCoord)
+              .toList()
+          : const [],
+      polyline: (j['polyline'] as String?)?.trim() ?? '',
+      toplamMesafeM: (j['toplam_mesafe_m'] as num?)?.toInt(),
+      toplamSureSn: (j['toplam_sure_sn'] as num?)?.toInt(),
       duraklar: duraklar,
     );
   }
+}
+
+/// Rota harita noktası (`rota.koordinatlar[]`, rota-app-ici-harita.md §2).
+class RotaNokta {
+  final int sira;
+  final int durakId;
+  final int postId;
+  final String name;
+  final double? lat;
+  final double? lng;
+  const RotaNokta({
+    this.sira = 0,
+    this.durakId = 0,
+    this.postId = 0,
+    this.name = '',
+    this.lat,
+    this.lng,
+  });
+
+  bool get hasCoord => lat != null && lng != null;
+
+  factory RotaNokta.fromJson(Map<String, dynamic> j) => RotaNokta(
+        sira: (j['sira'] as num?)?.toInt() ?? 0,
+        durakId: (j['durak_id'] as num?)?.toInt() ?? 0,
+        postId: (j['post_id'] as num?)?.toInt() ?? 0,
+        name: (j['name'] as String?)?.trim() ?? '',
+        lat: (j['lat'] as num?)?.toDouble(),
+        lng: (j['lng'] as num?)?.toDouble(),
+      );
 }
 
 /// Rota sahibi özeti (`/rotalar` keşfet + detay `sahip`, SOSYAL_BEGENI_TAKIP.md).
@@ -661,7 +717,8 @@ class RotaDurak {
   final String yorum;
   final RotaMekan? mekan;
   final bool silinmis;
-  final RotaUrun? seciliUrun;
+  final RotaUrun? seciliUrun; // geriye dönük uyumluluk (urunler[0])
+  final List<RotaUrun> urunler; // durağa bağlı tüm QR menü ürünleri
   final String haritaLink; // durağı haritada açan Google Maps linki (yoksa '')
 
   const RotaDurak({
@@ -671,6 +728,7 @@ class RotaDurak {
     this.mekan,
     this.silinmis = false,
     this.seciliUrun,
+    this.urunler = const [],
     this.haritaLink = '',
   });
 
@@ -678,6 +736,17 @@ class RotaDurak {
     final m = j['mekan'];
     final silinmis =
         j['silinmis'] == true || (m is Map && m['silinmis'] == true);
+    final secili = j['secili_urun'] is Map<String, dynamic>
+        ? RotaUrun.fromJson(j['secili_urun'] as Map<String, dynamic>)
+        : null;
+    // Çoklu ürün: `urunler[]` (rota-coklu-yemek.md); yoksa secili_urun'a düş.
+    final urunler = (j['urunler'] is List)
+        ? (j['urunler'] as List)
+            .whereType<Map<String, dynamic>>()
+            .map(RotaUrun.fromJson)
+            .where((u) => u.qrId > 0)
+            .toList()
+        : (secili != null ? [secili] : <RotaUrun>[]);
     return RotaDurak(
       durakId:
           (j['durak_id'] as num?)?.toInt() ?? (j['id'] as num?)?.toInt() ?? 0,
@@ -687,9 +756,8 @@ class RotaDurak {
           ? RotaMekan.fromJson(m, host: host)
           : null,
       silinmis: silinmis,
-      seciliUrun: j['secili_urun'] is Map<String, dynamic>
-          ? RotaUrun.fromJson(j['secili_urun'] as Map<String, dynamic>)
-          : null,
+      seciliUrun: secili ?? (urunler.isNotEmpty ? urunler.first : null),
+      urunler: urunler,
       haritaLink: (j['harita_link'] as String?)?.trim() ?? '',
     );
   }
@@ -812,13 +880,19 @@ class RotaMekan {
   final String image;
   final String sehir;
   final String ilce;
+  final double? lat;
+  final double? lng;
   const RotaMekan({
     required this.id,
     this.name = '',
     this.image = '',
     this.sehir = '',
     this.ilce = '',
+    this.lat,
+    this.lng,
   });
+
+  bool get hasCoord => lat != null && lng != null;
 
   String get cityDistrict =>
       [sehir, ilce].where((s) => s.trim().isNotEmpty).join(' · ');
@@ -834,6 +908,8 @@ class RotaMekan {
       image: img,
       sehir: (j['sehir'] as String?)?.trim() ?? '',
       ilce: (j['ilce'] as String?)?.trim() ?? '',
+      lat: (j['lat'] as num?)?.toDouble(),
+      lng: (j['lng'] as num?)?.toDouble(),
     );
   }
 }

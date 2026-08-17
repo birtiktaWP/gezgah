@@ -2655,14 +2655,15 @@ class RotaRepository {
   /// [RotaException]. Aynı `post_id` birden çok kez (farklı ürünlerle) verilebilir.
   Future<({int eklenen, List<Map<String, dynamic>> atlanan})> mekanlarEkle(
     int id,
-    List<({int postId, int? qrId, String? yorum})> duraklar,
+    List<({int postId, List<int> qrIds, String? yorum})> duraklar,
   ) async {
     final res = await _post('/uye/rotalar/$id/mekan', {
       'duraklar': [
         for (final d in duraklar)
           {
             'post_id': d.postId,
-            if (d.qrId != null && d.qrId! > 0) 'qr_id': d.qrId,
+            // Durağa birden çok ürün: qr_ids[] (rota-coklu-yemek.md).
+            if (d.qrIds.isNotEmpty) 'qr_ids': d.qrIds,
             if (d.yorum != null && d.yorum!.trim().isNotEmpty)
               'yorum': d.yorum!.trim(),
           }
@@ -2680,15 +2681,32 @@ class RotaRepository {
     );
   }
 
-  /// `POST /uye/rotalar/{id}/mekan/guncelle` — durak yorumu ve/veya ürününü
-  /// güncelle (Plus). [qrId] `0` → ürün seçimini temizler; null → dokunma.
+  /// `POST /uye/rotalar/{id}/mekan/guncelle` — durağın yorumunu ve/veya **ürün
+  /// kümesini** güncelle (Plus, rota-coklu-yemek.md §5). [qrIds] verilirse
+  /// durağın tüm ürün listesi bununla değiştirilir (boş liste = temizle);
+  /// null → ürünlere dokunma.
   Future<void> durakGuncelle(int id,
-      {required int durakId, String? yorum, int? qrId}) async {
+      {required int durakId, String? yorum, List<int>? qrIds}) async {
     await _post('/uye/rotalar/$id/mekan/guncelle', {
       'durak_id': durakId,
       if (yorum != null) 'yorum': yorum.trim(),
-      'qr_id': ?qrId,
+      'qr_ids': ?qrIds,
     });
+  }
+
+  /// `POST /uye/rotalar/{id}/mekan/urun-ekle` — durağa tek ürün ekle (idempotent).
+  Future<void> durakUrunEkle(int id,
+      {required int durakId, required int qrId}) async {
+    await _post('/uye/rotalar/$id/mekan/urun-ekle',
+        {'durak_id': durakId, 'qr_id': qrId});
+  }
+
+  /// `DELETE /uye/rotalar/{id}/mekan/urun` — durağın bir ürününü kaldır.
+  Future<void> durakUrunSil(int id,
+      {required int durakId, required int qrId}) async {
+    await _send(() async => _dio.delete('/uye/rotalar/$id/mekan/urun',
+        data: {'durak_id': durakId, 'qr_id': qrId},
+        options: await _uyeAuth()));
   }
 
   /// `DELETE /uye/rotalar/{id}/mekan` — durak sil (Plus şartı yok).
