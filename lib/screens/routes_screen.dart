@@ -2060,10 +2060,10 @@ class _FilterSheetState extends State<_FilterSheet> {
   List<Ilce> _ilceler = const [];
   bool _loadingIlce = true;
 
-  static const List<(String, String)> _tipler = [
-    ('restoran', 'Restoran'),
-    ('mesire', 'Mesire'),
-    ('plaj', 'Plaj'),
+  static const List<(String, String, IconData)> _tipler = [
+    ('restoran', 'Restoran', Icons.restaurant_outlined),
+    ('mesire', 'Mesire', Icons.park_outlined),
+    ('plaj', 'Plaj', Icons.beach_access_outlined),
   ];
 
   @override
@@ -2118,7 +2118,8 @@ class _FilterSheetState extends State<_FilterSheet> {
             children: [
               for (final t in _tipler)
                 _choice(t.$2, _tip == t.$1,
-                    () => setState(() => _tip = _tip == t.$1 ? null : t.$1)),
+                    () => setState(() => _tip = _tip == t.$1 ? null : t.$1),
+                    icon: t.$3),
             ],
           ),
           const SizedBox(height: 20),
@@ -2134,32 +2135,35 @@ class _FilterSheetState extends State<_FilterSheet> {
                   child: CircularProgressIndicator(strokeWidth: 2.4)),
             )
           else
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: AppColors.primarySoft,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<int?>(
-                  isExpanded: true,
-                  value: _ilce,
-                  hint: const Text('Tüm ilçeler'),
-                  items: [
-                    const DropdownMenuItem<int?>(
-                        value: null, child: Text('Tüm ilçeler')),
-                    for (final i in _ilceler)
-                      DropdownMenuItem<int?>(value: i.id, child: Text(i.ad)),
+            // Tasarım: dokununca alttan yarım modal (ilçe listesi) açılır.
+            GestureDetector(
+              onTap: _pickIlce,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                decoration: BoxDecoration(
+                  color: AppColors.primarySoft,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.place_outlined,
+                        size: 19, color: AppColors.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(_ilceAd ?? 'Tüm ilçeler',
+                          style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: _ilceAd == null
+                                  ? FontWeight.w400
+                                  : FontWeight.w600,
+                              color: _ilceAd == null
+                                  ? AppColors.muted
+                                  : AppColors.ink)),
+                    ),
+                    const Icon(Icons.keyboard_arrow_down,
+                        color: AppColors.muted),
                   ],
-                  onChanged: (v) => setState(() {
-                    _ilce = v;
-                    _ilceAd = v == null
-                        ? null
-                        : _ilceler
-                            .firstWhere((e) => e.id == v,
-                                orElse: () => const Ilce(id: 0, ad: ''))
-                            .ad;
-                  }),
                 ),
               ),
             ),
@@ -2205,22 +2209,124 @@ class _FilterSheetState extends State<_FilterSheet> {
     );
   }
 
-  Widget _choice(String label, bool active, VoidCallback onTap) {
+  Widget _choice(String label, bool active, VoidCallback onTap,
+      {IconData? icon}) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: EdgeInsets.fromLTRB(icon != null ? 12 : 16, 10, 16, 10),
         decoration: BoxDecoration(
           color: active ? AppColors.primary : Colors.white,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
               color: active ? AppColors.primary : AppColors.line),
         ),
-        child: Text(label,
-            style: TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w600,
-                color: active ? Colors.white : AppColors.ink)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon,
+                  size: 16,
+                  color: active ? Colors.white : AppColors.primary),
+              const SizedBox(width: 6),
+            ],
+            Text(label,
+                style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: active ? Colors.white : AppColors.ink)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// İlçe seçimi — üstü açık renk çizgili (drag handle) yarım bottom sheet.
+  /// Dönüş: `0` → Tüm ilçeler (temizle), `>0` → ilçe id, null → iptal.
+  Future<void> _pickIlce() async {
+    final res = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SizedBox(
+        height: MediaQuery.of(ctx).size.height * 0.7,
+        child: Column(
+          children: [
+            // Açık renk tutamak çizgisi.
+            Padding(
+              padding: const EdgeInsets.only(top: 10, bottom: 6),
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: AppColors.line,
+                    borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 6, 20, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('İlçe seç',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              ),
+            ),
+            const Divider(height: 1, color: AppColors.line),
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  _ilceRow(ctx, id: 0, ad: 'Tüm ilçeler', selected: _ilce == null),
+                  for (final i in _ilceler)
+                    _ilceRow(ctx, id: i.id, ad: i.ad, selected: _ilce == i.id),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (res == null || !mounted) return;
+    setState(() {
+      if (res == 0) {
+        _ilce = null;
+        _ilceAd = null;
+      } else {
+        _ilce = res;
+        _ilceAd = _ilceler
+            .firstWhere((e) => e.id == res,
+                orElse: () => const Ilce(id: 0, ad: ''))
+            .ad;
+      }
+    });
+  }
+
+  Widget _ilceRow(BuildContext ctx,
+      {required int id, required String ad, required bool selected}) {
+    return InkWell(
+      onTap: () => Navigator.pop(ctx, id),
+      child: Container(
+        color: selected ? AppColors.primarySoft : Colors.transparent,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(ad,
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight:
+                          selected ? FontWeight.w600 : FontWeight.w400,
+                      color: AppColors.ink)),
+            ),
+            if (selected)
+              const Icon(Icons.check, size: 18, color: AppColors.primary),
+          ],
+        ),
       ),
     );
   }
@@ -2229,32 +2335,252 @@ class _FilterSheetState extends State<_FilterSheet> {
 /// Keşfet: herkese açık gezi rotaları akışı (`GET /rotalar`). Tekli, tam
 /// genişlikte satırlar — solda kapak görseli, sağda rota adı + sahip + durak
 /// sayısı. Sonsuz kaydırmayla sayfalanır (UYELIK_PLUS.md §6.1).
-class DiscoverRoutesScreen extends StatelessWidget {
+class DiscoverRoutesScreen extends StatefulWidget {
   const DiscoverRoutesScreen({super.key});
 
   @override
+  State<DiscoverRoutesScreen> createState() => _DiscoverRoutesScreenState();
+}
+
+class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tab =
+      TabController(length: 2, vsync: this)..addListener(_onTab);
+
+  // Keşfet sıralama + filtre (header ikonlarından yönetilir).
+  String _sort = 'yeni';
+  String? _tip;
+  int? _ilce;
+  String? _ilceAd;
+  double? _lat;
+  double? _lng;
+
+  static const Map<String, String> _sortLabels = {
+    'yeni': 'En yeni',
+    'begeni': 'En beğenilen',
+    'fiyat_artan': 'Fiyat (artan)',
+    'fiyat_azalan': 'Fiyat (azalan)',
+    'mesafe': 'Bana en yakın',
+  };
+
+  static const Map<String, IconData> _sortIcons = {
+    'yeni': Icons.schedule,
+    'begeni': Icons.favorite_border,
+    'fiyat_artan': Icons.arrow_upward,
+    'fiyat_azalan': Icons.arrow_downward,
+    'mesafe': Icons.near_me_outlined,
+  };
+
+  void _onTab() {
+    if (mounted) setState(() {}); // sekme değişince header ikonlarını güncelle
+  }
+
+  @override
+  void dispose() {
+    _tab
+      ..removeListener(_onTab)
+      ..dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        backgroundColor: AppColors.bg,
-        body: Column(
+    final onKesfet = _tab.index == 0;
+    final filterCount = (_tip != null ? 1 : 0) + (_ilce != null ? 1 : 0);
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: Column(
+        children: [
+          PageHeader(
+            title: 'Gezi Rotaları',
+            // Filtre + sıralama yalnız Keşfet sekmesinde, sağ üstte, ikonlu.
+            actions: onKesfet
+                ? [
+                    _headerAction(Icons.tune, filterCount > 0, _openFilter),
+                    _headerAction(
+                        Icons.swap_vert, _sort != 'yeni', _openSort),
+                  ]
+                : const [],
+          ),
+          _PillTabs(controller: _tab, labels: const ['Keşfet', 'Takip']),
+          Expanded(
+            child: TabBarView(
+              controller: _tab,
+              children: [
+                _RouteFeed(
+                  follow: false,
+                  sort: _sort,
+                  tip: _tip,
+                  ilce: _ilce,
+                  lat: _lat,
+                  lng: _lng,
+                ),
+                const _RouteFeed(follow: true),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Header'daki ikon aksiyonu; aktifse primary + küçük nokta rozeti.
+  Widget _headerAction(IconData icon, bool active, VoidCallback onTap) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          onPressed: onTap,
+          icon: Icon(icon,
+              color: active ? AppColors.primary : AppColors.ink),
+        ),
+        if (active)
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                  color: AppColors.primary, shape: BoxShape.circle),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _openFilter() async {
+    final res =
+        await showModalBottomSheet<({String? tip, int? ilce, String? ilceAd})>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _FilterSheet(tip: _tip, ilce: _ilce, ilceAd: _ilceAd),
+    );
+    if (res == null || !mounted) return;
+    setState(() {
+      _tip = res.tip;
+      _ilce = res.ilce;
+      _ilceAd = res.ilceAd;
+    });
+  }
+
+  Future<void> _openSort() async {
+    final entries = _sortLabels.entries.toList();
+    final secili = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const PageHeader(title: 'Gezi Rotaları'),
-            Builder(
-              builder: (ctx) => _PillTabs(
-                controller: DefaultTabController.of(ctx),
-                labels: const ['Keşfet', 'Takip'],
+            // Açık renk tutamak çizgisi.
+            Padding(
+              padding: const EdgeInsets.only(top: 10, bottom: 6),
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: AppColors.line,
+                    borderRadius: BorderRadius.circular(2)),
               ),
             ),
-            const Expanded(
-              child: TabBarView(
-                children: [
-                  _RouteFeed(follow: false),
-                  _RouteFeed(follow: true),
-                ],
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 6, 20, 12),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Sırala',
+                    style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.ink)),
               ),
             ),
+            const Divider(height: 1, color: AppColors.line),
+            for (var i = 0; i < entries.length; i++) ...[
+              _sortRow(
+                ctx,
+                value: entries[i].key,
+                label: entries[i].value,
+                icon: _sortIcons[entries[i].key] ?? Icons.sort,
+                selected: _sort == entries[i].key,
+              ),
+              if (i < entries.length - 1)
+                const Divider(
+                    height: 1,
+                    thickness: 1,
+                    indent: 68,
+                    endIndent: 20,
+                    color: AppColors.line),
+            ],
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+    if (secili == null || secili == _sort) return;
+    if (secili == 'mesafe') {
+      final loc = await LocationService.resolve();
+      if (!mounted) return;
+      _lat = loc.lat;
+      _lng = loc.lng;
+    }
+    setState(() => _sort = secili);
+  }
+
+  Widget _sortRow(
+    BuildContext ctx, {
+    required String value,
+    required String label,
+    required IconData icon,
+    required bool selected,
+  }) {
+    return InkWell(
+      onTap: () => Navigator.pop(ctx, value),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: selected ? AppColors.primary : AppColors.primarySoft,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Icon(icon,
+                  size: 19,
+                  color: selected ? Colors.white : AppColors.primary),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(label,
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight:
+                          selected ? FontWeight.w600 : FontWeight.w500,
+                      color: AppColors.ink)),
+            ),
+            // Aktif badge — en sağda.
+            if (selected)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: const Text('Seçili',
+                    style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white)),
+              ),
           ],
         ),
       ),
@@ -2328,7 +2654,20 @@ class _PillTabs extends StatelessWidget {
 /// Kaymalı sekmeler (TabBarView) içinde kullanılır; kendi durumunu korur.
 class _RouteFeed extends StatefulWidget {
   final bool follow;
-  const _RouteFeed({required this.follow});
+  // Keşfet sıralama/filtre (üstteki header ikonlarından gelir).
+  final String sort;
+  final String? tip;
+  final int? ilce;
+  final double? lat;
+  final double? lng;
+  const _RouteFeed({
+    required this.follow,
+    this.sort = 'yeni',
+    this.tip,
+    this.ilce,
+    this.lat,
+    this.lng,
+  });
 
   @override
   State<_RouteFeed> createState() => _RouteFeedState();
@@ -2343,22 +2682,6 @@ class _RouteFeedState extends State<_RouteFeed>
   bool _hasMore = false;
   int _nextPage = 2;
 
-  // Sıralama + filtre (yalnız Keşfet sekmesi, KESFET_SIRALAMA_FILTRE.md).
-  String _sort = 'yeni'; // yeni | begeni | fiyat_artan | fiyat_azalan | mesafe
-  String? _tip; // restoran | mesire | plaj
-  int? _ilce; // ilçe id
-  String? _ilceAd;
-  double? _lat;
-  double? _lng;
-
-  static const Map<String, String> _sortLabels = {
-    'yeni': 'En yeni',
-    'begeni': 'En beğenilen',
-    'fiyat_artan': 'Fiyat (artan)',
-    'fiyat_azalan': 'Fiyat (azalan)',
-    'mesafe': 'Bana en yakın',
-  };
-
   @override
   bool get wantKeepAlive => true;
 
@@ -2367,6 +2690,19 @@ class _RouteFeedState extends State<_RouteFeed>
     super.initState();
     _scroll.addListener(_onScroll);
     _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _RouteFeed old) {
+    super.didUpdateWidget(old);
+    // Header'dan sıralama/filtre değişince listeyi baştan yükle.
+    if (old.sort != widget.sort ||
+        old.tip != widget.tip ||
+        old.ilce != widget.ilce ||
+        old.lat != widget.lat ||
+        old.lng != widget.lng) {
+      _load();
+    }
   }
 
   @override
@@ -2383,21 +2719,12 @@ class _RouteFeedState extends State<_RouteFeed>
     return RotaRepository.instance.kesfet(
       page: page,
       limit: 20,
-      sort: _sort,
-      tip: _tip,
-      ilce: _ilce,
-      lat: _sort == 'mesafe' ? _lat : null,
-      lng: _sort == 'mesafe' ? _lng : null,
+      sort: widget.sort,
+      tip: widget.tip,
+      ilce: widget.ilce,
+      lat: widget.sort == 'mesafe' ? widget.lat : null,
+      lng: widget.sort == 'mesafe' ? widget.lng : null,
     );
-  }
-
-  /// Sıralama/filtre değişince listeyi baştan yükler.
-  void _applyChange() {
-    setState(() {
-      _items.clear();
-      _loading = true;
-    });
-    _load();
   }
 
   Future<void> _load() async {
@@ -2438,134 +2765,9 @@ class _RouteFeedState extends State<_RouteFeed>
   Widget build(BuildContext context) {
     super.build(context);
     if (widget.follow && !AuthService.instance.isLoggedIn) return _loginGate();
-    final content = _loading
-        ? const Center(child: CircularProgressIndicator())
-        : (_items.isEmpty ? _empty() : _list());
-    if (widget.follow) return content;
-    // Keşfet: üstte sıralama + filtre çubuğu.
-    return Column(
-      children: [
-        _controls(),
-        Expanded(child: content),
-      ],
-    );
-  }
-
-  // ---- Sıralama + filtre çubuğu ---------------------------------------------
-
-  Widget _controls() {
-    final filterCount = (_tip != null ? 1 : 0) + (_ilce != null ? 1 : 0);
-    final sortActive = _sort != 'yeni';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
-      child: Row(
-        children: [
-          // Filtre — butonlu; bottom sheet ile seçilir.
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: _openFilter,
-              icon: const Icon(Icons.tune, size: 18),
-              label: Text(
-                  filterCount > 0 ? 'Filtrele ($filterCount)' : 'Filtrele',
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
-              style: OutlinedButton.styleFrom(
-                foregroundColor:
-                    filterCount > 0 ? AppColors.primary : AppColors.ink,
-                side: BorderSide(
-                    color: filterCount > 0
-                        ? AppColors.primary
-                        : AppColors.line),
-                minimumSize: const Size(0, 44),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          // Sıralama — sadece ikon.
-          GestureDetector(
-            onTap: _openSort,
-            child: Container(
-              width: 44,
-              height: 44,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: sortActive ? AppColors.primary : Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                    color: sortActive ? AppColors.primary : AppColors.line),
-              ),
-              child: Icon(Icons.swap_vert,
-                  color: sortActive ? Colors.white : AppColors.primary),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _openFilter() async {
-    final res =
-        await showModalBottomSheet<({String? tip, int? ilce, String? ilceAd})>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) =>
-          _FilterSheet(tip: _tip, ilce: _ilce, ilceAd: _ilceAd),
-    );
-    if (res == null || !mounted) return;
-    setState(() {
-      _tip = res.tip;
-      _ilce = res.ilce;
-      _ilceAd = res.ilceAd;
-    });
-    _applyChange();
-  }
-
-  Future<void> _openSort() async {
-    final secili = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 16, 20, 6),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Sırala',
-                    style: TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w600)),
-              ),
-            ),
-            for (final e in _sortLabels.entries)
-              ListTile(
-                title: Text(e.value),
-                trailing: _sort == e.key
-                    ? const Icon(Icons.check, color: AppColors.primary)
-                    : null,
-                onTap: () => Navigator.pop(ctx, e.key),
-              ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-    if (secili == null || secili == _sort) return;
-    // "Mesafe" için konum çöz.
-    if (secili == 'mesafe') {
-      final loc = await LocationService.resolve();
-      if (!mounted) return;
-      _lat = loc.lat;
-      _lng = loc.lng;
-    }
-    setState(() => _sort = secili);
-    _applyChange();
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_items.isEmpty) return _empty();
+    return _list();
   }
 
   Widget _loginGate() {
