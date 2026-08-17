@@ -19,6 +19,10 @@ workflows:
     cache:
       cache_paths:
         - ~/programs/flutter   # Flutter SDK'yı build'ler arası önbelleğe al (tekrar indirmeyi önler)
+        # CocoaPods CDN önbelleği — GoogleMaps podspec'lerini her build'de
+        # tekrar indirmeyi (GitHub 429 rate-limit) önler.
+        - ~/.cocoapods/repos
+        - ~/Library/Caches/CocoaPods
     environment:
       flutter: 3.44.4          # Yerel sürümle eşit; 'stable' indirme zaman aşımını önler
       xcode: latest
@@ -28,6 +32,26 @@ workflows:
     scripts:
       - name: Flutter bağımlılıkları
         script: flutter pub get
+      - name: CocoaPods kur (CDN 429'a karşı retry)
+        script: |
+          # pod install'ı önden ve retry ile çalıştır. GoogleMaps podspec
+          # çözümü GitHub CDN'de 429/timeout yerse birkaç kez tekrar dener;
+          # başarınca Podfile.lock oluşur ve sonraki `flutter build` adımı
+          # CDN'e tekrar yüklenmeden kilitli sürümleri kullanır.
+          cd ios
+          # İlk denemede CDN reposunu güncelle; sonrakiler önbelleği kullanır.
+          for i in 1 2 3 4 5; do
+            echo "pod install denemesi $i..."
+            if [ "$i" -eq 1 ]; then
+              pod install --repo-update && exit 0
+            else
+              pod install && exit 0
+            fi
+            echo "pod install başarısız (deneme $i). 30 sn bekleniyor..."
+            sleep 30
+          done
+          echo "pod install 5 denemede de başarısız oldu."
+          exit 1
       - name: İmza (Distribution sertifikası + App Store profili oluştur)
         script: |
           set -e
