@@ -77,11 +77,16 @@ class _RoutesScreenState extends State<RoutesScreen> {
     final data = await _showRouteForm(context);
     if (data == null || !mounted) return;
     try {
-      await RotaRepository.instance.olustur(
-        baslik: data.$1,
-        aciklama: data.$2,
-        gorunurluk: data.$3,
+      final rota = await RotaRepository.instance.olustur(
+        baslik: data.baslik,
+        aciklama: data.aciklama,
+        gorunurluk: data.gorunurluk,
       );
+      // Kapak ilk adımda seçildiyse oluşturmanın hemen ardından yükle.
+      if (data.kapak != null) {
+        await RotaRepository.instance.kapakYukle(rota.id,
+            'data:image/jpeg;base64,${base64Encode(data.kapak!)}');
+      }
       await _load();
     } on PlusRequiredException catch (e) {
       if (!mounted) return;
@@ -229,6 +234,25 @@ class _RoutesScreenState extends State<RoutesScreen> {
                         ],
                       ],
                     ),
+                    // İstatistik (kendi rotam): görüntülenme + gösterim.
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        const Icon(Icons.visibility_outlined,
+                            size: 13, color: AppColors.muted),
+                        const SizedBox(width: 4),
+                        Text('${r.goruntulenme}',
+                            style: const TextStyle(
+                                fontSize: 12.5, color: AppColors.muted)),
+                        const SizedBox(width: 12),
+                        const Icon(Icons.bar_chart,
+                            size: 13, color: AppColors.muted),
+                        const SizedBox(width: 4),
+                        Text('${r.gosterim}',
+                            style: const TextStyle(
+                                fontSize: 12.5, color: AppColors.muted)),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -297,12 +321,19 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     if (r == null) return;
     final data = await _showRouteForm(context, initial: r);
     if (data == null) return;
-    await _guard(() => RotaRepository.instance.guncelle(
-          r.id,
-          baslik: data.$1,
-          aciklama: data.$2,
-          gorunurluk: data.$3,
-        ));
+    await _guard(() async {
+      await RotaRepository.instance.guncelle(
+        r.id,
+        baslik: data.baslik,
+        aciklama: data.aciklama,
+        gorunurluk: data.gorunurluk,
+      );
+      // Yeni kapak seçildiyse güncellemeyle birlikte yükle.
+      if (data.kapak != null) {
+        await RotaRepository.instance.kapakYukle(
+            r.id, 'data:image/jpeg;base64,${base64Encode(data.kapak!)}');
+      }
+    });
   }
 
   Future<void> _deleteRoute() async {
@@ -332,90 +363,19 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
   /// Kapak görseli seç/kaldır (`/uye/rotalar/{id}/kapak`, Plus gerekli).
   Future<void> _changeCover() async {
     final hasCover = _rota?.kapakGorsel.isNotEmpty ?? false;
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined,
-                  color: AppColors.primary),
-              title: const Text('Galeriden seç'),
-              onTap: () => Navigator.pop(ctx, 'gallery'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.camera_alt_outlined,
-                  color: AppColors.primary),
-              title: const Text('Fotoğraf çek'),
-              onTap: () => Navigator.pop(ctx, 'camera'),
-            ),
-            if (hasCover)
-              ListTile(
-                leading:
-                    const Icon(Icons.delete_outline, color: AppColors.closing),
-                title: const Text('Kapağı kaldır',
-                    style: TextStyle(color: AppColors.closing)),
-                onTap: () => Navigator.pop(ctx, 'remove'),
-              ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
+    final action = await _pickImageSource(context, allowRemove: hasCover);
     if (action == null || !mounted) return;
-
     if (action == 'remove') {
       await _guard(() => RotaRepository.instance.kapakSil(widget.rotaId));
       return;
     }
-    final picker = ImagePicker();
-    final file = await picker.pickImage(
-      source: action == 'camera' ? ImageSource.camera : ImageSource.gallery,
-    );
-    if (file == null || !mounted) return;
-
-    // 16:10 yatay çerçevede kullanıcı kırpma alanını kendisi seçer
-    // (SOSYAL/UYELIK_PLUS §6.2 — kapak 1200×750).
-    final cropped = await ImageCropper().cropImage(
-      sourcePath: file.path,
-      aspectRatio: const CropAspectRatio(ratioX: 16, ratioY: 10),
-      compressFormat: ImageCompressFormat.jpg,
-      compressQuality: 88,
-      maxWidth: 1200,
-      maxHeight: 750,
-      uiSettings: [
-        AndroidUiSettings(
-          toolbarTitle: 'Kapağı Kırp',
-          toolbarColor: AppColors.primary,
-          toolbarWidgetColor: Colors.white,
-          backgroundColor: Colors.black,
-          activeControlsWidgetColor: AppColors.primary,
-          lockAspectRatio: true,
-          hideBottomControls: false,
-        ),
-        IOSUiSettings(
-          title: 'Kapağı Kırp',
-          aspectRatioLockEnabled: true,
-          resetAspectRatioEnabled: false,
-          aspectRatioPickerButtonHidden: true,
-          rotateButtonsHidden: false,
-        ),
-      ],
-    );
-    if (cropped == null || !mounted) return;
-
-    final bytes = await cropped.readAsBytes();
+    final bytes = await _cropCover(
+        action == 'camera' ? ImageSource.camera : ImageSource.gallery);
+    if (bytes == null || !mounted) return;
     final b64 = 'data:image/jpeg;base64,${base64Encode(bytes)}';
     // Yükleme sırasında kırpılan görseli anında (blob) göster.
     setState(() => _pendingCover = bytes);
-    await _guard(
-        () => RotaRepository.instance.kapakYukle(widget.rotaId, b64));
+    await _guard(() => RotaRepository.instance.kapakYukle(widget.rotaId, b64));
     if (mounted) setState(() => _pendingCover = null);
   }
 
@@ -542,6 +502,8 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
       benim: r.benim,
       begeniSayisi: r.begeniSayisi,
       begendim: r.begendim,
+      goruntulenme: r.goruntulenme,
+      gosterim: r.gosterim,
       rotaFiyat: r.rotaFiyat,
       mesafeM: r.mesafeM,
       haritaLink: r.haritaLink,
@@ -906,6 +868,27 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
               ],
             ],
           ),
+          // İstatistik: görüntülenme (herkese), gösterim (yalnız sahibe).
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Icon(Icons.visibility_outlined,
+                  size: 14, color: AppColors.muted),
+              const SizedBox(width: 4),
+              Text('${r.goruntulenme} görüntülenme',
+                  style: const TextStyle(
+                      fontSize: 12.5, color: AppColors.muted)),
+              if (r.benim) ...[
+                const Text('  ·  ', style: TextStyle(color: AppColors.muted)),
+                const Icon(Icons.bar_chart,
+                    size: 14, color: AppColors.muted),
+                const SizedBox(width: 4),
+                Text('${r.gosterim} gösterim',
+                    style: const TextStyle(
+                        fontSize: 12.5, color: AppColors.muted)),
+              ],
+            ],
+          ),
           const SizedBox(height: 14),
           _actions(r),
               ],
@@ -983,46 +966,90 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
           );
   }
 
-  /// Durağa bağlı QR menü ürünü rozeti (küçük görsel + ad + fiyat).
-  Widget _urunRozet(RotaUrun u) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(4, 4, 10, 4),
-      decoration: BoxDecoration(
-        color: AppColors.primarySoft,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: SizedBox(
-              width: 22,
-              height: 22,
-              child: u.gorsel.isNotEmpty
-                  ? NetImage(u.gorsel)
-                  : Container(
-                      color: Colors.white,
-                      child: const Icon(Icons.restaurant_menu,
-                          size: 13, color: AppColors.primary),
+  /// Durağa bağlı QR menü ürünü rozeti (küçük görsel + ad + fiyat). Kullanıcının
+  /// yüklediği yemek fotoğrafı (`foto`) varsa küçük görsel onu gösterir, yoksa
+  /// menü görseli. Dokununca: sahip → foto yönetimi, diğerleri → foto varsa
+  /// tam ekran (rota-yemek-gorsel.md).
+  Widget _urunRozet(RotaDurak d, RotaUrun u, bool owner) {
+    final thumb = u.foto.isNotEmpty ? u.foto : u.gorsel;
+    final hasFoto = u.foto.isNotEmpty;
+    return GestureDetector(
+      onTap: () {
+        if (owner) {
+          _openUrunFoto(d, u);
+        } else if (hasFoto) {
+          _openFotoViewer([DurakGorsel(id: 0, url: u.foto)], 0);
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(4, 4, 10, 4),
+        decoration: BoxDecoration(
+          color: AppColors.primarySoft,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: thumb.isNotEmpty
+                        ? NetImage(thumb)
+                        : Container(
+                            color: Colors.white,
+                            child: const Icon(Icons.restaurant_menu,
+                                size: 13, color: AppColors.primary),
+                          ),
+                  ),
+                ),
+                // Sahibe: foto ekleme/varlığı ipucu.
+                if (owner)
+                  Positioned(
+                    right: -1,
+                    bottom: -1,
+                    child: Container(
+                      padding: const EdgeInsets.all(1.5),
+                      decoration: const BoxDecoration(
+                          color: AppColors.primary, shape: BoxShape.circle),
+                      child: Icon(
+                          hasFoto ? Icons.edit : Icons.add_a_photo,
+                          size: 8,
+                          color: Colors.white),
                     ),
+                  ),
+              ],
             ),
-          ),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              u.fiyatLabel.isEmpty ? u.ad : '${u.ad} · ${u.fiyatLabel}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.primary),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                u.fiyatLabel.isEmpty ? u.ad : '${u.ad} · ${u.fiyatLabel}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
+  }
+
+  /// Sahip için yemek (ürün) fotoğrafı yönetimi (yükle/değiştir/kaldır).
+  Future<void> _openUrunFoto(RotaDurak d, RotaUrun u) async {
+    final changed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _UrunFotoSheet(rotaId: widget.rotaId, durak: d, urun: u),
+    );
+    if (changed == true && mounted) _load();
   }
 
   /// Küçük yuvarlak sahip avatarı (yoksa baş harf yerine kişi ikonu).
@@ -1077,8 +1104,11 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
             : null,
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Row(
+                children: [
               // Sıra numarası rozeti.
               Container(
                 width: 26,
@@ -1140,7 +1170,7 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                         spacing: 6,
                         runSpacing: 6,
                         children: [
-                          for (final u in d.urunler) _urunRozet(u),
+                          for (final u in d.urunler) _urunRozet(d, u, owner),
                         ],
                       ),
                     ],
@@ -1180,11 +1210,79 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                   ),
                 ),
               ],
+                ],
+              ),
+              // Durak fotoğrafları (rota-durak-gorsel.md).
+              if (d.gorseller.isNotEmpty || (owner && !d.silinmis)) ...[
+                const SizedBox(height: 10),
+                _fotoStrip(d, owner),
+              ],
             ],
           ),
         ),
       ),
     );
+  }
+
+  /// Durak fotoğraf şeridi (yatay). Fotoğrafa dokununca tam ekran görüntüleyici;
+  /// sahibe sonda "yönet" (ekle/sil) girişi.
+  Widget _fotoStrip(RotaDurak d, bool owner) {
+    return SizedBox(
+      height: 64,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.zero,
+        children: [
+          for (var i = 0; i < d.gorseller.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: GestureDetector(
+                onTap: () => _openFotoViewer(d.gorseller, i),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: SizedBox(
+                    width: 64,
+                    height: 64,
+                    child: NetImage(d.gorseller[i].url),
+                  ),
+                ),
+              ),
+            ),
+          if (owner && !d.silinmis)
+            GestureDetector(
+              onTap: () => _openFotoManager(d),
+              child: Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: AppColors.primarySoft,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.line),
+                ),
+                child: const Icon(Icons.add_a_photo_outlined,
+                    color: AppColors.primary, size: 22),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _openFotoViewer(List<DurakGorsel> fotos, int index) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => _FotoViewer(fotos: fotos, index: index),
+    );
+  }
+
+  Future<void> _openFotoManager(RotaDurak d) async {
+    final changed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _DurakFotoSheet(rotaId: widget.rotaId, durak: d),
+    );
+    if (changed == true && mounted) _load();
   }
 }
 
@@ -1192,90 +1290,305 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
 // Ortak formlar / seçiciler
 // ===========================================================================
 
-/// Rota oluştur/düzenle formu. `(baslik, aciklama, gorunurluk)` döner; iptalde
-/// null.
-Future<(String, String, String)?> _showRouteForm(BuildContext context,
-    {GeziRota? initial}) {
+/// Galeri/kamera'dan görsel seçip **16:10** kırpar (kapak için); JPEG bytes
+/// döner. İptalde null. Alttaki taşan kontroller gizlenir.
+Future<Uint8List?> _cropCover(ImageSource source) async {
+  final file = await ImagePicker().pickImage(source: source);
+  if (file == null) return null;
+  final cropped = await ImageCropper().cropImage(
+    sourcePath: file.path,
+    aspectRatio: const CropAspectRatio(ratioX: 16, ratioY: 10),
+    compressFormat: ImageCompressFormat.jpg,
+    compressQuality: 88,
+    maxWidth: 1200,
+    maxHeight: 750,
+    uiSettings: [
+      AndroidUiSettings(
+        toolbarTitle: 'Kapağı Kırp',
+        toolbarColor: AppColors.primary,
+        toolbarWidgetColor: Colors.white,
+        backgroundColor: Colors.black,
+        activeControlsWidgetColor: AppColors.primary,
+        lockAspectRatio: true,
+        hideBottomControls: true, // alttaki taşan kontrol çubuğunu gizle
+      ),
+      IOSUiSettings(
+        title: 'Kapağı Kırp',
+        aspectRatioLockEnabled: true,
+        resetAspectRatioEnabled: false,
+        aspectRatioPickerButtonHidden: true,
+        rotateButtonsHidden: true,
+      ),
+    ],
+  );
+  if (cropped == null) return null;
+  return cropped.readAsBytes();
+}
+
+/// Galeri/kamera'dan görsel seçip **1:1 kare** kırpar (yemek fotoğrafı için,
+/// rota-yemek-gorsel.md); JPEG bytes döner. İptalde null.
+Future<Uint8List?> _cropSquare(ImageSource source) async {
+  final file = await ImagePicker().pickImage(source: source);
+  if (file == null) return null;
+  final cropped = await ImageCropper().cropImage(
+    sourcePath: file.path,
+    aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+    compressFormat: ImageCompressFormat.jpg,
+    compressQuality: 88,
+    maxWidth: 1080,
+    maxHeight: 1080,
+    uiSettings: [
+      AndroidUiSettings(
+        toolbarTitle: 'Fotoğrafı Kırp',
+        toolbarColor: AppColors.primary,
+        toolbarWidgetColor: Colors.white,
+        backgroundColor: Colors.black,
+        activeControlsWidgetColor: AppColors.primary,
+        lockAspectRatio: true,
+        hideBottomControls: true,
+      ),
+      IOSUiSettings(
+        title: 'Fotoğrafı Kırp',
+        aspectRatioLockEnabled: true,
+        resetAspectRatioEnabled: false,
+        aspectRatioPickerButtonHidden: true,
+        rotateButtonsHidden: true,
+      ),
+    ],
+  );
+  if (cropped == null) return null;
+  return cropped.readAsBytes();
+}
+
+/// Görsel kaynağı seçici (galeri/kamera[/kaldır]) — `'gallery'|'camera'|'remove'`.
+Future<String?> _pickImageSource(BuildContext context,
+    {bool allowRemove = false}) {
+  return showModalBottomSheet<String>(
+    context: context,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (ctx) => SafeArea(
+      top: false,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined,
+                color: AppColors.primary),
+            title: const Text('Galeriden seç'),
+            onTap: () => Navigator.pop(ctx, 'gallery'),
+          ),
+          ListTile(
+            leading:
+                const Icon(Icons.camera_alt_outlined, color: AppColors.primary),
+            title: const Text('Fotoğraf çek'),
+            onTap: () => Navigator.pop(ctx, 'camera'),
+          ),
+          if (allowRemove)
+            ListTile(
+              leading:
+                  const Icon(Icons.delete_outline, color: AppColors.closing),
+              title: const Text('Kapağı kaldır',
+                  style: TextStyle(color: AppColors.closing)),
+              onTap: () => Navigator.pop(ctx, 'remove'),
+            ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    ),
+  );
+}
+
+/// Rota oluştur/düzenle formu (kapak görseli **ilk adımda**). Kaydedilirse
+/// `(baslik, aciklama, gorunurluk, kapak-bytes?)` döner; iptalde null.
+Future<
+        ({
+          String baslik,
+          String aciklama,
+          String gorunurluk,
+          Uint8List? kapak
+        })?>
+    _showRouteForm(BuildContext context, {GeziRota? initial}) {
   final baslikC = TextEditingController(text: initial?.baslik ?? '');
   final aciklamaC = TextEditingController(text: initial?.aciklama ?? '');
   var herkeseAcik = initial?.herkeseAcik ?? false;
+  final initialKapak = initial?.kapakGorsel ?? '';
+  Uint8List? kapak;
 
-  return showModalBottomSheet<(String, String, String)>(
+  return showModalBottomSheet<
+      ({
+        String baslik,
+        String aciklama,
+        String gorunurluk,
+        Uint8List? kapak
+      })>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setSheet) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-        child: Container(
-          decoration: const BoxDecoration(
-            color: AppColors.bg,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                      color: AppColors.line,
-                      borderRadius: BorderRadius.circular(2)),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Text(initial == null ? 'Yeni Rota' : 'Rotayı Düzenle',
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 18),
-              _field(baslikC, 'Rota başlığı', 'Örn. Kadıköy Turu'),
-              const SizedBox(height: 14),
-              _field(aciklamaC, 'Açıklama (opsiyonel)', 'Kısa bir açıklama',
-                  maxLines: 3),
-              const SizedBox(height: 14),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Herkese açık',
-                    style: TextStyle(
-                        fontSize: 14.5, fontWeight: FontWeight.w600)),
-                subtitle: const Text('Diğer üyeler bu rotayı görebilir',
-                    style: TextStyle(fontSize: 12.5, color: AppColors.muted)),
-                value: herkeseAcik,
-                activeThumbColor: Colors.white,
-                activeTrackColor: AppColors.primary,
-                onChanged: (v) => setSheet(() => herkeseAcik = v),
-              ),
-              const SizedBox(height: 18),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: () {
-                    if (baslikC.text.trim().isEmpty) return;
-                    Navigator.pop(ctx, (
-                      baslikC.text.trim(),
-                      aciklamaC.text.trim(),
-                      herkeseAcik ? 'herkese_acik' : 'gizli',
-                    ));
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
+      builder: (ctx, setSheet) {
+        Future<void> pickCover() async {
+          final src = await _pickImageSource(ctx);
+          if (src == null || src == 'remove') return;
+          final b = await _cropCover(
+              src == 'camera' ? ImageSource.camera : ImageSource.gallery);
+          if (b != null) setSheet(() => kapak = b);
+        }
+
+        return Padding(
+          padding:
+              EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: Container(
+            decoration: const BoxDecoration(
+              color: AppColors.bg,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                          color: AppColors.line,
+                          borderRadius: BorderRadius.circular(2)),
+                    ),
                   ),
-                  child: Text(initial == null ? 'Oluştur' : 'Kaydet',
+                  const SizedBox(height: 18),
+                  Text(initial == null ? 'Yeni Rota' : 'Rotayı Düzenle',
                       style: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w600)),
-                ),
+                          fontSize: 18, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 16),
+                  // Kapak görseli — ilk adımda seçilir/kırpılır.
+                  const Text('Kapak görseli (opsiyonel)',
+                      style: TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: pickCover,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: AspectRatio(
+                        aspectRatio: 16 / 10,
+                        child: kapak != null
+                            ? Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  Image.memory(kapak!, fit: BoxFit.cover),
+                                  _coverEditHint(),
+                                ],
+                              )
+                            : initialKapak.isNotEmpty
+                                ? Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      NetImage(initialKapak),
+                                      _coverEditHint(),
+                                    ],
+                                  )
+                                : Container(
+                                    color: AppColors.primarySoft,
+                                    child: const Center(
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.add_photo_alternate_outlined,
+                                              size: 30,
+                                              color: AppColors.primary),
+                                          SizedBox(height: 6),
+                                          Text('Kapak Ekle',
+                                              style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: AppColors.primary)),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _field(baslikC, 'Rota başlığı', 'Örn. Kadıköy Turu'),
+                  const SizedBox(height: 14),
+                  _field(aciklamaC, 'Açıklama (opsiyonel)',
+                      'Kısa bir açıklama',
+                      maxLines: 3),
+                  const SizedBox(height: 14),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Herkese açık',
+                        style: TextStyle(
+                            fontSize: 14.5, fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Diğer üyeler bu rotayı görebilir',
+                        style:
+                            TextStyle(fontSize: 12.5, color: AppColors.muted)),
+                    value: herkeseAcik,
+                    activeThumbColor: Colors.white,
+                    activeTrackColor: AppColors.primary,
+                    onChanged: (v) => setSheet(() => herkeseAcik = v),
+                  ),
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        if (baslikC.text.trim().isEmpty) return;
+                        Navigator.pop(ctx, (
+                          baslik: baslikC.text.trim(),
+                          aciklama: aciklamaC.text.trim(),
+                          gorunurluk: herkeseAcik ? 'herkese_acik' : 'gizli',
+                          kapak: kapak,
+                        ));
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: Text(initial == null ? 'Oluştur' : 'Kaydet',
+                          style: const TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
+        );
+      },
+    ),
+  );
+}
+
+/// Kapak önizlemesi üstünde "değiştir" ipucu.
+Widget _coverEditHint() {
+  return Container(
+    alignment: Alignment.bottomRight,
+    padding: const EdgeInsets.all(8),
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.edit, size: 13, color: Colors.white),
+          SizedBox(width: 4),
+          Text('Değiştir',
+              style: TextStyle(fontSize: 11.5, color: Colors.white)),
+        ],
       ),
     ),
   );
@@ -2539,10 +2852,14 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen>
     if (data == null || !mounted) return;
     try {
       final rota = await RotaRepository.instance.olustur(
-        baslik: data.$1,
-        aciklama: data.$2,
-        gorunurluk: data.$3,
+        baslik: data.baslik,
+        aciklama: data.aciklama,
+        gorunurluk: data.gorunurluk,
       );
+      if (data.kapak != null) {
+        await RotaRepository.instance.kapakYukle(rota.id,
+            'data:image/jpeg;base64,${base64Encode(data.kapak!)}');
+      }
       if (!mounted) return;
       await Navigator.push(
         context,
@@ -3147,6 +3464,458 @@ class _RouteFeedState extends State<_RouteFeed>
                 child:
                     const Icon(Icons.person, size: 12, color: AppColors.primary),
               ),
+      ),
+    );
+  }
+}
+
+
+/// Durak fotoğrafları tam ekran görüntüleyici (kaydırmalı + yakınlaştırma).
+class _FotoViewer extends StatelessWidget {
+  final List<DurakGorsel> fotos;
+  final int index;
+  const _FotoViewer({required this.fotos, required this.index});
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = PageController(initialPage: index);
+    return Dialog(
+      backgroundColor: Colors.black,
+      insetPadding: EdgeInsets.zero,
+      child: Stack(
+        children: [
+          PageView(
+            controller: controller,
+            children: [
+              for (final f in fotos)
+                InteractiveViewer(
+                  minScale: 1,
+                  maxScale: 4,
+                  child: Center(child: NetImage(f.url, fit: BoxFit.contain)),
+                ),
+            ],
+          ),
+          Positioned(
+            top: 0,
+            right: 0,
+            child: SafeArea(
+              child: IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Durak fotoğraf yönetimi (sahibe): ekle/sil. Değişiklik olduysa `true` döner.
+class _DurakFotoSheet extends StatefulWidget {
+  final int rotaId;
+  final RotaDurak durak;
+  const _DurakFotoSheet({required this.rotaId, required this.durak});
+
+  @override
+  State<_DurakFotoSheet> createState() => _DurakFotoSheetState();
+}
+
+class _DurakFotoSheetState extends State<_DurakFotoSheet> {
+  static const int _max = 10;
+  late final List<DurakGorsel> _fotos = List.of(widget.durak.gorseller);
+  bool _busy = false;
+  bool _changed = false;
+
+  void _snack(String m) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+  }
+
+  Future<void> _add() async {
+    if (_fotos.length >= _max) {
+      _snack('En fazla $_max fotoğraf ekleyebilirsin.');
+      return;
+    }
+    final files = await ImagePicker().pickMultiImage(imageQuality: 90);
+    if (files.isEmpty || !mounted) return;
+    setState(() => _busy = true);
+    for (final f in files) {
+      if (_fotos.length >= _max) break;
+      try {
+        final bytes = await f.readAsBytes();
+        final b64 = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+        final g = await RotaRepository.instance.durakGorselYukle(
+            widget.rotaId,
+            durakId: widget.durak.durakId,
+            base64: b64);
+        if (!mounted) return;
+        setState(() {
+          _fotos.add(g);
+          _changed = true;
+        });
+      } on PlusRequiredException catch (e) {
+        _snack(e.message);
+        break;
+      } on RotaException catch (e) {
+        _snack(e.message);
+        break;
+      } catch (_) {
+        _snack('Fotoğraf yüklenemedi.');
+        break;
+      }
+    }
+    if (mounted) setState(() => _busy = false);
+  }
+
+  Future<void> _remove(DurakGorsel g) async {
+    try {
+      await RotaRepository.instance.durakGorselSil(widget.rotaId,
+          durakId: widget.durak.durakId, gorselId: g.id);
+      if (!mounted) return;
+      setState(() {
+        _fotos.removeWhere((e) => e.id == g.id);
+        _changed = true;
+      });
+    } on PlusRequiredException catch (e) {
+      _snack(e.message);
+    } on RotaException catch (e) {
+      _snack(e.message);
+    } catch (_) {
+      _snack('Fotoğraf silinemedi.');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.7,
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
+            child: Row(
+              children: [
+                const Text('Durak Fotoğrafları',
+                    style:
+                        TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                const SizedBox(width: 8),
+                Text('(${_fotos.length}/$_max)',
+                    style: const TextStyle(
+                        fontSize: 13, color: AppColors.muted)),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => Navigator.pop(context, _changed),
+                  icon: const Icon(Icons.close, color: AppColors.ink),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: AppColors.line),
+          Expanded(
+            child: _fotos.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.photo_library_outlined,
+                              size: 48, color: AppColors.muted),
+                          const SizedBox(height: 12),
+                          const Text('Bu durağa henüz fotoğraf eklenmedi.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: AppColors.muted)),
+                        ],
+                      ),
+                    ),
+                  )
+                : GridView.count(
+                    crossAxisCount: 3,
+                    padding: const EdgeInsets.all(16),
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    children: [
+                      for (final g in _fotos)
+                        Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: NetImage(g.url),
+                            ),
+                            Positioned(
+                              top: 4,
+                              right: 4,
+                              child: GestureDetector(
+                                onTap: () => _remove(g),
+                                child: Container(
+                                  width: 26,
+                                  height: 26,
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.55),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.close,
+                                      color: Colors.white, size: 16),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+          ),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton.icon(
+                  onPressed: (_busy || _fotos.length >= _max) ? null : _add,
+                  icon: _busy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2.2, color: Colors.white))
+                      : const Icon(Icons.add_a_photo_outlined, size: 18),
+                  label: Text(_busy ? 'Yükleniyor…' : 'Fotoğraf Ekle',
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Yemek (ürün) fotoğrafı yönetimi (sahibe): tek foto yükle/değiştir/kaldır
+/// (rota-yemek-gorsel.md). Değişiklik olduysa `true` döner.
+class _UrunFotoSheet extends StatefulWidget {
+  final int rotaId;
+  final RotaDurak durak;
+  final RotaUrun urun;
+  const _UrunFotoSheet(
+      {required this.rotaId, required this.durak, required this.urun});
+
+  @override
+  State<_UrunFotoSheet> createState() => _UrunFotoSheetState();
+}
+
+class _UrunFotoSheetState extends State<_UrunFotoSheet> {
+  late String _foto = widget.urun.foto;
+  bool _busy = false;
+  bool _changed = false;
+
+  void _snack(String m) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+  }
+
+  Future<void> _upload() async {
+    final src = await _pickImageSource(context, allowRemove: _foto.isNotEmpty);
+    if (src == null) return;
+    if (src == 'remove') {
+      await _remove();
+      return;
+    }
+    final bytes = await _cropSquare(
+        src == 'camera' ? ImageSource.camera : ImageSource.gallery);
+    if (bytes == null || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final b64 = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+      final url = await RotaRepository.instance.urunGorselYukle(
+        widget.rotaId,
+        durakId: widget.durak.durakId,
+        qrId: widget.urun.qrId,
+        base64: b64,
+      );
+      if (!mounted) return;
+      setState(() {
+        _foto = url;
+        _changed = true;
+      });
+    } on PlusRequiredException catch (e) {
+      _snack(e.message);
+    } on RotaException catch (e) {
+      _snack(e.message);
+    } catch (_) {
+      _snack('Fotoğraf yüklenemedi.');
+    }
+    if (mounted) setState(() => _busy = false);
+  }
+
+  Future<void> _remove() async {
+    setState(() => _busy = true);
+    try {
+      await RotaRepository.instance.urunGorselSil(widget.rotaId,
+          durakId: widget.durak.durakId, qrId: widget.urun.qrId);
+      if (!mounted) return;
+      setState(() {
+        _foto = '';
+        _changed = true;
+      });
+    } on PlusRequiredException catch (e) {
+      _snack(e.message);
+    } on RotaException catch (e) {
+      _snack(e.message);
+    } catch (_) {
+      _snack('Fotoğraf silinemedi.');
+    }
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final u = widget.urun;
+    // Önizlemede kullanıcı fotoğrafı öncelikli, yoksa menü görseli.
+    final preview = _foto.isNotEmpty ? _foto : u.gorsel;
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 10, bottom: 4),
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: AppColors.line,
+                    borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      u.ad.isEmpty ? 'Yemek Fotoğrafı' : u.ad,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 17, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context, _changed),
+                    icon: const Icon(Icons.close, color: AppColors.ink),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: preview.isNotEmpty
+                      ? NetImage(preview)
+                      : Container(
+                          color: AppColors.primarySoft,
+                          child: const Center(
+                            child: Icon(Icons.restaurant_menu,
+                                size: 48, color: AppColors.primary),
+                          ),
+                        ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+              child: Text(
+                _foto.isNotEmpty
+                    ? 'Bu yemek için yüklediğin fotoğraf.'
+                    : 'Bu yemek için bir fotoğraf yükleyebilirsin (kare).',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12.5, color: AppColors.muted),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: _busy ? null : _upload,
+                        icon: _busy
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2.2, color: Colors.white))
+                            : Icon(
+                                _foto.isEmpty
+                                    ? Icons.add_a_photo_outlined
+                                    : Icons.swap_horiz,
+                                size: 18),
+                        label: Text(
+                            _busy
+                                ? 'Yükleniyor…'
+                                : (_foto.isEmpty
+                                    ? 'Fotoğraf Yükle'
+                                    : 'Değiştir'),
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w600)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (_foto.isNotEmpty) ...[
+                    const SizedBox(width: 10),
+                    SizedBox(
+                      height: 50,
+                      width: 50,
+                      child: OutlinedButton(
+                        onPressed: _busy ? null : _remove,
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          side: const BorderSide(color: AppColors.closing),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
+                        ),
+                        child: const Icon(Icons.delete_outline,
+                            color: AppColors.closing),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

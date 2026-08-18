@@ -351,20 +351,8 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   Widget _hero() {
-    final content = _heroContent();
-    final tag = widget.heroTag;
-    if (tag == null) return content;
-    // Galeri bir PageView olduğundan, uçuş sırasında tek düz görsel gösteririz
-    // (glitch'i önler); iniş anında gerçek galeri devreye girer.
-    return Hero(
-      tag: tag,
-      flightShuttleBuilder: (_, __, ___, ____, _____) => NetImage(
-          widget.place.image.isNotEmpty
-              ? widget.place.image
-              : (_images.isNotEmpty ? _images.first : ''),
-          fit: BoxFit.cover),
-      child: content,
-    );
+    // Hero (liste→detay) uçuş animasyonu iptal edildi: düz içerik döner.
+    return _heroContent();
   }
 
   Widget _heroContent() {

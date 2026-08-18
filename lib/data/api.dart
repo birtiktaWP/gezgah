@@ -2709,6 +2709,53 @@ class RotaRepository {
         options: await _uyeAuth()));
   }
 
+  /// `POST /uye/rotalar/{id}/mekan/gorsel` — durağa fotoğraf yükle (Plus,
+  /// rota-durak-gorsel.md). [base64] data URI/çıplak base64. Yeni görseli döner
+  /// (id + url); durak başına en çok 10 (aşılırsa [RotaException]).
+  Future<DurakGorsel> durakGorselYukle(int id,
+      {required int durakId, required String base64}) async {
+    final res = await _post('/uye/rotalar/$id/mekan/gorsel', {
+      'durak_id': durakId,
+      'gorsel': base64,
+    });
+    final g = res is Map ? res['gorsel'] : null;
+    if (g is Map<String, dynamic>) {
+      return DurakGorsel.fromJson(g, host: kApiHost);
+    }
+    throw RotaException('Fotoğraf yüklenemedi.');
+  }
+
+  /// `DELETE /uye/rotalar/{id}/mekan/gorsel` — durak fotoğrafını sil.
+  Future<void> durakGorselSil(int id,
+      {required int durakId, required int gorselId}) async {
+    await _send(() async => _dio.delete('/uye/rotalar/$id/mekan/gorsel',
+        data: {'durak_id': durakId, 'gorsel_id': gorselId},
+        options: await _uyeAuth()));
+  }
+
+  /// `POST /uye/rotalar/{id}/mekan/urun-gorsel` — durakta seçili bir yemeğe
+  /// (ürüne) fotoğraf yükle (Plus, rota-yemek-gorsel.md). Ürün başına tek foto;
+  /// yeni yükleme öncekini değiştirir. [base64] data URI/çıplak base64. Yeni
+  /// fotoğrafın tam URL'ini döner.
+  Future<String> urunGorselYukle(int id,
+      {required int durakId, required int qrId, required String base64}) async {
+    final res = await _post('/uye/rotalar/$id/mekan/urun-gorsel', {
+      'durak_id': durakId,
+      'qr_id': qrId,
+      'gorsel': base64,
+    });
+    final d = res is Map ? res : const {};
+    return (d['foto'] as String?) ?? '';
+  }
+
+  /// `DELETE /uye/rotalar/{id}/mekan/urun-gorsel` — yemek fotoğrafını sil.
+  Future<void> urunGorselSil(int id,
+      {required int durakId, required int qrId}) async {
+    await _send(() async => _dio.delete('/uye/rotalar/$id/mekan/urun-gorsel',
+        data: {'durak_id': durakId, 'qr_id': qrId},
+        options: await _uyeAuth()));
+  }
+
   /// `DELETE /uye/rotalar/{id}/mekan` — durak sil (Plus şartı yok).
   Future<void> durakSil(int id, {required int durakId}) async {
     await _send(() async => _dio.delete('/uye/rotalar/$id/mekan',

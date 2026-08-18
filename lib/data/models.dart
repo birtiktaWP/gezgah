@@ -497,6 +497,8 @@ class GeziRota {
   final bool benim; // detayda: rota oturumdaki üyeye mi ait
   final int begeniSayisi; // rotanın toplam beğeni sayısı
   final bool begendim; // isteği yapan üye bu rotayı beğendi mi
+  final int goruntulenme; // detay görüntülenme sayısı (rota-istatistik.md)
+  final int gosterim; // listede gösterim (impression) sayısı
   final double? rotaFiyat; // seçili ürünlerin fiyat toplamı (yoksa null)
   final int? mesafeM; // ilk durağa mesafe (metre); konum verildiyse
   final String haritaLink; // tüm rotayı gezen Google Maps yol tarifi (yoksa '')
@@ -519,6 +521,8 @@ class GeziRota {
     this.benim = false,
     this.begeniSayisi = 0,
     this.begendim = false,
+    this.goruntulenme = 0,
+    this.gosterim = 0,
     this.rotaFiyat,
     this.mesafeM,
     this.haritaLink = '',
@@ -562,6 +566,8 @@ class GeziRota {
         benim: benim,
         begeniSayisi: begeniSayisi,
         begendim: begendim,
+        goruntulenme: goruntulenme,
+        gosterim: gosterim,
         rotaFiyat: rotaFiyat,
         mesafeM: mesafeM,
         haritaLink: haritaLink,
@@ -595,6 +601,8 @@ class GeziRota {
       benim: j['benim'] == true,
       begeniSayisi: (j['begeni_sayisi'] as num?)?.toInt() ?? 0,
       begendim: j['begendim'] == true,
+      goruntulenme: (j['goruntulenme'] as num?)?.toInt() ?? 0,
+      gosterim: (j['gosterim'] as num?)?.toInt() ?? 0,
       rotaFiyat: (j['rota_fiyat'] as num?)?.toDouble(),
       mesafeM: (j['mesafe_m'] as num?)?.toInt(),
       haritaLink: (j['harita_link'] as String?)?.trim() ?? '',
@@ -719,6 +727,7 @@ class RotaDurak {
   final bool silinmis;
   final RotaUrun? seciliUrun; // geriye dönük uyumluluk (urunler[0])
   final List<RotaUrun> urunler; // durağa bağlı tüm QR menü ürünleri
+  final List<DurakGorsel> gorseller; // durağa yüklenen fotoğraflar (sıralı)
   final String haritaLink; // durağı haritada açan Google Maps linki (yoksa '')
 
   const RotaDurak({
@@ -729,6 +738,7 @@ class RotaDurak {
     this.silinmis = false,
     this.seciliUrun,
     this.urunler = const [],
+    this.gorseller = const [],
     this.haritaLink = '',
   });
 
@@ -737,13 +747,13 @@ class RotaDurak {
     final silinmis =
         j['silinmis'] == true || (m is Map && m['silinmis'] == true);
     final secili = j['secili_urun'] is Map<String, dynamic>
-        ? RotaUrun.fromJson(j['secili_urun'] as Map<String, dynamic>)
+        ? RotaUrun.fromJson(j['secili_urun'] as Map<String, dynamic>, host: host)
         : null;
     // Çoklu ürün: `urunler[]` (rota-coklu-yemek.md); yoksa secili_urun'a düş.
     final urunler = (j['urunler'] is List)
         ? (j['urunler'] as List)
             .whereType<Map<String, dynamic>>()
-            .map(RotaUrun.fromJson)
+            .map((u) => RotaUrun.fromJson(u, host: host))
             .where((u) => u.qrId > 0)
             .toList()
         : (secili != null ? [secili] : <RotaUrun>[]);
@@ -758,33 +768,66 @@ class RotaDurak {
       silinmis: silinmis,
       seciliUrun: secili ?? (urunler.isNotEmpty ? urunler.first : null),
       urunler: urunler,
+      gorseller: (j['gorseller'] is List)
+          ? (j['gorseller'] as List)
+              .whereType<Map<String, dynamic>>()
+              .map((g) => DurakGorsel.fromJson(g, host: host))
+              .where((g) => g.url.isNotEmpty)
+              .toList()
+          : const [],
       haritaLink: (j['harita_link'] as String?)?.trim() ?? '',
     );
   }
 }
 
+/// Durağa yüklenen fotoğraf (`duraklar[].gorseller[]`, rota-durak-gorsel.md).
+class DurakGorsel {
+  final int id;
+  final String url;
+  const DurakGorsel({required this.id, this.url = ''});
+
+  factory DurakGorsel.fromJson(Map<String, dynamic> j, {String host = ''}) =>
+      DurakGorsel(
+        id: (j['id'] as num?)?.toInt() ?? 0,
+        url: _absUrl(j['url'], host),
+      );
+}
+
 /// Rota durağına bağlanabilen QR menü ürünü (PROFIL_VE_ROTA_URUN.md §1).
-/// [gorsel] QR menü `img.php` proxy tam URL'idir.
+/// [gorsel] QR menü `img.php` proxy tam URL'idir. [foto] kullanıcının bu rota
+/// için yüklediği ürün fotoğrafı (rota-yemek-gorsel.md, ürün başına tek); yoksa ''.
 class RotaUrun {
   final int qrId;
   final String ad;
   final String fiyat; // ham metin
-  final String gorsel; // tam URL; yoksa ''
+  final String gorsel; // menüdeki hazır görsel; tam URL; yoksa ''
+  final String foto; // kullanıcının yüklediği ürün fotoğrafı; tam URL; yoksa ''
   const RotaUrun({
     required this.qrId,
     this.ad = '',
     this.fiyat = '',
     this.gorsel = '',
+    this.foto = '',
   });
 
   /// "350 ₺" / fiyat yoksa ''.
   String get fiyatLabel => fiyat.trim().isEmpty ? '' : '$fiyat ₺';
 
-  factory RotaUrun.fromJson(Map<String, dynamic> j) => RotaUrun(
+  RotaUrun copyWith({String? foto}) => RotaUrun(
+        qrId: qrId,
+        ad: ad,
+        fiyat: fiyat,
+        gorsel: gorsel,
+        foto: foto ?? this.foto,
+      );
+
+  factory RotaUrun.fromJson(Map<String, dynamic> j, {String host = ''}) =>
+      RotaUrun(
         qrId: (j['qr_id'] as num?)?.toInt() ?? 0,
         ad: (j['ad'] as String?)?.trim() ?? '',
         fiyat: j['fiyat']?.toString().trim() ?? '',
         gorsel: (j['gorsel'] as String?)?.trim() ?? '',
+        foto: _absUrl(j['foto'], host),
       );
 }
 

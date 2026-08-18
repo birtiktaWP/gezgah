@@ -3,6 +3,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../data/models.dart';
 import '../theme/app_theme.dart';
+import '../widgets/common.dart';
 import 'detail_screen.dart';
 
 /// Rotayı uygulama içi haritada gösterir (rota-app-ici-harita.md):
@@ -135,9 +136,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
             },
           ),
           _topBar(),
-          if (widget.rota.toplamMesafeM != null ||
-              widget.rota.toplamSureSn != null)
-            _ozetChip(),
+          _bottomBar(),
         ],
       ),
     );
@@ -202,8 +201,10 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     );
   }
 
-  Widget _ozetChip() {
-    final parts = <String>[];
+  /// Alt bar — durak sayısı + (varsa) mesafe/süre. Dokununca durak listesi
+  /// bottom sheet'i açılır.
+  Widget _bottomBar() {
+    final parts = <String>['${_noktalar.length} durak'];
     final m = widget.rota.toplamMesafeM;
     final s = widget.rota.toplamSureSn;
     if (m != null) {
@@ -213,7 +214,6 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       final dk = (s / 60).round();
       parts.add(dk >= 60 ? '${dk ~/ 60} sa ${dk % 60} dk' : '$dk dk');
     }
-    if (parts.isEmpty) return const SizedBox.shrink();
     return Positioned(
       left: 0,
       right: 0,
@@ -223,25 +223,31 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Center(
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(999),
-                boxShadow: AppShadows.listTile,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.directions, color: Colors.white, size: 18),
-                  const SizedBox(width: 8),
-                  Text(parts.join('  ·  '),
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w600)),
-                ],
+            child: GestureDetector(
+              onTap: _openStopList,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(999),
+                  boxShadow: AppShadows.listTile,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.directions, color: Colors.white, size: 18),
+                    const SizedBox(width: 8),
+                    Text(parts.join('  ·  '),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600)),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.keyboard_arrow_up,
+                        color: Colors.white, size: 18),
+                  ],
+                ),
               ),
             ),
           ),
@@ -249,6 +255,180 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       ),
     );
   }
+
+  /// Haritadaki durakların listesi (görsel + ad). En çok 5 görünür, kalan
+  /// görünmez kaydırma. Bir öğeye dokununca harita o koordinata odaklanır.
+  void _openStopList() {
+    final items = _stopItems();
+    if (items.isEmpty) return;
+    const rowH = 72.0;
+    final visible = items.length > 5 ? 5 : items.length;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.bg,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 10, bottom: 6),
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: AppColors.line,
+                    borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Duraklar (${items.length})',
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w600)),
+              ),
+            ),
+            const Divider(height: 1, color: AppColors.line),
+            SizedBox(
+              height: visible * rowH,
+              child: ListView.separated(
+                padding: EdgeInsets.zero,
+                itemCount: items.length,
+                separatorBuilder: (_, __) => const Divider(
+                    height: 1, indent: 76, color: AppColors.line),
+                itemBuilder: (_, i) => _stopListRow(items[i], rowH),
+              ),
+            ),
+            SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _stopListRow(_MapStop it, double height) {
+    return InkWell(
+      onTap: () => _focusStop(it),
+      child: SizedBox(
+        height: height,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                    color: AppColors.primary, shape: BoxShape.circle),
+                child: Text('${it.sira}',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(width: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: it.image.isNotEmpty
+                      ? NetImage(it.image)
+                      : Container(
+                          color: AppColors.primarySoft,
+                          child: const Icon(Icons.place,
+                              color: AppColors.primary)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(it.name.isEmpty ? 'Durak' : it.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 14.5, fontWeight: FontWeight.w600)),
+              ),
+              const Icon(Icons.my_location,
+                  size: 18, color: AppColors.primary),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Durak listesi öğelerini (koordinatlı) üretir; görsel için önce durak
+  /// fotoğrafı, sonra mekan görseli kullanılır.
+  List<_MapStop> _stopItems() {
+    final list = <_MapStop>[];
+    if (widget.rota.duraklar.isNotEmpty) {
+      for (final d in widget.rota.duraklar) {
+        final mk = d.mekan;
+        if (mk == null || !mk.hasCoord) continue;
+        final img = d.gorseller.isNotEmpty ? d.gorseller.first.url : mk.image;
+        list.add(_MapStop(
+          sira: d.sira,
+          durakId: d.durakId,
+          postId: mk.id,
+          name: mk.name,
+          image: img,
+          lat: mk.lat!,
+          lng: mk.lng!,
+        ));
+      }
+    }
+    if (list.isEmpty) {
+      for (final n in _noktalar) {
+        list.add(_MapStop(
+          sira: n.sira,
+          durakId: n.durakId,
+          postId: n.postId,
+          name: n.name,
+          image: '',
+          lat: n.lat!,
+          lng: n.lng!,
+        ));
+      }
+    }
+    return list;
+  }
+
+  Future<void> _focusStop(_MapStop it) async {
+    Navigator.pop(context); // listeyi kapat
+    await _controller?.animateCamera(
+        CameraUpdate.newLatLngZoom(LatLng(it.lat, it.lng), 16.5));
+    // Marker bilgi balonunu aç (id, _buildMarkers ile aynı).
+    try {
+      await _controller
+          ?.showMarkerInfoWindow(MarkerId('durak_${it.durakId}_${it.postId}'));
+    } catch (_) {}
+  }
+}
+
+/// Harita durak listesi öğesi (dahili).
+class _MapStop {
+  final int sira;
+  final int durakId;
+  final int postId;
+  final String name;
+  final String image;
+  final double lat;
+  final double lng;
+  const _MapStop({
+    required this.sira,
+    required this.durakId,
+    required this.postId,
+    required this.name,
+    required this.image,
+    required this.lat,
+    required this.lng,
+  });
 }
 
 /// Google encoded polyline → LatLng listesi (bağımsız decoder; ek paket yok).

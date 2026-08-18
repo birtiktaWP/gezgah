@@ -42,9 +42,8 @@ class NetImage extends StatelessWidget {
 /// geçişinde akıcı büyüme için `Hero` ile sarmalar. [tag] null ise düz görsel
 /// döner (Hero yok → aynı ekranda tag çakışması riski olmaz).
 Widget heroImage(Object? tag, String url, {BoxFit fit = BoxFit.cover}) {
-  final img = NetImage(url, fit: fit);
-  if (tag == null) return img;
-  return Hero(tag: tag, child: img);
+  // Hero (liste→detay) uçuş animasyonu iptal edildi: her zaman düz görsel.
+  return NetImage(url, fit: fit);
 }
 
 /// "Gezgah" markası — HTML'deki orijinal SVG logo.
