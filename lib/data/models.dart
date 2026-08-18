@@ -715,6 +715,51 @@ class RotaSahip {
       );
 }
 
+/// Google Places otomatik tamamlama tahmini (rota-place-arama.md §1).
+class PlaceTahmin {
+  final String placeId;
+  final String ad; // birincil metin (kalın)
+  final String altBilgi; // ikincil metin (adres)
+  final String aciklama; // tam metin
+  const PlaceTahmin({
+    required this.placeId,
+    this.ad = '',
+    this.altBilgi = '',
+    this.aciklama = '',
+  });
+
+  factory PlaceTahmin.fromJson(Map<String, dynamic> j) => PlaceTahmin(
+        placeId: (j['place_id'] as String?)?.trim() ?? '',
+        ad: (j['ad'] as String?)?.trim() ?? '',
+        altBilgi: (j['alt_bilgi'] as String?)?.trim() ?? '',
+        aciklama: (j['aciklama'] as String?)?.trim() ?? '',
+      );
+}
+
+/// Google Places yer detayı (rota-place-arama.md §2). Konum durağı eklemek için.
+class PlaceDetay {
+  final String placeId;
+  final String ad;
+  final String adres;
+  final double lat;
+  final double lng;
+  const PlaceDetay({
+    required this.placeId,
+    this.ad = '',
+    this.adres = '',
+    required this.lat,
+    required this.lng,
+  });
+
+  factory PlaceDetay.fromJson(Map<String, dynamic> j) => PlaceDetay(
+        placeId: (j['place_id'] as String?)?.trim() ?? '',
+        ad: (j['ad'] as String?)?.trim() ?? '',
+        adres: (j['adres'] as String?)?.trim() ?? '',
+        lat: (j['lat'] as num?)?.toDouble() ?? 0,
+        lng: (j['lng'] as num?)?.toDouble() ?? 0,
+      );
+}
+
 /// Rota yorumu (`/uye/rotalar/{id}/yorumlar`, rota-yorumlar.md). [silebilir]
 /// true ise bu kullanıcı (yorumu yazan veya rota sahibi) yorumu silebilir.
 class RotaYorum {

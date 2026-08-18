@@ -2743,6 +2743,61 @@ class RotaRepository {
     return (d['durak_id'] as num?)?.toInt() ?? 0;
   }
 
+  /// `GET /uye/rotalar/place/autocomplete` — Google Places otomatik tamamlama
+  /// (rota-place-arama.md §1, Gezgah dışı yerler). En az 2 karakter; kısa/boş
+  /// veya hata durumunda boş liste. [session] aynı arama oturumunda detayla
+  /// paylaşılır (faturalamayı ucuzlatır).
+  Future<List<PlaceTahmin>> placeAutocomplete(
+    String q, {
+    double? lat,
+    double? lng,
+    String? session,
+  }) async {
+    if (q.trim().length < 2) return const [];
+    try {
+      final res = await _dio.get('/uye/rotalar/place/autocomplete',
+          queryParameters: {
+            'q': q.trim(),
+            if (lat != null && lng != null) 'lat': lat,
+            if (lat != null && lng != null) 'lng': lng,
+            if (session != null && session.isNotEmpty) 'session': session,
+          },
+          options: await _uyeAuth());
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return const [];
+      final data = body['data'];
+      final list = data is Map ? data['tahminler'] : null;
+      if (list is! List) return const [];
+      return list
+          .whereType<Map<String, dynamic>>()
+          .map(PlaceTahmin.fromJson)
+          .where((t) => t.placeId.isNotEmpty)
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// `GET /uye/rotalar/place/detay` — seçilen Google yerinin ad/adres/lat/lng
+  /// detayı (rota-place-arama.md §2). Hata/boşta null.
+  Future<PlaceDetay?> placeDetay(String placeId, {String? session}) async {
+    if (placeId.isEmpty) return null;
+    try {
+      final res = await _dio.get('/uye/rotalar/place/detay',
+          queryParameters: {
+            'place_id': placeId,
+            if (session != null && session.isNotEmpty) 'session': session,
+          },
+          options: await _uyeAuth());
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return null;
+      final data = body['data'];
+      return data is Map<String, dynamic> ? PlaceDetay.fromJson(data) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// `POST /uye/rotalar/{id}/mekan` — **çoklu** durak ekle (Plus,
   /// rota-coklu-mekan-ekleme.md). Kısmi başarı olabilir: [eklenen] eklenen
   /// sayısı, [atlanan] eklenemeyenler (`{post_id, neden}`). Hiçbiri eklenemezse

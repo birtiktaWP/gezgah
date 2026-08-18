@@ -281,11 +281,32 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
   bool _loading = true;
   // Kapak yüklenirken gösterilen yerel önizleme (blob). Yükleme bitince temizlenir.
   Uint8List? _pendingCover;
+  // Kaydırıldıkça üst bar başlığı "Rota Detayı" → rota başlığına döner.
+  final ScrollController _scroll = ScrollController();
+  bool _titleInBar = false;
 
   @override
   void initState() {
     super.initState();
+    _scroll.addListener(_onScroll);
     _load();
+  }
+
+  void _onScroll() {
+    // Kapak görseli varsa başlık, kapak kayıp gizlenince gelsin (daha geç eşik).
+    final hasCover =
+        (_rota?.kapakGorsel.isNotEmpty ?? false) || _pendingCover != null;
+    final threshold = hasCover ? 200.0 : 56.0;
+    final show = _scroll.hasClients && _scroll.offset > threshold;
+    if (show != _titleInBar) setState(() => _titleInBar = show);
+  }
+
+  @override
+  void dispose() {
+    _scroll
+      ..removeListener(_onScroll)
+      ..dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -660,7 +681,10 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
       body: Column(
         children: [
           PageHeader(
-            title: 'Rota Detayı',
+            // Kapak kaydırılıp gizlenince üst bara rota başlığı gelir.
+            title: (_titleInBar && r != null && r.baslik.isNotEmpty)
+                ? r.baslik
+                : 'Rota Detayı',
             // Tek ayar ikonu (geri butonu gibi arka planlı); menü bottom
             // sheet'te açılır.
             actions: [
@@ -700,6 +724,7 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
   Widget _body(GeziRota r) {
     final duraklar = r.duraklar;
     return CustomScrollView(
+      controller: _scroll,
       slivers: [
         SliverToBoxAdapter(child: _header(r)),
         if (duraklar.isEmpty)
@@ -822,81 +847,58 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                 style: const TextStyle(
                     fontSize: 13.5, height: 1.5, color: AppColors.muted)),
           ],
-          const SizedBox(height: 10),
-          Row(
+          const SizedBox(height: 12),
+          // İstatistikler — ikon ağırlıklı, sade (satıra sığmazsa alt satıra).
+          Wrap(
+            spacing: 16,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Text('${r.duraklar.length} durak',
-                  style: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.ink)),
-              // Rota toplam fiyatı (seçili ürünler) — varsa göster.
-              if (r.fiyatLabel.isNotEmpty) ...[
-                const Text('  ·  ', style: TextStyle(color: AppColors.muted)),
-                Text(r.fiyatLabel,
-                    style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primary)),
-              ],
-              // Başkasının rotasıysa sahip bilgisi — profiline tıklanabilir.
-              if (!r.benim && r.sahip != null) ...[
-                const Text('  ·  ', style: TextStyle(color: AppColors.muted)),
-                Flexible(
-                  child: GestureDetector(
-                    onTap: () => openMemberProfile(
-                      context,
-                      uyeId: r.sahip!.uyeId,
-                      isim: r.sahip!.isim,
-                      soyisim: r.sahip!.soyisim,
-                      avatar: r.sahip!.avatar,
-                      takipEdiyorum: r.sahip!.takipEdiyorum,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _ownerAvatar(r.sahip!.avatar, 18),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            r.sahip!.adSoyad.isEmpty ? 'Üye' : r.sahip!.adSoyad,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.primary),
-                          ),
-                        ),
-                      ],
+              _stat(Icons.place_outlined, '${r.duraklar.length} durak'),
+              if (r.fiyatLabel.isNotEmpty)
+                _stat(Icons.sell_outlined, r.fiyatLabel, primary: true),
+              // Görüntülenme herkese; gösterim (listeleme) yalnız sahibe.
+              _stat(Icons.visibility_outlined, '${r.goruntulenme} görüntülenme'),
+              if (r.benim)
+                _stat(Icons.bar_chart_outlined, '${r.gosterim} gösterim'),
+            ],
+          ),
+          // Başkasının rotasıysa sahip — profiline tıklanabilir sade satır.
+          if (!r.benim && r.sahip != null) ...[
+            const SizedBox(height: 12),
+            GestureDetector(
+              onTap: () => openMemberProfile(
+                context,
+                uyeId: r.sahip!.uyeId,
+                isim: r.sahip!.isim,
+                soyisim: r.sahip!.soyisim,
+                avatar: r.sahip!.avatar,
+                takipEdiyorum: r.sahip!.takipEdiyorum,
+              ),
+              child: Row(
+                children: [
+                  _ownerAvatar(r.sahip!.avatar, 22),
+                  const SizedBox(width: 8),
+                  const Text('Oluşturan',
+                      style:
+                          TextStyle(fontSize: 12.5, color: AppColors.muted)),
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: Text(
+                      r.sahip!.adSoyad.isEmpty ? 'Üye' : r.sahip!.adSoyad,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.ink),
                     ),
                   ),
-                ),
-              ],
-            ],
-          ),
-          // İstatistik: görüntülenme (herkese), gösterim (yalnız sahibe).
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              const Icon(Icons.visibility_outlined,
-                  size: 14, color: AppColors.muted),
-              const SizedBox(width: 4),
-              Text('${r.goruntulenme} görüntülenme',
-                  style: const TextStyle(
-                      fontSize: 12.5, color: AppColors.muted)),
-              if (r.benim) ...[
-                const Text('  ·  ', style: TextStyle(color: AppColors.muted)),
-                const Icon(Icons.bar_chart,
-                    size: 14, color: AppColors.muted),
-                const SizedBox(width: 4),
-                Text('${r.gosterim} gösterim',
-                    style: const TextStyle(
-                        fontSize: 12.5, color: AppColors.muted)),
-              ],
-            ],
-          ),
-          const SizedBox(height: 14),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
           _actions(r),
               ],
             ),
@@ -906,55 +908,97 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     );
   }
 
-  /// Beğen + Yorumlar aksiyonları (SOSYAL §1, rota-yorumlar.md). Takip butonu
-  /// başlık satırının en sağına taşındı.
+  /// İkon + etiket + sayı rozeti taşıyan sade istatistik öğesi.
+  Widget _stat(IconData icon, String label, {bool primary = false}) {
+    final color = primary ? AppColors.primary : AppColors.muted;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 15, color: color),
+        const SizedBox(width: 5),
+        Text(label,
+            style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: primary ? FontWeight.w700 : FontWeight.w500,
+                color: primary ? AppColors.primary : AppColors.ink)),
+      ],
+    );
+  }
+
+  /// Beğen + Yorum aksiyonları (SOSYAL §1, rota-yorumlar.md). İkon ağırlıklı,
+  /// sabit yükseklikli, minimal renk (sayı küçük rozette). Takip butonu başlık
+  /// satırının en sağına taşındı.
   Widget _actions(GeziRota r) {
     return Row(
       children: [
-        // Beğen — dokununca toggle (giriş gerekir).
         Expanded(
-          child: OutlinedButton.icon(
-            onPressed: _toggleLike,
-            icon: Icon(
-                r.begendim ? Icons.favorite : Icons.favorite_border,
-                size: 18,
-                color: r.begendim ? AppColors.heart : AppColors.primary),
-            label: Text(
-              r.begeniSayisi > 0 ? 'Beğen · ${r.begeniSayisi}' : 'Beğen',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.ink,
-              side: const BorderSide(color: AppColors.line),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
+          child: _actionBtn(
+            icon: r.begendim ? Icons.favorite : Icons.favorite_border,
+            iconColor: r.begendim ? AppColors.heart : AppColors.primary,
+            label: 'Beğen',
+            count: r.begeniSayisi,
+            onTap: _toggleLike,
           ),
         ),
         const SizedBox(width: 10),
-        // Yorumlar — dokununca yorum sheet'i açılır.
         Expanded(
-          child: OutlinedButton.icon(
-            onPressed: () => _openComments(r),
-            icon: const Icon(Icons.mode_comment_outlined,
-                size: 18, color: AppColors.primary),
-            label: Text(
-              r.yorumSayisi > 0 ? 'Yorumlar · ${r.yorumSayisi}' : 'Yorumlar',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.ink,
-              side: const BorderSide(color: AppColors.line),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
+          child: _actionBtn(
+            icon: Icons.mode_comment_outlined,
+            iconColor: AppColors.primary,
+            label: 'Yorum',
+            count: r.yorumSayisi,
+            onTap: () => _openComments(r),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _actionBtn({
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required int count,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 48,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.line),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 20, color: iconColor),
+            const SizedBox(width: 8),
+            Text(label,
+                style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.ink)),
+            if (count > 0) ...[
+              const SizedBox(width: 7),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.primarySoft,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text('$count',
+                    style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary)),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -1270,10 +1314,11 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
               ],
                 ],
               ),
-              // Durak fotoğrafları (rota-durak-gorsel.md).
-              if (d.gorseller.isNotEmpty || (owner && !d.silinmis)) ...[
+              // Durak fotoğrafları — yalnız görüntüleme (ekleme üç nokta
+              // menüsündeki foto yönetiminde). rota-durak-gorsel.md.
+              if (d.gorseller.isNotEmpty) ...[
                 const SizedBox(height: 10),
-                _fotoStrip(d, owner),
+                _fotoStrip(d),
               ],
             ],
           ),
@@ -1282,9 +1327,9 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     );
   }
 
-  /// Durak fotoğraf şeridi (yatay). Fotoğrafa dokununca tam ekran görüntüleyici;
-  /// sahibe sonda "yönet" (ekle/sil) girişi.
-  Widget _fotoStrip(RotaDurak d, bool owner) {
+  /// Durak fotoğraf şeridi (yatay, yalnız görüntüleme). Fotoğrafa dokununca
+  /// tam ekran görüntüleyici açılır. Ekleme/silme üç nokta menüsündedir.
+  Widget _fotoStrip(RotaDurak d) {
     return SizedBox(
       height: 64,
       child: ListView(
@@ -1304,21 +1349,6 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                     child: NetImage(d.gorseller[i].url),
                   ),
                 ),
-              ),
-            ),
-          if (owner && !d.silinmis)
-            GestureDetector(
-              onTap: () => _openFotoManager(d),
-              child: Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: AppColors.primarySoft,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.line),
-                ),
-                child: const Icon(Icons.add_a_photo_outlined,
-                    color: AppColors.primary, size: 22),
               ),
             ),
         ],
@@ -2157,9 +2187,22 @@ class _MenuPickerSheetState extends State<_MenuPickerSheet> {
   }
 }
 
-/// Mekan arama seçici (durak eklemek için). Seçilen mekanı döner.
-Future<Place?> _showPlacePicker(BuildContext context) {
-  return showModalBottomSheet<Place>(
+/// Mekan seçici sonucu: Gezgah mekanı ([place]) **veya** Google yeri ([konum],
+/// konum durağı olarak eklenir — rota-place-arama.md).
+class _PickResult {
+  final Place? place;
+  final PlaceDetay? konum;
+  const _PickResult.mekan(Place p)
+      : place = p,
+        konum = null;
+  const _PickResult.konum(PlaceDetay k)
+      : konum = k,
+        place = null;
+}
+
+/// Mekan arama seçici (durak eklemek için). Seçilen sonucu döner.
+Future<_PickResult?> _showPlacePicker(BuildContext context) {
+  return showModalBottomSheet<_PickResult>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
@@ -2177,8 +2220,13 @@ class _PlacePickerSheet extends StatefulWidget {
 class _PlacePickerSheetState extends State<_PlacePickerSheet> {
   final TextEditingController _c = TextEditingController();
   List<SearchResult> _results = const [];
+  List<PlaceTahmin> _gResults = const []; // Google Places tahminleri
   bool _loading = false;
+  bool _gLoading = false;
   int _seq = 0;
+  String? _resolving; // detayı çözülen Google place_id
+  // Google faturalamasını ucuzlatan arama oturumu token'ı (autocomplete+detay).
+  final String _session = 's${DateTime.now().microsecondsSinceEpoch}';
 
   Future<void> _search(String q) async {
     final term = q.trim();
@@ -2186,17 +2234,46 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
     if (term.length < 2) {
       setState(() {
         _results = const [];
+        _gResults = const [];
         _loading = false;
+        _gLoading = false;
       });
       return;
     }
-    setState(() => _loading = true);
-    final r = await HomeRepository.instance.aramaMekan(term, limit: 20);
-    if (!mounted || mySeq != _seq) return;
     setState(() {
-      _results = r.items;
-      _loading = false;
+      _loading = true;
+      _gLoading = true;
     });
+    // Gezgah mekan araması.
+    HomeRepository.instance.aramaMekan(term, limit: 20).then((r) {
+      if (!mounted || mySeq != _seq) return;
+      setState(() {
+        _results = r.items;
+        _loading = false;
+      });
+    });
+    // Google Places (Gezgah dışı yerler) — paralel.
+    RotaRepository.instance.placeAutocomplete(term, session: _session).then((g) {
+      if (!mounted || mySeq != _seq) return;
+      setState(() {
+        _gResults = g;
+        _gLoading = false;
+      });
+    });
+  }
+
+  /// Google tahminini seç → detayını çöz → konum sonucu olarak döndür.
+  Future<void> _pickGoogle(PlaceTahmin t) async {
+    setState(() => _resolving = t.placeId);
+    final d = await RotaRepository.instance.placeDetay(t.placeId, session: _session);
+    if (!mounted) return;
+    setState(() => _resolving = null);
+    if (d == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Yer bilgisi alınamadı.')));
+      return;
+    }
+    Navigator.pop(context, _PickResult.konum(d));
   }
 
   @override
@@ -2261,60 +2338,132 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
                 ),
               ),
             ),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _results.isEmpty
-                      ? const Center(
-                          child: Text('En az 2 karakter yaz ve mekan ara.',
-                              style: TextStyle(color: AppColors.muted)),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-                          itemCount: _results.length,
-                          itemBuilder: (_, i) {
-                            final p = _results[i].place;
-                            return ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: ClipRRect(
-                                borderRadius: BorderRadius.circular(10),
-                                child: SizedBox(
-                                  width: 48,
-                                  height: 48,
-                                  child: NetImage(p.thumb(ThumbSize.square)),
-                                ),
-                              ),
-                              title: Text(p.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      fontSize: 14.5,
-                                      fontWeight: FontWeight.w600)),
-                              subtitle: p.cityDistrict.isNotEmpty
-                                  ? Text(p.cityDistrict,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(fontSize: 12.5))
-                                  : null,
-                              onTap: () => Navigator.pop(
-                                  context, p.toPlace(subtitle: p.cityDistrict)),
-                            );
-                          },
-                        ),
-            ),
+            Expanded(child: _resultsView()),
           ],
         ),
       );
   }
+
+  Widget _resultsView() {
+    final term = _c.text.trim();
+    final busy = _loading || _gLoading;
+    if (term.length < 2) {
+      return const Center(
+        child: Text('En az 2 karakter yaz ve mekan ara.',
+            style: TextStyle(color: AppColors.muted)),
+      );
+    }
+    if (busy && _results.isEmpty && _gResults.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (!busy && _results.isEmpty && _gResults.isEmpty) {
+      return const Center(
+        child: Text('Sonuç bulunamadı.',
+            style: TextStyle(color: AppColors.muted)),
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+      children: [
+        if (_results.isNotEmpty) ...[
+          _sectionLabel('Gezgah\u2019ta'),
+          for (final r in _results) _gezgahTile(r.place),
+        ],
+        if (_gResults.isNotEmpty) ...[
+          _sectionLabel('Haritadan (Google)'),
+          for (final t in _gResults) _googleTile(t),
+        ],
+      ],
+    );
+  }
+
+  Widget _sectionLabel(String s) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 10, 0, 4),
+      child: Text(s,
+          style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.muted)),
+    );
+  }
+
+  Widget _gezgahTile(ApiPlace p) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: NetImage(p.thumb(ThumbSize.square)),
+        ),
+      ),
+      title: Text(p.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+      subtitle: p.cityDistrict.isNotEmpty
+          ? Text(p.cityDistrict,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12.5))
+          : null,
+      onTap: () => Navigator.pop(
+          context, _PickResult.mekan(p.toPlace(subtitle: p.cityDistrict))),
+    );
+  }
+
+  Widget _googleTile(PlaceTahmin t) {
+    final resolving = _resolving == t.placeId;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: AppColors.primarySoft,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: const Icon(Icons.place_outlined, color: AppColors.primary),
+      ),
+      title: Text(t.ad.isEmpty ? t.aciklama : t.ad,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+      subtitle: t.altBilgi.isNotEmpty
+          ? Text(t.altBilgi,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12.5))
+          : null,
+      trailing: resolving
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2.2))
+          : const Icon(Icons.add, color: AppColors.primary),
+      onTap: resolving ? null : () => _pickGoogle(t),
+    );
+  }
 }
 
 
-/// Rotaya eklenmek üzere hazırlanan bir durak (mekan + çoklu ürün + not).
+/// Rotaya eklenmek üzere hazırlanan bir durak. [isKonum] true ise Google/serbest
+/// konum durağıdır (ürünsüz; `konumEkle` ile eklenir), [place] lat/lng taşır.
 class _StagedStop {
   final Place place;
   List<RotaUrun> urunler;
   String yorum;
-  _StagedStop({required this.place, this.urunler = const [], this.yorum = ''});
+  final bool isKonum;
+  final String adres;
+  _StagedStop({
+    required this.place,
+    this.urunler = const [],
+    this.yorum = '',
+    this.isKonum = false,
+    this.adres = '',
+  });
 }
 
 /// Çoklu mekan/ürün ekleme ekranı (rota-coklu-mekan-ekleme.md). Kullanıcı
@@ -2363,13 +2512,37 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
   }
 
   Future<void> _pickAndAdd() async {
-    final place = await _showPlacePicker(context);
-    if (place == null || !mounted) return;
-    final res =
-        await _showStopSheet(context, postId: place.id, title: place.name);
+    final picked = await _showPlacePicker(context);
+    if (picked == null || !mounted) return;
+    // Gezgah mekanı → ürün seçimi + not; sonra durağa ekle.
+    if (picked.place != null) {
+      final p = picked.place!;
+      final res =
+          await _showStopSheet(context, postId: p.id, title: p.name);
+      if (res == null || !mounted) return;
+      setState(() => _staged
+          .add(_StagedStop(place: p, urunler: res.urunler, yorum: res.yorum)));
+      return;
+    }
+    // Google yeri → konum durağı (ürünsüz, yalnız not).
+    final k = picked.konum!;
+    final ad = k.ad.isEmpty ? 'Konum' : k.ad;
+    final res = await _showStopSheet(context, postId: 0, title: ad);
     if (res == null || !mounted) return;
-    setState(() => _staged.add(
-        _StagedStop(place: place, urunler: res.urunler, yorum: res.yorum)));
+    final place = Place(
+      id: 0,
+      name: ad,
+      category: '',
+      subtitle: k.adres,
+      rating: 0,
+      distance: '',
+      price: '',
+      image: '',
+      lat: k.lat,
+      lng: k.lng,
+    );
+    setState(() => _staged.add(_StagedStop(
+        place: place, yorum: res.yorum, isKonum: true, adres: k.adres)));
   }
 
   Future<void> _edit(int index) async {
@@ -2392,21 +2565,50 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
     if (_staged.isEmpty || _busy) return;
     setState(() => _busy = true);
     try {
-      final res = await RotaRepository.instance.mekanlarEkle(
-        widget.rotaId,
-        _staged
-            .map((s) => (
-                  postId: s.place.id,
-                  qrIds: s.urunler.map((u) => u.qrId).toList(),
-                  yorum: s.yorum,
-                ))
-            .toList(),
-      );
-      if (!mounted) return;
-      if (res.atlanan.isNotEmpty) {
-        await _showAtlanan(res.eklenen, res.atlanan);
+      final mekanlar = _staged.where((s) => !s.isKonum).toList();
+      final konumlar = _staged.where((s) => s.isKonum).toList();
+      var eklenen = 0;
+      var atlanan = <Map<String, dynamic>>[];
+      // Konum durakları tek tek (kendi ucuyla).
+      for (final s in konumlar) {
+        try {
+          await RotaRepository.instance.konumEkle(
+            widget.rotaId,
+            lat: s.place.lat,
+            lng: s.place.lng,
+            ad: s.place.name,
+            adres: s.adres,
+            yorum: s.yorum,
+          );
+          eklenen++;
+        } on PlusRequiredException {
+          rethrow;
+        } on RotaException catch (e) {
+          atlanan.add({'neden': '${s.place.name}: ${e.message}'});
+        } catch (_) {
+          atlanan.add({'neden': '${s.place.name}: konum eklenemedi'});
+        }
       }
-      if (mounted) Navigator.pop(context, res.eklenen > 0);
+      // Mekan durakları toplu.
+      if (mekanlar.isNotEmpty) {
+        final res = await RotaRepository.instance.mekanlarEkle(
+          widget.rotaId,
+          mekanlar
+              .map((s) => (
+                    postId: s.place.id,
+                    qrIds: s.urunler.map((u) => u.qrId).toList(),
+                    yorum: s.yorum,
+                  ))
+              .toList(),
+        );
+        eklenen += res.eklenen;
+        atlanan = [...atlanan, ...res.atlanan];
+      }
+      if (!mounted) return;
+      if (atlanan.isNotEmpty) {
+        await _showAtlanan(eklenen, atlanan);
+      }
+      if (mounted) Navigator.pop(context, eklenen > 0);
     } on PlusRequiredException catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
@@ -2535,7 +2737,13 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
               child: SizedBox(
                 width: 52,
                 height: 52,
-                child: NetImage(s.place.thumb(ThumbSize.square)),
+                // Konum durağı: görsel yok → konum pini.
+                child: s.isKonum
+                    ? Container(
+                        color: AppColors.primarySoft,
+                        child: const Icon(Icons.place, color: AppColors.primary),
+                      )
+                    : NetImage(s.place.thumb(ThumbSize.square)),
               ),
             ),
             const SizedBox(width: 12),
@@ -2543,15 +2751,29 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(s.place.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 14.5, fontWeight: FontWeight.w600)),
-                  if (s.urunler.isNotEmpty || s.yorum.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      if (s.isKonum) ...[
+                        const Icon(Icons.near_me,
+                            size: 13, color: AppColors.primary),
+                        const SizedBox(width: 4),
+                      ],
+                      Flexible(
+                        child: Text(s.place.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 14.5, fontWeight: FontWeight.w600)),
+                      ),
+                    ],
+                  ),
+                  if (s.isKonum && s.adres.isNotEmpty ||
+                      s.urunler.isNotEmpty ||
+                      s.yorum.isNotEmpty) ...[
                     const SizedBox(height: 3),
                     Text(
                       [
+                        if (s.isKonum && s.adres.isNotEmpty) s.adres,
                         if (s.urunler.isNotEmpty)
                           s.urunler.map((u) => u.ad).join(', '),
                         if (s.yorum.isNotEmpty) s.yorum,
@@ -4541,9 +4763,15 @@ class _YorumSheetState extends State<_YorumSheet> {
                     ? _empty()
                     : ListView.separated(
                         controller: _scroll,
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                         itemCount: _yorumlar.length + (_hasMore ? 1 : 0),
-                        separatorBuilder: (_, __) => const SizedBox(height: 14),
+                        separatorBuilder: (_, i) => i < _yorumlar.length - 1
+                            ? const Divider(
+                                height: 26,
+                                thickness: 1,
+                                indent: 50,
+                                color: AppColors.line)
+                            : const SizedBox(height: 12),
                         itemBuilder: (_, i) {
                           if (i >= _yorumlar.length) {
                             return Center(
@@ -4625,14 +4853,6 @@ class _YorumSheetState extends State<_YorumSheet> {
                   Text(_yorumZaman(y.createdAt),
                       style: const TextStyle(
                           fontSize: 11.5, color: AppColors.muted)),
-                  if (y.silebilir) ...[
-                    const Spacer(),
-                    GestureDetector(
-                      onTap: () => _delete(y),
-                      child: const Icon(Icons.delete_outline,
-                          size: 18, color: AppColors.muted),
-                    ),
-                  ],
                 ],
               ),
               const SizedBox(height: 3),
@@ -4642,6 +4862,16 @@ class _YorumSheetState extends State<_YorumSheet> {
             ],
           ),
         ),
+        // Silme — satırın en sağına sabit (yalnız yetkiliye).
+        if (y.silebilir)
+          Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: GestureDetector(
+              onTap: () => _delete(y),
+              child: const Icon(Icons.delete_outline,
+                  size: 19, color: AppColors.muted),
+            ),
+          ),
       ],
     );
   }
