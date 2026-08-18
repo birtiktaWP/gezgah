@@ -30,8 +30,22 @@ workflows:
       vars:
         BUNDLE_ID: "com.gezgah.gezgah"
     scripts:
-      - name: Flutter bağımlılıkları
-        script: flutter pub get
+      - name: Derlenen commit bilgisi
+        script: |
+          # Bu build'in HANGİ commit'ten alındığını loga yaz. Telefondaki
+          # sürümle eşleşmiyorsa buradan hangi commit'in derlendiği görülür.
+          echo "===================== BUILD COMMIT ====================="
+          echo "Branch : $(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
+          echo "Commit : $(git rev-parse HEAD 2>/dev/null || echo '?')"
+          git log -1 --format="Tarih  : %ci%nMesaj  : %s" 2>/dev/null || true
+          echo "Sürüm  : $(grep '^version:' pubspec.yaml)"
+          echo "========================================================"
+      - name: Flutter bağımlılıkları (temiz build)
+        script: |
+          # flutter clean → önceki build artefaktlarının bayat kalmasını önler
+          # (yeni Dart kodu her zaman yeniden derlenir).
+          flutter clean
+          flutter pub get
       - name: CocoaPods kur (CDN 429'a karşı retry)
         script: |
           # pod install'ı önden ve retry ile çalıştır. GoogleMaps podspec
@@ -102,8 +116,18 @@ workflows:
       flutter: 3.44.4          # Yerel sürümle eşit; 'stable' indirme zaman aşımını önler
       java: 17
     scripts:
-      - name: Flutter bağımlılıkları
-        script: flutter pub get
+      - name: Derlenen commit bilgisi
+        script: |
+          echo "===================== BUILD COMMIT ====================="
+          echo "Branch : $(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
+          echo "Commit : $(git rev-parse HEAD 2>/dev/null || echo '?')"
+          git log -1 --format="Tarih  : %ci%nMesaj  : %s" 2>/dev/null || true
+          echo "Sürüm  : $(grep '^version:' pubspec.yaml)"
+          echo "========================================================"
+      - name: Flutter bağımlılıkları (temiz build)
+        script: |
+          flutter clean
+          flutter pub get
       - name: Statik analiz
         script: flutter analyze
       - name: APK + AAB derle
