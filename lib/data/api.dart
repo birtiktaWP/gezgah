@@ -2579,12 +2579,14 @@ class RotaRepository {
     required String baslik,
     String? aciklama,
     String gorunurluk = 'gizli',
+    bool yorumlarAcik = true,
   }) async {
     final res = await _post('/uye/rotalar', {
       'baslik': baslik.trim(),
       if (aciklama != null && aciklama.trim().isNotEmpty)
         'aciklama': aciklama.trim(),
       'gorunurluk': gorunurluk,
+      'yorumlar_acik': yorumlarAcik,
     });
     final data = res is Map ? (res['rota'] ?? res) : null;
     if (data is Map<String, dynamic>) {
@@ -2599,12 +2601,79 @@ class RotaRepository {
     required String baslik,
     String? aciklama,
     String gorunurluk = 'gizli',
+    bool yorumlarAcik = true,
   }) async {
     await _post('/uye/rotalar/$id/guncelle', {
       'baslik': baslik.trim(),
       'aciklama': aciklama?.trim() ?? '',
       'gorunurluk': gorunurluk,
+      'yorumlar_acik': yorumlarAcik,
     });
+  }
+
+  /// `GET /uye/rotalar/{id}/yorumlar` — rota yorumları (sayfalı, en yeni üstte,
+  /// rota-yorumlar.md §4). Cihaz/üye token'ı yeterli. Gizli başkasının rotası
+  /// için boş döner. Meta'daki `yorumlar_acik` de gelir.
+  Future<({List<RotaYorum> items, bool hasMore, int? nextPage, int total, bool yorumlarAcik})>
+      yorumlar(int id, {int page = 1, int limit = 20}) async {
+    if (id <= 0) {
+      return (items: <RotaYorum>[], hasMore: false, nextPage: null, total: 0, yorumlarAcik: true);
+    }
+    try {
+      final res = await _dio.get('/uye/rotalar/$id/yorumlar',
+          queryParameters: {'page': page, 'limit': limit},
+          options: await _uyeAuth());
+      final body = res.data;
+      if (body is! Map || body['success'] != true) {
+        return (items: <RotaYorum>[], hasMore: false, nextPage: null, total: 0, yorumlarAcik: true);
+      }
+      final data = body['data'];
+      final list = (data is List)
+          ? data
+              .whereType<Map<String, dynamic>>()
+              .map((j) => RotaYorum.fromJson(j, host: kApiHost))
+              .toList()
+          : <RotaYorum>[];
+      final meta = (body['meta'] as Map?) ?? const {};
+      return (
+        items: list,
+        hasMore: meta['has_more'] == true,
+        nextPage: (meta['next_page'] as num?)?.toInt(),
+        total: (meta['total'] as num?)?.toInt() ?? list.length,
+        yorumlarAcik: meta['yorumlar_acik'] == null
+            ? true
+            : (meta['yorumlar_acik'] == true || meta['yorumlar_acik'] == 1),
+      );
+    } catch (_) {
+      return (items: <RotaYorum>[], hasMore: false, nextPage: null, total: 0, yorumlarAcik: true);
+    }
+  }
+
+  /// `POST /uye/rotalar/{id}/yorum` — yorum ekle (giriş yapmış üye,
+  /// rota-yorumlar.md §3). Eklenen yorumu ve güncel toplam sayıyı döner.
+  /// Yorumlar kapalıysa/gizli rota erişimi yoksa 403 → [RotaException].
+  Future<({RotaYorum yorum, int yorumSayisi})> yorumEkle(
+      int id, String yorum) async {
+    final res = await _post('/uye/rotalar/$id/yorum', {'yorum': yorum.trim()});
+    final d = res is Map ? res : const {};
+    final y = d['yorum'];
+    if (y is Map<String, dynamic>) {
+      return (
+        yorum: RotaYorum.fromJson(y, host: kApiHost),
+        yorumSayisi: (d['yorum_sayisi'] as num?)?.toInt() ?? 0,
+      );
+    }
+    throw RotaException('Yorum eklenemedi.');
+  }
+
+  /// `DELETE /uye/rotalar/{id}/yorum` — yorum sil (yazan üye veya rota sahibi,
+  /// rota-yorumlar.md §5). Güncel toplam yorum sayısını döner.
+  Future<int> yorumSil(int id, int yorumId) async {
+    final data = await _sendData(() async => _dio.delete(
+        '/uye/rotalar/$id/yorum',
+        data: {'yorum_id': yorumId},
+        options: await _uyeAuth()));
+    return (data is Map ? (data['yorum_sayisi'] as num?)?.toInt() : null) ?? 0;
   }
 
   /// `DELETE /uye/rotalar/{id}` — rota sil (Plus şartı yok).
@@ -2644,6 +2713,31 @@ class RotaRepository {
       'post_id': postId,
       if (yorum != null && yorum.trim().isNotEmpty) 'yorum': yorum.trim(),
       if (qrId != null && qrId > 0) 'qr_id': qrId,
+    });
+    final d = res is Map ? res : const {};
+    return (d['durak_id'] as num?)?.toInt() ?? 0;
+  }
+
+  /// `POST /uye/rotalar/{id}/konum` — serbest **konum** durağı ekle (Plus,
+  /// rota-konum-durak.md). Kullanıcının bulunduğu lat/lng + opsiyonel ad/adres/
+  /// yorum/görsel. Yeni durak id'sini döner. [gorselBase64] data URI/base64.
+  Future<int> konumEkle(
+    int id, {
+    required double lat,
+    required double lng,
+    String? ad,
+    String? adres,
+    String? yorum,
+    String? gorselBase64,
+  }) async {
+    final res = await _post('/uye/rotalar/$id/konum', {
+      'lat': lat,
+      'lng': lng,
+      if (ad != null && ad.trim().isNotEmpty) 'ad': ad.trim(),
+      if (adres != null && adres.trim().isNotEmpty) 'adres': adres.trim(),
+      if (yorum != null && yorum.trim().isNotEmpty) 'yorum': yorum.trim(),
+      if (gorselBase64 != null && gorselBase64.isNotEmpty)
+        'gorsel': gorselBase64,
     });
     final d = res is Map ? res : const {};
     return (d['durak_id'] as num?)?.toInt() ?? 0;
@@ -2915,6 +3009,40 @@ class RotaRepository {
       if (body is! Map || body['success'] != true) {
         throw RotaException(_rotaMessage(body) ?? 'İşlem tamamlanamadı.');
       }
+    } on PlusRequiredException {
+      rethrow;
+    } on RotaException {
+      rethrow;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 403) {
+        throw PlusRequiredException(
+            _rotaMessage(e.response?.data) ??
+                'Bu işlem Gezgah Plus üyeliği gerektirir.');
+      }
+      throw RotaException(_rotaMessage(e.response?.data) ??
+          'Sunucuya ulaşılamadı. Lütfen tekrar dene.');
+    }
+  }
+
+  /// [_send] gibi ama başarıda yanıt zarfının `data`'sını döner (ör. silme
+  /// yanıtındaki güncel sayı).
+  Future<dynamic> _sendData(Future<Response> Function() run) async {
+    final token = await Api.instance.uyeToken;
+    if (token == null || token.isEmpty) {
+      throw PlusRequiredException('Bu işlem için giriş yapmalısın.',
+          girisGerekli: true);
+    }
+    try {
+      final res = await run();
+      final body = res.data;
+      if (res.statusCode == 403 || _rotaDetail(body) == 'plus_gerekli') {
+        throw PlusRequiredException(
+            _rotaMessage(body) ?? 'Bu işlem Gezgah Plus üyeliği gerektirir.');
+      }
+      if (body is! Map || body['success'] != true) {
+        throw RotaException(_rotaMessage(body) ?? 'İşlem tamamlanamadı.');
+      }
+      return body['data'];
     } on PlusRequiredException {
       rethrow;
     } on RotaException {

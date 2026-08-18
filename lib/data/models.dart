@@ -501,6 +501,8 @@ class GeziRota {
   final int gosterim; // listede gösterim (impression) sayısı
   final double? rotaFiyat; // seçili ürünlerin fiyat toplamı (yoksa null)
   final int? mesafeM; // ilk durağa mesafe (metre); konum verildiyse
+  final bool yorumlarAcik; // rotaya yorum yapılabilir mi (rota-yorumlar.md)
+  final int yorumSayisi; // toplam yorum sayısı
   final String haritaLink; // tüm rotayı gezen Google Maps yol tarifi (yoksa '')
   // Uygulama içi harita (rota-app-ici-harita.md): sıralı koordinatlar + yol
   // çizgisi (encoded polyline) + toplam mesafe/süre. Yalnız detayda dolu.
@@ -525,6 +527,8 @@ class GeziRota {
     this.gosterim = 0,
     this.rotaFiyat,
     this.mesafeM,
+    this.yorumlarAcik = true,
+    this.yorumSayisi = 0,
     this.haritaLink = '',
     this.koordinatlar = const [],
     this.polyline = '',
@@ -570,6 +574,34 @@ class GeziRota {
         gosterim: gosterim,
         rotaFiyat: rotaFiyat,
         mesafeM: mesafeM,
+        yorumlarAcik: yorumlarAcik,
+        yorumSayisi: yorumSayisi,
+        haritaLink: haritaLink,
+        koordinatlar: koordinatlar,
+        polyline: polyline,
+        toplamMesafeM: toplamMesafeM,
+        toplamSureSn: toplamSureSn,
+        duraklar: duraklar,
+      );
+
+  /// Yorum sayısı güncellenmiş kopya (optimistic UI için).
+  GeziRota copyWithYorumSayisi(int yorumSayisi) => GeziRota(
+        id: id,
+        baslik: baslik,
+        aciklama: aciklama,
+        gorunurluk: gorunurluk,
+        durakSayisi: durakSayisi,
+        kapakGorsel: kapakGorsel,
+        sahip: sahip,
+        benim: benim,
+        begeniSayisi: begeniSayisi,
+        begendim: begendim,
+        goruntulenme: goruntulenme,
+        gosterim: gosterim,
+        rotaFiyat: rotaFiyat,
+        mesafeM: mesafeM,
+        yorumlarAcik: yorumlarAcik,
+        yorumSayisi: yorumSayisi,
         haritaLink: haritaLink,
         koordinatlar: koordinatlar,
         polyline: polyline,
@@ -605,6 +637,10 @@ class GeziRota {
       gosterim: (j['gosterim'] as num?)?.toInt() ?? 0,
       rotaFiyat: (j['rota_fiyat'] as num?)?.toDouble(),
       mesafeM: (j['mesafe_m'] as num?)?.toInt(),
+      yorumlarAcik: j['yorumlar_acik'] == null
+          ? true
+          : (j['yorumlar_acik'] == true || j['yorumlar_acik'] == 1),
+      yorumSayisi: (j['yorum_sayisi'] as num?)?.toInt() ?? 0,
       haritaLink: (j['harita_link'] as String?)?.trim() ?? '',
       koordinatlar: (j['koordinatlar'] is List)
           ? (j['koordinatlar'] as List)
@@ -679,6 +715,39 @@ class RotaSahip {
       );
 }
 
+/// Rota yorumu (`/uye/rotalar/{id}/yorumlar`, rota-yorumlar.md). [silebilir]
+/// true ise bu kullanıcı (yorumu yazan veya rota sahibi) yorumu silebilir.
+class RotaYorum {
+  final int id;
+  final String yorum;
+  final DateTime? createdAt;
+  final RotaSahip uye;
+  final bool benim;
+  final bool silebilir;
+  const RotaYorum({
+    required this.id,
+    this.yorum = '',
+    this.createdAt,
+    this.uye = const RotaSahip(uyeId: 0),
+    this.benim = false,
+    this.silebilir = false,
+  });
+
+  factory RotaYorum.fromJson(Map<String, dynamic> j, {String host = ''}) {
+    final u = j['uye'];
+    return RotaYorum(
+      id: (j['id'] as num?)?.toInt() ?? 0,
+      yorum: (j['yorum'] as String?)?.trim() ?? '',
+      createdAt: DateTime.tryParse((j['created_at'] as String?) ?? ''),
+      uye: u is Map<String, dynamic>
+          ? RotaSahip.fromJson(u, host: host)
+          : const RotaSahip(uyeId: 0),
+      benim: j['benim'] == true,
+      silebilir: j['silebilir_mi'] == true,
+    );
+  }
+}
+
 /// Takip listesi öğesi (`/uye/takip/edenler|edilenler`, SOSYAL_BEGENI_TAKIP.md).
 class TakipUye {
   final int uyeId;
@@ -723,6 +792,7 @@ class RotaDurak {
   final int durakId;
   final int sira;
   final String yorum;
+  final String tip; // 'mekan' | 'konum' (rota-konum-durak.md)
   final RotaMekan? mekan;
   final bool silinmis;
   final RotaUrun? seciliUrun; // geriye dönük uyumluluk (urunler[0])
@@ -734,6 +804,7 @@ class RotaDurak {
     required this.durakId,
     this.sira = 0,
     this.yorum = '',
+    this.tip = 'mekan',
     this.mekan,
     this.silinmis = false,
     this.seciliUrun,
@@ -741,6 +812,9 @@ class RotaDurak {
     this.gorseller = const [],
     this.haritaLink = '',
   });
+
+  /// Serbest konum durağı mı (kayıtlı işletme değil).
+  bool get isKonum => tip == 'konum';
 
   factory RotaDurak.fromJson(Map<String, dynamic> j, {String host = ''}) {
     final m = j['mekan'];
@@ -762,6 +836,7 @@ class RotaDurak {
           (j['durak_id'] as num?)?.toInt() ?? (j['id'] as num?)?.toInt() ?? 0,
       sira: (j['sira'] as num?)?.toInt() ?? 0,
       yorum: (j['yorum'] as String?)?.trim() ?? '',
+      tip: (j['tip'] as String?)?.trim() == 'konum' ? 'konum' : 'mekan',
       mekan: (m is Map<String, dynamic> && !silinmis)
           ? RotaMekan.fromJson(m, host: host)
           : null,
@@ -916,13 +991,16 @@ class UyeProfil {
       );
 }
 
-/// Rota durağındaki mekan özeti (`duraklar[].mekan`).
+/// Rota durağındaki mekan/konum özeti (`duraklar[].mekan`). Konum durağında
+/// (rota-konum-durak.md) `id`=0 olur, [adres] dolu olabilir; mekan durağında
+/// kayıtlı işletme bilgisidir.
 class RotaMekan {
   final int id;
   final String name;
   final String image;
   final String sehir;
   final String ilce;
+  final String adres; // konum durağında serbest adres metni
   final double? lat;
   final double? lng;
   const RotaMekan({
@@ -931,14 +1009,17 @@ class RotaMekan {
     this.image = '',
     this.sehir = '',
     this.ilce = '',
+    this.adres = '',
     this.lat,
     this.lng,
   });
 
   bool get hasCoord => lat != null && lng != null;
 
-  String get cityDistrict =>
-      [sehir, ilce].where((s) => s.trim().isNotEmpty).join(' · ');
+  String get cityDistrict {
+    final byRegion = [sehir, ilce].where((s) => s.trim().isNotEmpty).join(' · ');
+    return byRegion.isNotEmpty ? byRegion : adres;
+  }
 
   factory RotaMekan.fromJson(Map<String, dynamic> j, {String host = ''}) {
     String img = _absUrl(j['thumbnail'], host);
@@ -947,10 +1028,15 @@ class RotaMekan {
       id: (j['id'] as num?)?.toInt() ?? (j['post_id'] as num?)?.toInt() ?? 0,
       name: (j['name'] as String?)?.trim().isNotEmpty == true
           ? (j['name'] as String).trim()
-          : (j['baslik'] as String?)?.trim() ?? '',
+          : (j['ad'] as String?)?.trim().isNotEmpty == true
+              ? (j['ad'] as String).trim()
+              : (j['konum_adi'] as String?)?.trim().isNotEmpty == true
+                  ? (j['konum_adi'] as String).trim()
+                  : (j['baslik'] as String?)?.trim() ?? '',
       image: img,
       sehir: (j['sehir'] as String?)?.trim() ?? '',
       ilce: (j['ilce'] as String?)?.trim() ?? '',
+      adres: (j['adres'] as String?)?.trim() ?? '',
       lat: (j['lat'] as num?)?.toDouble(),
       lng: (j['lng'] as num?)?.toDouble(),
     );

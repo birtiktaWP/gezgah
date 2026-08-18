@@ -81,6 +81,7 @@ class _RoutesScreenState extends State<RoutesScreen> {
         baslik: data.baslik,
         aciklama: data.aciklama,
         gorunurluk: data.gorunurluk,
+        yorumlarAcik: data.yorumlarAcik,
       );
       // Kapak ilk adımda seçildiyse oluşturmanın hemen ardından yükle.
       if (data.kapak != null) {
@@ -327,6 +328,7 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
         baslik: data.baslik,
         aciklama: data.aciklama,
         gorunurluk: data.gorunurluk,
+        yorumlarAcik: data.yorumlarAcik,
       );
       // Yeni kapak seçildiyse güncellemeyle birlikte yükle.
       if (data.kapak != null) {
@@ -778,14 +780,19 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: Text(r.baslik.isEmpty ? 'Adsız rota' : r.baslik,
                     style: const TextStyle(
                         fontSize: 19, fontWeight: FontWeight.w600)),
               ),
-              // Yalnız "Gizli" rozeti gösterilir; herkese açık rozetine gerek yok.
-              if (!r.herkeseAcik)
+              const SizedBox(width: 10),
+              // Başkasının rotası → ismin en sağında takip butonu; kendi gizli
+              // rotanda → "Gizli" rozeti.
+              if (!r.benim && r.sahip != null)
+                _followButtonCompact(r.sahip!)
+              else if (!r.herkeseAcik)
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -899,12 +906,12 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     );
   }
 
-  /// Beğen + (başkasının rotasıysa) Takip Et aksiyonları (SOSYAL §1–2).
+  /// Beğen + Yorumlar aksiyonları (SOSYAL §1, rota-yorumlar.md). Takip butonu
+  /// başlık satırının en sağına taşındı.
   Widget _actions(GeziRota r) {
-    final followable = !r.benim && r.sahip != null;
     return Row(
       children: [
-        // Beğen butonu — dokununca toggle (giriş gerekir).
+        // Beğen — dokununca toggle (giriş gerekir).
         Expanded(
           child: OutlinedButton.icon(
             onPressed: _toggleLike,
@@ -914,6 +921,8 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                 color: r.begendim ? AppColors.heart : AppColors.primary),
             label: Text(
               r.begeniSayisi > 0 ? 'Beğen · ${r.begeniSayisi}' : 'Beğen',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             style: OutlinedButton.styleFrom(
@@ -924,46 +933,76 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
             ),
           ),
         ),
-        if (followable) ...[
-          const SizedBox(width: 10),
-          Expanded(child: _followButton(r.sahip!)),
-        ],
+        const SizedBox(width: 10),
+        // Yorumlar — dokununca yorum sheet'i açılır.
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () => _openComments(r),
+            icon: const Icon(Icons.mode_comment_outlined,
+                size: 18, color: AppColors.primary),
+            label: Text(
+              r.yorumSayisi > 0 ? 'Yorumlar · ${r.yorumSayisi}' : 'Yorumlar',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.ink,
+              side: const BorderSide(color: AppColors.line),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ),
       ],
     );
   }
 
-  Widget _followButton(RotaSahip s) {
+  /// Başlık satırı için kompakt takip pili (ismin en sağında).
+  Widget _followButtonCompact(RotaSahip s) {
     final following = s.takipEdiyorum ?? false;
-    return following
-        ? OutlinedButton.icon(
-            onPressed: _toggleFollow,
-            icon: const Icon(Icons.check, size: 18),
-            label: const Text('Takipte',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontWeight: FontWeight.w600)),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.primary,
-              side: const BorderSide(color: AppColors.primary),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-          )
-        : ElevatedButton.icon(
-            onPressed: _toggleFollow,
-            icon: const Icon(Icons.person_add_alt, size: 18),
-            label: const Text('Takip Et',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontWeight: FontWeight.w600)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-          );
+    return GestureDetector(
+      onTap: _toggleFollow,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: following ? Colors.white : AppColors.primary,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: AppColors.primary),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(following ? Icons.check : Icons.person_add_alt,
+                size: 15,
+                color: following ? AppColors.primary : Colors.white),
+            const SizedBox(width: 5),
+            Text(following ? 'Takipte' : 'Takip Et',
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: following ? AppColors.primary : Colors.white)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Yorum sheet'ini açar; yorum eklenince/silinince başlıktaki sayıyı tazeler.
+  Future<void> _openComments(GeziRota r) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _YorumSheet(
+        rota: r,
+        onCount: (c) {
+          if (mounted && _rota != null) {
+            setState(() => _rota = _rota!.copyWithYorumSayisi(c));
+          }
+        },
+      ),
+    );
   }
 
   /// Durağa bağlı QR menü ürünü rozeti (küçük görsel + ad + fiyat). Kullanıcının
@@ -1083,7 +1122,8 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: (m != null && !d.silinmis)
+        // Konum durağının kayıtlı mekanı yok → detay açılmaz.
+        onTap: (m != null && !d.silinmis && !d.isKonum)
             ? () => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -1134,7 +1174,14 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                           child: const Icon(Icons.image_not_supported_outlined,
                               color: AppColors.muted),
                         )
-                      : NetImage(m?.image ?? ''),
+                      // Konum durağı: görseli yoksa konum pini göster.
+                      : (d.isKonum && (m?.image.isEmpty ?? true))
+                          ? Container(
+                              color: AppColors.primarySoft,
+                              child: const Icon(Icons.place,
+                                  color: AppColors.primary),
+                            )
+                          : NetImage(m?.image ?? ''),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1145,7 +1192,9 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                     Text(
                       d.silinmis
                           ? 'Silinmiş mekan'
-                          : (m?.name.isNotEmpty == true ? m!.name : 'Mekan'),
+                          : (m?.name.isNotEmpty == true
+                              ? m!.name
+                              : (d.isKonum ? 'Konum' : 'Mekan')),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -1153,6 +1202,24 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                           fontWeight: FontWeight.w600,
                           color: d.silinmis ? AppColors.muted : AppColors.ink),
                     ),
+                    // Konum durağının adresi (varsa).
+                    if (d.isKonum && (m?.adres.isNotEmpty ?? false)) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          const Icon(Icons.place_outlined,
+                              size: 13, color: AppColors.muted),
+                          const SizedBox(width: 3),
+                          Expanded(
+                            child: Text(m!.adres,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 12, color: AppColors.muted)),
+                          ),
+                        ],
+                      ),
+                    ],
                     if (d.yorum.isNotEmpty) ...[
                       const SizedBox(height: 3),
                       Text(d.yorum,
@@ -1187,19 +1254,10 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                       color: AppColors.primary),
                 ),
               if (owner) ...[
-                PopupMenuButton<String>(
+                IconButton(
+                  visualDensity: VisualDensity.compact,
                   icon: const Icon(Icons.more_vert, color: AppColors.muted),
-                  onSelected: (v) {
-                    if (v == 'edit') _editStop(d);
-                    if (v == 'delete') _deleteStop(d);
-                  },
-                  itemBuilder: (_) => [
-                    if (!d.silinmis)
-                      const PopupMenuItem(
-                          value: 'edit', child: Text('Notu düzenle')),
-                    const PopupMenuItem(
-                        value: 'delete', child: Text('Durağı çıkar')),
-                  ],
+                  onPressed: () => _openStopMenu(d),
                 ),
                 ReorderableDragStartListener(
                   index: index,
@@ -1283,6 +1341,69 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
       builder: (_) => _DurakFotoSheet(rotaId: widget.rotaId, durak: d),
     );
     if (changed == true && mounted) _load();
+  }
+
+  /// Durak aksiyon menüsü (sahibe) — tasarıma uygun alttan sheet: Fotoğraf ekle
+  /// (en üstte) / Notu düzenle / Durağı çıkar. Her item altında çizgi.
+  Future<void> _openStopMenu(RotaDurak d) async {
+    // (key, icon, başlık, tehlikeli-mi)
+    final items = <(String, IconData, String, bool)>[
+      if (!d.silinmis)
+        ('foto', Icons.add_a_photo_outlined, 'Fotoğraf ekle', false),
+      if (!d.silinmis) ('edit', Icons.edit_outlined, 'Notu düzenle', false),
+      ('delete', Icons.delete_outline, 'Durağı çıkar', true),
+    ];
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 10, bottom: 6),
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: AppColors.line,
+                    borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            for (final it in items) ...[
+              ListTile(
+                leading: Icon(it.$2,
+                    color: it.$4 ? AppColors.closing : AppColors.primary),
+                title: Text(it.$3,
+                    style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                        color: it.$4 ? AppColors.closing : AppColors.ink)),
+                onTap: () => Navigator.pop(ctx, it.$1),
+              ),
+              const Divider(height: 1, thickness: 1, color: AppColors.line),
+            ],
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (action == null || !mounted) return;
+    switch (action) {
+      case 'foto':
+        await _openFotoManager(d);
+        break;
+      case 'edit':
+        _editStop(d);
+        break;
+      case 'delete':
+        _deleteStop(d);
+        break;
+    }
   }
 }
 
@@ -1402,18 +1523,20 @@ Future<String?> _pickImageSource(BuildContext context,
 }
 
 /// Rota oluştur/düzenle formu (kapak görseli **ilk adımda**). Kaydedilirse
-/// `(baslik, aciklama, gorunurluk, kapak-bytes?)` döner; iptalde null.
+/// `(baslik, aciklama, gorunurluk, yorumlarAcik, kapak-bytes?)` döner; iptalde null.
 Future<
         ({
           String baslik,
           String aciklama,
           String gorunurluk,
+          bool yorumlarAcik,
           Uint8List? kapak
         })?>
     _showRouteForm(BuildContext context, {GeziRota? initial}) {
   final baslikC = TextEditingController(text: initial?.baslik ?? '');
   final aciklamaC = TextEditingController(text: initial?.aciklama ?? '');
   var herkeseAcik = initial?.herkeseAcik ?? false;
+  var yorumlarAcik = initial?.yorumlarAcik ?? true;
   final initialKapak = initial?.kapakGorsel ?? '';
   Uint8List? kapak;
 
@@ -1422,6 +1545,7 @@ Future<
         String baslik,
         String aciklama,
         String gorunurluk,
+        bool yorumlarAcik,
         Uint8List? kapak
       })>(
     context: context,
@@ -1534,6 +1658,19 @@ Future<
                     activeTrackColor: AppColors.primary,
                     onChanged: (v) => setSheet(() => herkeseAcik = v),
                   ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Yoruma izin ver',
+                        style: TextStyle(
+                            fontSize: 14.5, fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Diğer üyeler bu rotaya yorum yapabilir',
+                        style:
+                            TextStyle(fontSize: 12.5, color: AppColors.muted)),
+                    value: yorumlarAcik,
+                    activeThumbColor: Colors.white,
+                    activeTrackColor: AppColors.primary,
+                    onChanged: (v) => setSheet(() => yorumlarAcik = v),
+                  ),
                   const SizedBox(height: 18),
                   SizedBox(
                     width: double.infinity,
@@ -1545,6 +1682,7 @@ Future<
                           baslik: baslikC.text.trim(),
                           aciklama: aciklamaC.text.trim(),
                           gorunurluk: herkeseAcik ? 'herkese_acik' : 'gizli',
+                          yorumlarAcik: yorumlarAcik,
                           kapak: kapak,
                         ));
                       },
@@ -2069,33 +2207,41 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        height: MediaQuery.of(context).size.height * 0.85,
-        decoration: const BoxDecoration(
-          color: AppColors.bg,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Row(
-                children: [
-                  const Text('Mekan Ekle',
-                      style: TextStyle(
-                          fontSize: 17, fontWeight: FontWeight.w600)),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close, color: AppColors.ink),
-                  ),
-                ],
-              ),
+    // Klavye yüksekliği; sheet'in ÜSTÜNÜ ekran dışına taşırmamak için padding'i
+    // dışarıya değil, içerideki listenin altına ekliyoruz.
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.8,
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        children: [
+          // Drag handle (diğer sheet'lerle tutarlı).
+          Padding(
+            padding: const EdgeInsets.only(top: 10, bottom: 6),
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: AppColors.line,
+                  borderRadius: BorderRadius.circular(2)),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 12, 4),
+            child: Row(
+              children: [
+                const Spacer(),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close, color: AppColors.ink),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: TextField(
                 controller: _c,
                 autofocus: true,
@@ -2158,8 +2304,7 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 }
 
@@ -2182,9 +2327,40 @@ class _AddStopsScreen extends StatefulWidget {
   State<_AddStopsScreen> createState() => _AddStopsScreenState();
 }
 
-class _AddStopsScreenState extends State<_AddStopsScreen> {
+class _AddStopsScreenState extends State<_AddStopsScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tab = TabController(length: 2, vsync: this)
+    ..addListener(_onTab);
   final List<_StagedStop> _staged = [];
   bool _busy = false;
+
+  // Konum sekmesi durumu (rota-konum-durak.md).
+  final TextEditingController _konumAdC = TextEditingController();
+  final TextEditingController _konumAdresC = TextEditingController();
+  final TextEditingController _konumYorumC = TextEditingController();
+  double? _konumLat;
+  double? _konumLng;
+  bool _konumReal = false;
+  bool _konumLoading = false;
+  bool _konumBusy = false;
+  bool _konumFetched = false;
+  Uint8List? _konumFoto;
+
+  void _onTab() {
+    // Konum sekmesine ilk geçişte konumu çöz.
+    if (_tab.index == 1 && !_konumFetched) _resolveKonum();
+  }
+
+  @override
+  void dispose() {
+    _tab
+      ..removeListener(_onTab)
+      ..dispose();
+    _konumAdC.dispose();
+    _konumAdresC.dispose();
+    _konumYorumC.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickAndAdd() async {
     final place = await _showPlacePicker(context);
@@ -2283,19 +2459,36 @@ class _AddStopsScreenState extends State<_AddStopsScreen> {
       backgroundColor: AppColors.bg,
       body: Column(
         children: [
-          const PageHeader(title: 'Mekan Ekle'),
+          const PageHeader(title: 'Durak Ekle'),
+          _PillTabs(controller: _tab, labels: const ['Mekan', 'Konum']),
           Expanded(
-            child: _staged.isEmpty
-                ? _empty()
-                : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                    itemCount: _staged.length,
-                    itemBuilder: (_, i) => _stagedTile(i),
-                  ),
+            child: TabBarView(
+              controller: _tab,
+              children: [
+                _mekanTab(),
+                _konumTab(),
+              ],
+            ),
           ),
-          _bottomBar(),
         ],
       ),
+    );
+  }
+
+  Widget _mekanTab() {
+    return Column(
+      children: [
+        Expanded(
+          child: _staged.isEmpty
+              ? _empty()
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                  itemCount: _staged.length,
+                  itemBuilder: (_, i) => _stagedTile(i),
+                ),
+        ),
+        _bottomBar(),
+      ],
     );
   }
 
@@ -2444,6 +2637,244 @@ class _AddStopsScreenState extends State<_AddStopsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  // --- Konum sekmesi (rota-konum-durak.md) ---------------------------------
+
+  Future<void> _resolveKonum() async {
+    setState(() {
+      _konumLoading = true;
+      _konumFetched = true;
+    });
+    final loc = await LocationService.resolve(forceRefresh: true);
+    String? adres;
+    try {
+      adres =
+          await LocationService.cityDistrict(loc.lat, loc.lng, districtFirst: true);
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _konumLat = loc.lat;
+      _konumLng = loc.lng;
+      _konumReal = loc.real;
+      if (adres != null && adres.isNotEmpty && _konumAdresC.text.trim().isEmpty) {
+        _konumAdresC.text = adres;
+      }
+      _konumLoading = false;
+    });
+  }
+
+  Future<void> _pickKonumFoto() async {
+    final src = await _pickImageSource(context, allowRemove: _konumFoto != null);
+    if (src == null) return;
+    if (src == 'remove') {
+      setState(() => _konumFoto = null);
+      return;
+    }
+    final bytes = await _cropSquare(
+        src == 'camera' ? ImageSource.camera : ImageSource.gallery);
+    if (bytes != null && mounted) setState(() => _konumFoto = bytes);
+  }
+
+  Future<void> _submitKonum() async {
+    if (_konumLat == null || _konumLng == null || _konumBusy) return;
+    setState(() => _konumBusy = true);
+    try {
+      await RotaRepository.instance.konumEkle(
+        widget.rotaId,
+        lat: _konumLat!,
+        lng: _konumLng!,
+        ad: _konumAdC.text,
+        adres: _konumAdresC.text,
+        yorum: _konumYorumC.text,
+        gorselBase64: _konumFoto != null
+            ? 'data:image/jpeg;base64,${base64Encode(_konumFoto!)}'
+            : null,
+      );
+      if (mounted) Navigator.pop(context, true);
+    } on PlusRequiredException catch (e) {
+      if (!mounted) return;
+      setState(() => _konumBusy = false);
+      await _handlePlus(context, e);
+    } on RotaException catch (e) {
+      if (!mounted) return;
+      setState(() => _konumBusy = false);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Widget _konumTab() {
+    final hasLoc = _konumLat != null && _konumLng != null;
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Konum kartı.
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: AppShadows.listTile,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: const BoxDecoration(
+                            color: AppColors.primarySoft,
+                            shape: BoxShape.circle),
+                        child: const Icon(Icons.my_location,
+                            color: AppColors.primary),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Bulunduğun konum',
+                                style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 2),
+                            Text(
+                              _konumLoading
+                                  ? 'Konum alınıyor…'
+                                  : hasLoc
+                                      ? '${_konumLat!.toStringAsFixed(5)}, ${_konumLng!.toStringAsFixed(5)}'
+                                      : 'Konum alınamadı',
+                              style: const TextStyle(
+                                  fontSize: 12.5, color: AppColors.muted),
+                            ),
+                            if (!_konumLoading && hasLoc && !_konumReal)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 2),
+                                child: Text('Yaklaşık konum (GPS kapalı olabilir)',
+                                    style: TextStyle(
+                                        fontSize: 11.5,
+                                        color: AppColors.closing)),
+                              ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Yenile',
+                        onPressed: _konumLoading ? null : _resolveKonum,
+                        icon: _konumLoading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2.2))
+                            : const Icon(Icons.refresh,
+                                color: AppColors.primary),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                // Fotoğraf (opsiyonel, kare).
+                const Text('Fotoğraf (opsiyonel)',
+                    style:
+                        TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: _pickKonumFoto,
+                  child: SizedBox(
+                    width: 110,
+                    height: 110,
+                    child: _konumFoto != null
+                        ? Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(14),
+                                child:
+                                    Image.memory(_konumFoto!, fit: BoxFit.cover),
+                              ),
+                              Positioned(
+                                top: 4,
+                                right: 4,
+                                child: GestureDetector(
+                                  onTap: () =>
+                                      setState(() => _konumFoto = null),
+                                  child: Container(
+                                    width: 26,
+                                    height: 26,
+                                    decoration: BoxDecoration(
+                                      color:
+                                          Colors.black.withValues(alpha: 0.55),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.close,
+                                        color: Colors.white, size: 16),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        : Container(
+                            decoration: BoxDecoration(
+                              color: AppColors.primarySoft,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: AppColors.line),
+                            ),
+                            child: const Icon(Icons.add_a_photo_outlined,
+                                color: AppColors.primary, size: 26),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _field(_konumAdC, 'Konum adı (opsiyonel)',
+                    'Örn. Sultanahmet Meydanı'),
+                const SizedBox(height: 14),
+                _field(_konumAdresC, 'Adres (opsiyonel)', 'Örn. Fatih/İstanbul'),
+                const SizedBox(height: 14),
+                _field(_konumYorumC, 'Yorum (opsiyonel)', 'Kısa bir not',
+                    maxLines: 3),
+              ],
+            ),
+          ),
+        ),
+        Container(
+          padding: EdgeInsets.fromLTRB(
+              16, 12, 16, 12 + MediaQuery.of(context).viewPadding.bottom),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(top: BorderSide(color: AppColors.line)),
+          ),
+          child: SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton.icon(
+              onPressed: (!hasLoc || _konumBusy) ? null : _submitKonum,
+              icon: _konumBusy
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.4, color: Colors.white))
+                  : const Icon(Icons.add_location_alt_outlined, size: 20),
+              label: Text(_konumBusy ? 'Ekleniyor…' : 'Konumu Rotaya Ekle',
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -2855,6 +3286,7 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen>
         baslik: data.baslik,
         aciklama: data.aciklama,
         gorunurluk: data.gorunurluk,
+        yorumlarAcik: data.yorumlarAcik,
       );
       if (data.kapak != null) {
         await RotaRepository.instance.kapakYukle(rota.id,
@@ -3915,6 +4347,377 @@ class _UrunFotoSheetState extends State<_UrunFotoSheet> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Göreli zaman etiketi ("az önce", "5 dk", "3 sa", "2 gün", tarih).
+String _yorumZaman(DateTime? d) {
+  if (d == null) return '';
+  final diff = DateTime.now().difference(d);
+  if (diff.inMinutes < 1) return 'az önce';
+  if (diff.inMinutes < 60) return '${diff.inMinutes} dk';
+  if (diff.inHours < 24) return '${diff.inHours} sa';
+  if (diff.inDays < 7) return '${diff.inDays} gün';
+  return '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
+}
+
+/// Rota yorumları sheet'i (rota-yorumlar.md): listeleme + ekleme + silme.
+/// [onCount] her değişiklikte güncel toplam yorum sayısını üst ekrana bildirir.
+class _YorumSheet extends StatefulWidget {
+  final GeziRota rota;
+  final ValueChanged<int> onCount;
+  const _YorumSheet({required this.rota, required this.onCount});
+
+  @override
+  State<_YorumSheet> createState() => _YorumSheetState();
+}
+
+class _YorumSheetState extends State<_YorumSheet> {
+  final TextEditingController _c = TextEditingController();
+  final ScrollController _scroll = ScrollController();
+  List<RotaYorum> _yorumlar = const [];
+  bool _loading = true;
+  bool _sending = false;
+  bool _hasMore = false;
+  int _page = 1;
+  late bool _yorumlarAcik = widget.rota.yorumlarAcik;
+  late int _total = widget.rota.yorumSayisi;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _snack(String m) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+  }
+
+  Future<void> _load() async {
+    final res = await RotaRepository.instance.yorumlar(widget.rota.id, page: 1);
+    if (!mounted) return;
+    setState(() {
+      _yorumlar = res.items;
+      _hasMore = res.hasMore;
+      _page = 1;
+      _yorumlarAcik = res.yorumlarAcik;
+      _total = res.total;
+      _loading = false;
+    });
+    widget.onCount(_total);
+  }
+
+  Future<void> _loadMore() async {
+    final res = await RotaRepository.instance
+        .yorumlar(widget.rota.id, page: _page + 1);
+    if (!mounted) return;
+    setState(() {
+      _yorumlar = [..._yorumlar, ...res.items];
+      _hasMore = res.hasMore;
+      _page += 1;
+    });
+  }
+
+  Future<void> _send() async {
+    final text = _c.text.trim();
+    if (text.isEmpty || _sending) return;
+    if (!AuthService.instance.isLoggedIn) {
+      final ok = await openLogin(context);
+      if (ok != true || !mounted || !AuthService.instance.isLoggedIn) return;
+    }
+    setState(() => _sending = true);
+    try {
+      final res = await RotaRepository.instance.yorumEkle(widget.rota.id, text);
+      if (!mounted) return;
+      setState(() {
+        _yorumlar = [res.yorum, ..._yorumlar];
+        _total = res.yorumSayisi;
+        _c.clear();
+        _sending = false;
+      });
+      widget.onCount(_total);
+      FocusScope.of(context).unfocus();
+    } on PlusRequiredException catch (e) {
+      if (mounted) setState(() => _sending = false);
+      _snack(e.message);
+    } on RotaException catch (e) {
+      if (mounted) setState(() => _sending = false);
+      _snack(e.message);
+    } catch (_) {
+      if (mounted) setState(() => _sending = false);
+      _snack('Yorum eklenemedi.');
+    }
+  }
+
+  Future<void> _delete(RotaYorum y) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Yorumu sil'),
+        content: const Text('Bu yorumu silmek istediğine emin misin?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Vazgeç')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sil',
+                style: TextStyle(
+                    color: AppColors.closing, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      final count = await RotaRepository.instance.yorumSil(widget.rota.id, y.id);
+      if (!mounted) return;
+      setState(() {
+        _yorumlar = _yorumlar.where((e) => e.id != y.id).toList();
+        _total = count;
+      });
+      widget.onCount(_total);
+    } on RotaException catch (e) {
+      _snack(e.message);
+    } catch (_) {
+      _snack('Yorum silinemedi.');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final insets = MediaQuery.of(context).viewInsets.bottom;
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.85,
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 10, bottom: 6),
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: AppColors.line,
+                  borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 2, 12, 8),
+            child: Row(
+              children: [
+                Text(_total > 0 ? 'Yorumlar ($_total)' : 'Yorumlar',
+                    style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.ink)),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close, color: AppColors.ink),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: AppColors.line),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _yorumlar.isEmpty
+                    ? _empty()
+                    : ListView.separated(
+                        controller: _scroll,
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                        itemCount: _yorumlar.length + (_hasMore ? 1 : 0),
+                        separatorBuilder: (_, __) => const SizedBox(height: 14),
+                        itemBuilder: (_, i) {
+                          if (i >= _yorumlar.length) {
+                            return Center(
+                              child: TextButton(
+                                onPressed: _loadMore,
+                                child: const Text('Daha fazla göster'),
+                              ),
+                            );
+                          }
+                          return _yorumTile(_yorumlar[i]);
+                        },
+                      ),
+          ),
+          _composer(insets),
+        ],
+      ),
+    );
+  }
+
+  Widget _empty() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.mode_comment_outlined,
+                size: 46, color: AppColors.muted),
+            const SizedBox(height: 12),
+            Text(
+              _yorumlarAcik
+                  ? 'Henüz yorum yok. İlk yorumu sen yaz.'
+                  : 'Bu rotada yorumlar kapalı.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.muted),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _yorumTile(RotaYorum y) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Avatar.
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: SizedBox(
+            width: 38,
+            height: 38,
+            child: y.uye.avatar.isNotEmpty
+                ? NetImage(y.uye.avatar)
+                : Container(
+                    color: AppColors.primarySoft,
+                    child: const Icon(Icons.person,
+                        size: 20, color: AppColors.primary),
+                  ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      y.uye.adSoyad.isEmpty ? 'Üye' : y.uye.adSoyad,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 13.5, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(_yorumZaman(y.createdAt),
+                      style: const TextStyle(
+                          fontSize: 11.5, color: AppColors.muted)),
+                  if (y.silebilir) ...[
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () => _delete(y),
+                      child: const Icon(Icons.delete_outline,
+                          size: 18, color: AppColors.muted),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 3),
+              Text(y.yorum,
+                  style: const TextStyle(
+                      fontSize: 13.5, height: 1.4, color: AppColors.ink)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _composer(double insets) {
+    if (!_yorumlarAcik) {
+      return SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.only(bottom: insets),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: AppColors.line)),
+            ),
+            alignment: Alignment.center,
+            child: const Text('Bu rotada yorumlar kapalı.',
+                style: TextStyle(color: AppColors.muted, fontSize: 13)),
+          ),
+        ),
+      );
+    }
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: insets),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(top: BorderSide(color: AppColors.line)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _c,
+                  minLines: 1,
+                  maxLines: 4,
+                  maxLength: 1000,
+                  textInputAction: TextInputAction.newline,
+                  decoration: InputDecoration(
+                    hintText: 'Yorum yaz…',
+                    counterText: '',
+                    filled: true,
+                    fillColor: AppColors.primarySoft,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: _sending ? null : _send,
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: const BoxDecoration(
+                      color: AppColors.primary, shape: BoxShape.circle),
+                  child: _sending
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2.2, color: Colors.white),
+                        )
+                      : const Icon(Icons.send, color: Colors.white, size: 20),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
