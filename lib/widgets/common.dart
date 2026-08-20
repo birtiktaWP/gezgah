@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
@@ -641,57 +640,24 @@ class CategoryIcon extends StatelessWidget {
 }
 
 /// Gemi dümeni (ship's wheel) ikonu — Material'da karşılığı olmadığı için
-/// CustomPainter ile çizilir. Gezi Rotaları kısayolunda kullanılır.
+/// verilen rota (harita pinleri) SVG'siyle çizilir. Gezi Rotaları kısayolunda
+/// kullanılır.
 class ShipWheelIcon extends StatelessWidget {
   final double size;
   final Color color;
-  const ShipWheelIcon({super.key, this.size = 18, this.color = AppColors.primary});
+  const ShipWheelIcon(
+      {super.key, this.size = 18, this.color = AppColors.primary});
+
+  static const String _svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><path d="M516.1 228.2C504.4 246.9 491.1 264.7 480 278.6C468.9 264.7 455.6 246.9 443.9 228.2C426.1 199.7 416 175.3 416 160C416 124.7 444.7 96 480 96C515.3 96 544 124.7 544 160C544 175.2 533.9 199.7 516.1 228.2zM491.4 315C516.8 285.1 576 210.2 576 160C576 107 533 64 480 64C427 64 384 107 384 160C384 198.7 419 251.9 446.7 288L400 288C355.8 288 320 323.8 320 368C320 412.2 355.8 448 400 448L496 448C522.5 448 544 469.5 544 496C544 522.5 522.5 544 496 544L230 544C220.6 556.3 211.4 567.2 203.6 576L496 576C540.2 576 576 540.2 576 496C576 451.8 540.2 416 496 416L400 416C373.5 416 352 394.5 352 368C352 341.5 373.5 320 400 320L476.9 320C482 321.1 487.6 319.4 491.4 315zM196.2 481.2C184.5 499 171.1 515.7 160 528.6C148.9 515.7 135.5 499 123.8 481.2C105.9 454.3 96 431 96 416C96 380.7 124.7 352 160 352C195.3 352 224 380.7 224 416C224 431 214.1 454.3 196.2 481.2zM188.6 544.3C216.9 510.7 256 456.8 256 415.9C256 362.9 213 319.9 160 319.9C107 319.9 64 363 64 416C64 466.5 123.8 537 149 564.4C155 570.9 165 570.9 170.9 564.4C174 561 177.7 556.9 181.8 552.2C184 549.7 186.2 547.1 188.5 544.3zM504 160C504 146.7 493.3 136 480 136C466.7 136 456 146.7 456 160C456 173.3 466.7 184 480 184C493.3 184 504 173.3 504 160zM160 440C173.3 440 184 429.3 184 416C184 402.7 173.3 392 160 392C146.7 392 136 402.7 136 416C136 429.3 146.7 440 160 440z"/></svg>';
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    return SvgPicture.string(
+      _svg,
       width: size,
       height: size,
-      child: CustomPaint(painter: _ShipWheelPainter(color)),
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
     );
   }
-}
-
-class _ShipWheelPainter extends CustomPainter {
-  final Color color;
-  _ShipWheelPainter(this.color);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final c = Offset(size.width / 2, size.height / 2);
-    final r = size.width / 2;
-    final stroke = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = size.width * 0.09
-      ..strokeCap = StrokeCap.round;
-    final fill = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-
-    // Dış çember (jant).
-    canvas.drawCircle(c, r * 0.72, stroke);
-    // Göbek (merkez).
-    canvas.drawCircle(c, r * 0.16, fill);
-
-    // 8 kol + uçlarda tutamak topuzları (jantın dışına taşar).
-    for (var i = 0; i < 8; i++) {
-      final a = i * math.pi / 4;
-      final dir = Offset(math.cos(a), math.sin(a));
-      final inner = c + dir * (r * 0.16);
-      final outer = c + dir * (r * 0.98);
-      canvas.drawLine(inner, c + dir * (r * 0.72), stroke);
-      // Jant dışındaki kısa tutamak.
-      canvas.drawLine(c + dir * (r * 0.72), outer, stroke);
-      canvas.drawCircle(outer, r * 0.08, fill);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _ShipWheelPainter old) => old.color != color;
 }

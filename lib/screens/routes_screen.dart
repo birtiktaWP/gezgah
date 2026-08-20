@@ -1327,31 +1327,54 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     );
   }
 
-  /// Durak fotoğraf şeridi (yatay, yalnız görüntüleme). Fotoğrafa dokununca
-  /// tam ekran görüntüleyici açılır. Ekleme/silme üç nokta menüsündedir.
+  /// Durak fotoğrafları — tek küçük görsel; birden fazlaysa sağ üstte tam
+  /// yuvarlak sayı rozeti (toplam adet). Dokununca tam ekran görüntüleyici
+  /// (tüm fotoğraflar) açılır.
   Widget _fotoStrip(RotaDurak d) {
-    return SizedBox(
-      height: 64,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.zero,
-        children: [
-          for (var i = 0; i < d.gorseller.length; i++)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: GestureDetector(
-                onTap: () => _openFotoViewer(d.gorseller, i),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: SizedBox(
-                    width: 64,
-                    height: 64,
-                    child: NetImage(d.gorseller[i].url),
-                  ),
+    final fotos = d.gorseller;
+    if (fotos.isEmpty) return const SizedBox.shrink();
+    final count = fotos.length;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: GestureDetector(
+        onTap: () => _openFotoViewer(fotos, 0),
+        child: SizedBox(
+          width: 72,
+          height: 72,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: SizedBox(
+                  width: 68,
+                  height: 68,
+                  child: NetImage(fotos.first.url),
                 ),
               ),
-            ),
-        ],
+              if (count > 1)
+                Positioned(
+                  top: -4,
+                  right: -4,
+                  child: Container(
+                    width: 24,
+                    height: 24,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                    child: Text('$count',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700)),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -4717,6 +4740,98 @@ class _YorumSheetState extends State<_YorumSheet> {
     }
   }
 
+  /// Yorum beğeni/beğenmeme tepkisi (rota-yorum-begeni.md) — iyimser güncelleme,
+  /// yanıtla senkron; hatada geri al. Aktif tepkiye tekrar dokunmak kaldırır.
+  Future<void> _react(RotaYorum y, {required bool like}) async {
+    if (!AuthService.instance.isLoggedIn) {
+      final ok = await openLogin(context);
+      if (ok != true || !mounted || !AuthService.instance.isLoggedIn) return;
+    }
+    final idx = _yorumlar.indexWhere((e) => e.id == y.id);
+    if (idx < 0) return;
+    final cur = _yorumlar[idx];
+    RotaYorum optimistic;
+    Future<YorumTepki> Function() call;
+    if (like) {
+      if (cur.begendim) {
+        optimistic = cur.copyWith(
+            begendim: false,
+            begeniSayisi: (cur.begeniSayisi - 1).clamp(0, 1 << 30));
+        call = () => RotaRepository.instance.yorumBegenKaldir(widget.rota.id, y.id);
+      } else {
+        optimistic = cur.copyWith(
+            begendim: true,
+            begenmedim: false,
+            begeniSayisi: cur.begeniSayisi + 1,
+            begenmemeSayisi: cur.begenmedim
+                ? (cur.begenmemeSayisi - 1).clamp(0, 1 << 30)
+                : cur.begenmemeSayisi);
+        call = () => RotaRepository.instance.yorumBegen(widget.rota.id, y.id);
+      }
+    } else {
+      if (cur.begenmedim) {
+        optimistic = cur.copyWith(
+            begenmedim: false,
+            begenmemeSayisi: (cur.begenmemeSayisi - 1).clamp(0, 1 << 30));
+        call =
+            () => RotaRepository.instance.yorumBegenmeKaldir(widget.rota.id, y.id);
+      } else {
+        optimistic = cur.copyWith(
+            begenmedim: true,
+            begendim: false,
+            begenmemeSayisi: cur.begenmemeSayisi + 1,
+            begeniSayisi: cur.begendim
+                ? (cur.begeniSayisi - 1).clamp(0, 1 << 30)
+                : cur.begeniSayisi);
+        call = () => RotaRepository.instance.yorumBegenme(widget.rota.id, y.id);
+      }
+    }
+    setState(() => _yorumlar[idx] = optimistic);
+    try {
+      final r = await call();
+      if (!mounted) return;
+      final i2 = _yorumlar.indexWhere((e) => e.id == y.id);
+      if (i2 >= 0) {
+        setState(() => _yorumlar[i2] = _yorumlar[i2].copyWith(
+              begendim: r.begendim,
+              begenmedim: r.begenmedim,
+              begeniSayisi: r.begeniSayisi,
+              begenmemeSayisi: r.begenmemeSayisi,
+            ));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      final i3 = _yorumlar.indexWhere((e) => e.id == y.id);
+      if (i3 >= 0) setState(() => _yorumlar[i3] = cur); // geri al
+      _snack(e is RotaException ? e.message : 'İşlem yapılamadı.');
+    }
+  }
+
+  Widget _reactBtn({
+    required IconData icon,
+    required bool active,
+    required int count,
+    required VoidCallback onTap,
+  }) {
+    final color = active ? AppColors.primary : AppColors.muted;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 17, color: color),
+          if (count > 0) ...[
+            const SizedBox(width: 4),
+            Text('$count',
+                style: TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final insets = MediaQuery.of(context).viewInsets.bottom;
@@ -4763,7 +4878,7 @@ class _YorumSheetState extends State<_YorumSheet> {
                     ? _empty()
                     : ListView.separated(
                         controller: _scroll,
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                         itemCount: _yorumlar.length + (_hasMore ? 1 : 0),
                         separatorBuilder: (_, i) => i < _yorumlar.length - 1
                             ? const Divider(
@@ -4859,6 +4974,29 @@ class _YorumSheetState extends State<_YorumSheet> {
               Text(y.yorum,
                   style: const TextStyle(
                       fontSize: 13.5, height: 1.4, color: AppColors.ink)),
+              const SizedBox(height: 8),
+              // Beğeni / beğenmeme (rota-yorum-begeni.md).
+              Row(
+                children: [
+                  _reactBtn(
+                    icon: y.begendim
+                        ? Icons.thumb_up_alt
+                        : Icons.thumb_up_alt_outlined,
+                    active: y.begendim,
+                    count: y.begeniSayisi,
+                    onTap: () => _react(y, like: true),
+                  ),
+                  const SizedBox(width: 20),
+                  _reactBtn(
+                    icon: y.begenmedim
+                        ? Icons.thumb_down_alt
+                        : Icons.thumb_down_alt_outlined,
+                    active: y.begenmedim,
+                    count: y.begenmemeSayisi,
+                    onTap: () => _react(y, like: false),
+                  ),
+                ],
+              ),
             ],
           ),
         ),

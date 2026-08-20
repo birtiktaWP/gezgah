@@ -769,6 +769,11 @@ class RotaYorum {
   final RotaSahip uye;
   final bool benim;
   final bool silebilir;
+  // Yorum beğeni/beğenmeme (rota-yorum-begeni.md).
+  final int begeniSayisi;
+  final int begenmemeSayisi;
+  final bool begendim;
+  final bool begenmedim;
   const RotaYorum({
     required this.id,
     this.yorum = '',
@@ -776,7 +781,30 @@ class RotaYorum {
     this.uye = const RotaSahip(uyeId: 0),
     this.benim = false,
     this.silebilir = false,
+    this.begeniSayisi = 0,
+    this.begenmemeSayisi = 0,
+    this.begendim = false,
+    this.begenmedim = false,
   });
+
+  RotaYorum copyWith({
+    int? begeniSayisi,
+    int? begenmemeSayisi,
+    bool? begendim,
+    bool? begenmedim,
+  }) =>
+      RotaYorum(
+        id: id,
+        yorum: yorum,
+        createdAt: createdAt,
+        uye: uye,
+        benim: benim,
+        silebilir: silebilir,
+        begeniSayisi: begeniSayisi ?? this.begeniSayisi,
+        begenmemeSayisi: begenmemeSayisi ?? this.begenmemeSayisi,
+        begendim: begendim ?? this.begendim,
+        begenmedim: begenmedim ?? this.begenmedim,
+      );
 
   factory RotaYorum.fromJson(Map<String, dynamic> j, {String host = ''}) {
     final u = j['uye'];
@@ -789,6 +817,34 @@ class RotaYorum {
           : const RotaSahip(uyeId: 0),
       benim: j['benim'] == true,
       silebilir: j['silebilir_mi'] == true,
+      begeniSayisi: (j['begeni_sayisi'] as num?)?.toInt() ?? 0,
+      begenmemeSayisi: (j['begenmeme_sayisi'] as num?)?.toInt() ?? 0,
+      begendim: j['begendim'] == true,
+      begenmedim: j['begenmedim'] == true,
+    );
+  }
+}
+
+/// Yorum tepki (beğeni/beğenmeme) işlemi yanıtı (rota-yorum-begeni.md).
+class YorumTepki {
+  final bool begendim;
+  final bool begenmedim;
+  final int begeniSayisi;
+  final int begenmemeSayisi;
+  const YorumTepki({
+    this.begendim = false,
+    this.begenmedim = false,
+    this.begeniSayisi = 0,
+    this.begenmemeSayisi = 0,
+  });
+
+  factory YorumTepki.fromData(dynamic data) {
+    final d = data is Map ? data : const {};
+    return YorumTepki(
+      begendim: d['begendim'] == true,
+      begenmedim: d['begenmedim'] == true,
+      begeniSayisi: (d['begeni_sayisi'] as num?)?.toInt() ?? 0,
+      begenmemeSayisi: (d['begenmeme_sayisi'] as num?)?.toInt() ?? 0,
     );
   }
 }

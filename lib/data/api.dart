@@ -2676,6 +2676,37 @@ class RotaRepository {
     return (data is Map ? (data['yorum_sayisi'] as num?)?.toInt() : null) ?? 0;
   }
 
+  /// `POST /uye/rotalar/{id}/yorum/begen` — yorumu beğen (👍, rota-yorum-begeni.md).
+  Future<YorumTepki> yorumBegen(int id, int yorumId) async {
+    final res = await _post('/uye/rotalar/$id/yorum/begen', {'yorum_id': yorumId});
+    return YorumTepki.fromData(res);
+  }
+
+  /// `DELETE /uye/rotalar/{id}/yorum/begen` — beğeniyi kaldır.
+  Future<YorumTepki> yorumBegenKaldir(int id, int yorumId) async {
+    final data = await _sendData(() async => _dio.delete(
+        '/uye/rotalar/$id/yorum/begen',
+        data: {'yorum_id': yorumId},
+        options: await _uyeAuth()));
+    return YorumTepki.fromData(data);
+  }
+
+  /// `POST /uye/rotalar/{id}/yorum/begenme` — yorumu beğenme (👎).
+  Future<YorumTepki> yorumBegenme(int id, int yorumId) async {
+    final res =
+        await _post('/uye/rotalar/$id/yorum/begenme', {'yorum_id': yorumId});
+    return YorumTepki.fromData(res);
+  }
+
+  /// `DELETE /uye/rotalar/{id}/yorum/begenme` — beğenmemeyi kaldır.
+  Future<YorumTepki> yorumBegenmeKaldir(int id, int yorumId) async {
+    final data = await _sendData(() async => _dio.delete(
+        '/uye/rotalar/$id/yorum/begenme',
+        data: {'yorum_id': yorumId},
+        options: await _uyeAuth()));
+    return YorumTepki.fromData(data);
+  }
+
   /// `DELETE /uye/rotalar/{id}` — rota sil (Plus şartı yok).
   Future<void> sil(int id) async {
     await _send(() async =>

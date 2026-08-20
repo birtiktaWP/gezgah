@@ -66,11 +66,19 @@ class _MapScreenState extends State<MapScreen> {
       if (mounted) setState(() => _myLocation = true);
       _goToUser(); // harita hazırsa konuma git
     }
-    // Kategoriler (ana sayfayla aynı: mekanı olanlar, en çok mekana göre).
+    // Kategoriler (ana sayfayla aynı kaynak). `mekan_sayisi` alanı yalnız bazı
+    // uçlarda gelir (öne çıkan kategoriler ucu döndürmez). Sayı bilgisi olan
+    // kategori varsa ona göre süz + en çok mekana göre sırala; yoksa (öne çıkan
+    // veri) kategorileri olduğu gibi öne çıkan sırasıyla göster.
     try {
       final all = await HomeRepository.instance.kategoriler();
-      _cats = all.where((c) => c.mekanSayisi > 0).toList()
-        ..sort((a, b) => b.mekanSayisi.compareTo(a.mekanSayisi));
+      final withCount = all.where((c) => c.mekanSayisi > 0).toList();
+      if (withCount.isNotEmpty) {
+        withCount.sort((a, b) => b.mekanSayisi.compareTo(a.mekanSayisi));
+        _cats = withCount;
+      } else {
+        _cats = all;
+      }
     } catch (_) {
       _cats = const [];
     }
