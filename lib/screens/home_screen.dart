@@ -6,6 +6,7 @@ import '../data/location_service.dart';
 import '../data/mock_data.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
 import '../widgets/place_cards.dart';
 import '../widgets/typewriter.dart';
@@ -266,10 +267,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 Row(
                   children: [
                     GlassButton(
-                        icon: Icons.location_on_outlined, onTap: _openMap),
+                        icon: Icons.location_on_outlined,
+                        svg: AppIcons.pin,
+                        onTap: _openMap),
                     const SizedBox(width: 10),
                     GlassButton(
                       icon: Icons.notifications_none,
+                      svg: AppIcons.bell,
                       showDot: true,
                       onTap: widget.onOpenNotifications,
                     ),
@@ -280,8 +284,8 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 22),
             Row(
               children: [
-                const Icon(Icons.location_on_outlined,
-                    size: 15, color: Colors.white70),
+                const AppSvgIcon(AppIcons.pin,
+                    size: 14, color: Colors.white70),
                 const SizedBox(width: 6),
                 Text('Konum · ',
                     style: TextStyle(
@@ -406,6 +410,7 @@ class _HomeScreenState extends State<HomeScreen> {
           final s = HomeConfig.tumu[i - 1];
           return CategoryPill(
             icon: HomeConfig.iconFor(s.id),
+            svg: HomeConfig.svgFor(s.id),
             label: s.name,
             active: _activeShortcut == (i - 1),
             // Bunlar kategori değil post type — type bazlı liste ekranını aç.
@@ -582,6 +587,7 @@ class _HomeScreenState extends State<HomeScreen> {
         badgeText: 'SPONSORLU',
         title: p.name,
         metaIcon: Icons.location_on_outlined,
+        metaSvg: AppIcons.pin,
         metaText: p.subtitle, // il · ilçe (koordinat yoksa)
         trailing: p.distance, // koordinat varsa mesafe (sağda)
         onTap: () => _openDetail(p),
@@ -722,6 +728,7 @@ class _HomeScreenState extends State<HomeScreen> {
     required String badgeText,
     required String title,
     required IconData metaIcon,
+    String? metaSvg,
     required String metaText,
     String trailing = '',
     VoidCallback? onTap,
@@ -787,7 +794,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        Icon(metaIcon, size: 13, color: Colors.white),
+                        metaSvg != null
+                            ? AppSvgIcon(metaSvg, size: 12, color: Colors.white)
+                            : Icon(metaIcon, size: 13, color: Colors.white),
                         const SizedBox(width: 5),
                         Expanded(
                           child: Text(metaText,

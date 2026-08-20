@@ -9,6 +9,7 @@ import '../data/home_config.dart';
 import '../data/models.dart';
 import '../navigation/main_nav.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
 import '../widgets/confetti.dart';
 import '../widgets/kedy_chat.dart';
@@ -475,8 +476,8 @@ class _DetailScreenState extends State<DetailScreen> {
           const SizedBox(height: 6),
           Row(
             children: [
-              const Icon(Icons.location_on_outlined,
-                  size: 15, color: AppColors.primary),
+              const AppSvgIcon(AppIcons.pin,
+                  size: 14, color: AppColors.primary),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -613,7 +614,7 @@ class _DetailScreenState extends State<DetailScreen> {
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        const Icon(Icons.location_on_outlined,
+                        const AppSvgIcon(AppIcons.pin,
                             size: 13, color: AppColors.primary),
                         const SizedBox(width: 5),
                         Expanded(
@@ -746,8 +747,8 @@ class _DetailScreenState extends State<DetailScreen> {
     }
     if (d.hasCoord) {
       actions.add(_action(
-          const Icon(Icons.near_me_outlined,
-              size: 20, color: AppColors.primary),
+          const AppSvgIcon(AppIcons.directions,
+              size: 19, color: AppColors.primary),
           'Yol Tarifi',
           () {}));
     }
@@ -958,10 +959,17 @@ class _DetailScreenState extends State<DetailScreen> {
   List<Widget>
       _infoRows(PlaceDetail d) {
     final specs = <
-        ({IconData icon, String title, String value, VoidCallback? onTap})>[];
+        ({
+          IconData icon,
+          String? svg,
+          String title,
+          String value,
+          VoidCallback? onTap
+        })>[];
     if (d.calismaSaatleri.isNotEmpty) {
       specs.add((
         icon: Icons.schedule,
+        svg: AppIcons.clock,
         title: 'Çalışma Saatleri',
         value: _hoursSummary(d),
         onTap: () => _openHoursSheet(d)
@@ -970,6 +978,7 @@ class _DetailScreenState extends State<DetailScreen> {
     if (d.adres.isNotEmpty) {
       specs.add((
         icon: Icons.location_on_outlined,
+        svg: AppIcons.pin,
         title: 'Adres',
         value: d.adres,
         onTap: () => _openMaps(d)
@@ -978,6 +987,7 @@ class _DetailScreenState extends State<DetailScreen> {
     if (d.telefon.isNotEmpty) {
       specs.add((
         icon: Icons.phone_outlined,
+        svg: AppIcons.phone,
         title: 'İletişim',
         value: d.telefon,
         onTap: () => _callPhone(d.telefon)
@@ -986,6 +996,7 @@ class _DetailScreenState extends State<DetailScreen> {
     if (specs.isEmpty) {
       specs.add((
         icon: Icons.info_outline,
+        svg: null,
         title: 'Bilgi',
         value: 'Bu mekan için ek bilgi girilmemiş.',
         onTap: null
@@ -995,12 +1006,14 @@ class _DetailScreenState extends State<DetailScreen> {
     return [
       for (var i = 0; i < specs.length; i++)
         _infoRow(specs[i].icon, specs[i].title, specs[i].value,
-            onTap: specs[i].onTap, showBorder: i != specs.length - 1),
+            svg: specs[i].svg,
+            onTap: specs[i].onTap,
+            showBorder: i != specs.length - 1),
     ];
   }
 
   Widget _infoRow(IconData icon, String title, String value,
-      {VoidCallback? onTap, bool showBorder = true}) {
+      {String? svg, VoidCallback? onTap, bool showBorder = true}) {
     return InkWell(
       onTap: onTap,
       child: Container(
@@ -1015,10 +1028,13 @@ class _DetailScreenState extends State<DetailScreen> {
             Container(
               width: 40,
               height: 40,
+              alignment: Alignment.center,
               decoration: BoxDecoration(
                   color: const Color(0xFFF4F5F9),
                   borderRadius: BorderRadius.circular(11)),
-              child: Icon(icon, size: 19, color: AppColors.primary),
+              child: svg != null
+                  ? AppSvgIcon(svg, size: 18, color: AppColors.primary)
+                  : Icon(icon, size: 19, color: AppColors.primary),
             ),
             const SizedBox(width: 13),
             Expanded(
@@ -1096,7 +1112,7 @@ class _DetailScreenState extends State<DetailScreen> {
         child: const Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.star_border_rounded, size: 20, color: Colors.white),
+            AppSvgIcon(AppIcons.star, size: 18, color: Colors.white),
             SizedBox(width: 8),
             Text('Değerlendirme Yap',
                 style: TextStyle(

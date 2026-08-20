@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
+import 'app_icons.dart';
 import 'common.dart';
 import 'fav_heart.dart';
 
@@ -77,8 +78,8 @@ class PopCard extends StatelessWidget {
                   const SizedBox(height: 5),
                   Row(
                     children: [
-                      const Icon(Icons.location_on_outlined,
-                          size: 13, color: AppColors.primary),
+                      const AppSvgIcon(AppIcons.pin,
+                          size: 12, color: AppColors.primary),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(place.subtitle,
@@ -198,8 +199,8 @@ class GridTile2 extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.location_on_outlined,
-                              size: 12, color: AppColors.primary),
+                          const AppSvgIcon(AppIcons.pin,
+                              size: 11, color: AppColors.primary),
                           const SizedBox(width: 3),
                           Text(place.distance,
                               style: const TextStyle(
@@ -293,8 +294,8 @@ class ListTileCard extends StatelessWidget {
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.location_on_outlined,
-                                size: 12, color: AppColors.primary),
+                            const AppSvgIcon(AppIcons.pin,
+                                size: 11, color: AppColors.primary),
                             const SizedBox(width: 3),
                             Text(place.distance,
                                 style: const TextStyle(

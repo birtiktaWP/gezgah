@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/app_icons.dart';
 import 'models.dart';
 
 /// Ana sayfa alan yapılandırması — `home_page_settings` tablosundaki
@@ -48,6 +49,15 @@ class HomeConfig {
 
   static IconData iconFor(int id) =>
       categoryIcons[id] ?? Icons.restaurant_outlined;
+
+  /// Bazı kategoriler için SVG ikonu (Font Awesome). Verilirse Material ikon
+  /// yerine bu kullanılır (bkz. AppIcons). Eşleşmezse null.
+  static String? svgFor(int id) => _categorySvg[id];
+
+  static const Map<int, String> _categorySvg = {
+    139: AppIcons.muze, // Müze
+    140: AppIcons.mesire, // Mesire
+  };
 
   /// İşletmeye özel harita ikonları — API'nin `custom_ikon` alanındaki anahtar
   /// (slug) app içindeki bu sete eşlenir. Doluysa haritada bu ikon gösterilir;

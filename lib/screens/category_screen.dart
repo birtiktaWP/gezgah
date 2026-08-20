@@ -7,6 +7,7 @@ import '../data/mock_data.dart';
 import '../data/models.dart';
 import '../navigation/main_nav.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
 import '../widgets/filter_sheet.dart';
 import '../widgets/place_cards.dart';
@@ -504,6 +505,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
             const SizedBox(width: 4),
             GlassButton(
               icon: Icons.location_on_outlined,
+              svg: AppIcons.pin,
               flat: true,
               onTap: () => Navigator.push(
                 context,
@@ -573,14 +575,16 @@ class _CategoryScreenState extends State<CategoryScreen> {
           Row(
             children: [
               GestureDetector(
-                  onTap: _openSortSheet, child: _actBtn(Icons.swap_vert)),
+                  onTap: _openSortSheet,
+                  child: _actBtn(Icons.swap_vert, svg: AppIcons.sort)),
               // Filtre yoksa (ör. type modu) filtre butonunu gizle.
               if (_filters.isNotEmpty) ...[
                 const SizedBox(width: 8),
                 GestureDetector(
                   onTap: _openFilterSheet,
                   child: _actBtn(Icons.filter_list,
-                      active: _selectedFilters.isNotEmpty),
+                      active: _selectedFilters.isNotEmpty,
+                      svg: AppIcons.filter),
                 ),
               ],
             ],
@@ -590,17 +594,21 @@ class _CategoryScreenState extends State<CategoryScreen> {
     );
   }
 
-  Widget _actBtn(IconData icon, {bool active = false}) {
+  Widget _actBtn(IconData icon, {bool active = false, String? svg}) {
     return Container(
       width: 38,
       height: 38,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
         color: active ? AppColors.primary : Colors.white,
         borderRadius: BorderRadius.circular(11),
         border: Border.all(color: active ? AppColors.primary : AppColors.line),
       ),
-      child: Icon(icon,
-          size: 18, color: active ? Colors.white : AppColors.primary),
+      child: svg != null
+          ? AppSvgIcon(svg,
+              size: 17, color: active ? Colors.white : AppColors.primary)
+          : Icon(icon,
+              size: 18, color: active ? Colors.white : AppColors.primary),
     );
   }
 }

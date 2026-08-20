@@ -355,8 +355,10 @@ class _MapScreenState extends State<MapScreen> {
             final icon = i == 0
                 ? Icons.explore_outlined
                 : HomeConfig.iconFor(_cats[i - 1].id);
+            final svg = i == 0 ? null : HomeConfig.svgFor(_cats[i - 1].id);
             return CategoryPill(
               icon: icon,
+              svg: svg,
               label: label,
               active: _activeCat == i,
               onTap: () {

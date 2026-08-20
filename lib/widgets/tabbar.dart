@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/app_theme.dart';
+import 'app_icons.dart';
 import 'common.dart';
 
 /// Yüzen alt navigasyon — ortada öne çıkan "Kedy" yuvarlak butonu.
@@ -41,7 +42,8 @@ class FloatingTabBar extends StatelessWidget {
             () => onTap(0),
             svg: _svgHome),
         TabItemData(Icons.grid_view_outlined, 'Kategori', activeIndex == 1,
-            () => onTap(1)),
+            () => onTap(1),
+            svg: AppIcons.grid),
         null, // Kedy yuvası (boş; daire üstte konumlanır)
         TabItemData(Icons.calendar_today_outlined, 'Etkinlikler',
             activeIndex == 3, () => onTap(3),

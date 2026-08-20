@@ -83,6 +83,7 @@ class KedyIcon extends StatelessWidget {
 /// Hero/flat header'lardaki cam efektli yuvarlak buton.
 class GlassButton extends StatelessWidget {
   final IconData icon;
+  final String? svg; // verilirse ikon yerine bu SVG çizilir
   final VoidCallback? onTap;
   final bool showDot;
   final bool flat; // beyaz zeminli (hero-flat) varyant
@@ -90,6 +91,7 @@ class GlassButton extends StatelessWidget {
   const GlassButton({
     super.key,
     required this.icon,
+    this.svg,
     this.onTap,
     this.showDot = false,
     this.flat = false,
@@ -112,8 +114,19 @@ class GlassButton extends StatelessWidget {
                 color: flat ? Colors.transparent : Colors.white.withValues(alpha: 0.22),
               ),
             ),
-            child: Icon(icon,
-                size: 19, color: flat ? AppColors.primary : Colors.white),
+            alignment: Alignment.center,
+            child: svg != null
+                ? SvgPicture.string(
+                    svg!,
+                    width: 19,
+                    height: 19,
+                    colorFilter: ColorFilter.mode(
+                        flat ? AppColors.primary : Colors.white,
+                        BlendMode.srcIn),
+                  )
+                : Icon(icon,
+                    size: 19,
+                    color: flat ? AppColors.primary : Colors.white),
           ),
           if (showDot)
             Positioned(
@@ -244,6 +257,9 @@ class CategoryPill extends StatelessWidget {
   /// Renk, [active] durumuna göre çağıran tarafından ayarlanmalıdır.
   final Widget? iconWidget;
 
+  /// Verilirse [icon] yerine bu SVG çizilir (renk [active]'e göre uygulanır).
+  final String? svg;
+
   const CategoryPill({
     super.key,
     required this.icon,
@@ -251,6 +267,7 @@ class CategoryPill extends StatelessWidget {
     this.active = false,
     this.onTap,
     this.iconWidget,
+    this.svg,
   });
 
   @override
@@ -278,10 +295,20 @@ class CategoryPill extends StatelessWidget {
                     ? Colors.white.withValues(alpha: 0.2)
                     : AppColors.primarySoft,
               ),
+              alignment: Alignment.center,
               child: iconWidget ??
-                  Icon(icon,
-                      size: 15,
-                      color: active ? Colors.white : AppColors.primary),
+                  (svg != null
+                      ? SvgPicture.string(
+                          svg!,
+                          width: 15,
+                          height: 15,
+                          colorFilter: ColorFilter.mode(
+                              active ? Colors.white : AppColors.primary,
+                              BlendMode.srcIn),
+                        )
+                      : Icon(icon,
+                          size: 15,
+                          color: active ? Colors.white : AppColors.primary)),
             ),
             const SizedBox(width: 7),
             Text(label,
