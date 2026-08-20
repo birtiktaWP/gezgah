@@ -70,15 +70,31 @@ workflows:
         script: |
           set -e
           keychain initialize
+          # --- Mevcut Distribution sertifikalarını sil ---------------------
+          # Apple, Distribution sertifika sayısını sınırlar. Her build yeni
+          # sertifika üretebildiği için limit ("Maximum number of certificates
+          # generated") dolabiliyor. Bu projede tek ekip kullandığından, yeni
+          # sertifika oluşturmadan ÖNCE var olan tüm Distribution sertifikalarını
+          # revoke ediyoruz. (Not: aynı hesabı paylaşan başka pipeline/kişi
+          # OLMAMALI — yoksa onların imzası bozulur.)
+          echo "Mevcut Distribution sertifikaları temizleniyor..."
+          for TYPE in IOS_DISTRIBUTION DISTRIBUTION; do
+            IDS=$(app-store-connect certificates list --type "$TYPE" --json 2>/dev/null | jq -r '.[].id' 2>/dev/null || true)
+            for id in $IDS; do
+              echo "  Siliniyor: $id ($TYPE)"
+              app-store-connect certificates delete "$id" --yes 2>/dev/null || true
+            done
+          done
           # Sertifika özel anahtarı: Codemagic'te CERTIFICATE_PRIVATE_KEY varsa onu
-          # kullan (her build aynı sertifikayı tekrar kullanır), yoksa üret.
+          # kullan, yoksa üret. (Sertifikalar silindiği için her iki durumda da
+          # aşağıda taze bir Distribution sertifikası oluşturulur.)
           CERT_KEY=/tmp/cert_key.pem
           if [ -n "$CERTIFICATE_PRIVATE_KEY" ]; then
             printf '%s' "$CERTIFICATE_PRIVATE_KEY" > "$CERT_KEY"
           else
             openssl genrsa -out "$CERT_KEY" 2048
           fi
-          # Distribution sertifikası + App Store profili yoksa oluştur, varsa getir.
+          # Distribution sertifikası + App Store profili oluştur/getir.
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
             --certificate-key=@file:$CERT_KEY \
