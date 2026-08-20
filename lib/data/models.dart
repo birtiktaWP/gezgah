@@ -774,6 +774,9 @@ class RotaYorum {
   final int begenmemeSayisi;
   final bool begendim;
   final bool begenmedim;
+  // İşletme yorumu (ROTA_YORUM_ISLETME.md): true ise mavi tik + en üstte.
+  final bool isletme;
+  final int postId; // işletme yorumunda mekan post id (mekan detayına gider)
   const RotaYorum({
     required this.id,
     this.yorum = '',
@@ -785,6 +788,8 @@ class RotaYorum {
     this.begenmemeSayisi = 0,
     this.begendim = false,
     this.begenmedim = false,
+    this.isletme = false,
+    this.postId = 0,
   });
 
   RotaYorum copyWith({
@@ -804,6 +809,8 @@ class RotaYorum {
         begenmemeSayisi: begenmemeSayisi ?? this.begenmemeSayisi,
         begendim: begendim ?? this.begendim,
         begenmedim: begenmedim ?? this.begenmedim,
+        isletme: isletme,
+        postId: postId,
       );
 
   factory RotaYorum.fromJson(Map<String, dynamic> j, {String host = ''}) {
@@ -821,6 +828,8 @@ class RotaYorum {
       begenmemeSayisi: (j['begenmeme_sayisi'] as num?)?.toInt() ?? 0,
       begendim: j['begendim'] == true,
       begenmedim: j['begenmedim'] == true,
+      isletme: j['isletme'] == true,
+      postId: (u is Map ? (u['post_id'] as num?)?.toInt() : null) ?? 0,
     );
   }
 }

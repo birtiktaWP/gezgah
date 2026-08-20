@@ -5023,20 +5023,41 @@ class _YorumSheetState extends State<_YorumSheet> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Avatar.
-        ClipRRect(
-          borderRadius: BorderRadius.circular(999),
-          child: SizedBox(
-            width: 38,
-            height: 38,
-            child: y.uye.avatar.isNotEmpty
-                ? NetImage(y.uye.avatar)
-                : Container(
-                    color: AppColors.primarySoft,
-                    alignment: Alignment.center,
-                    child: const AppSvgIcon(AppIcons.user,
-                        size: 18, color: AppColors.primary),
-                  ),
+        // Avatar. İşletme yorumunda dokununca mekan detayına gider.
+        GestureDetector(
+          onTap: (y.isletme && y.postId > 0)
+              ? () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => DetailScreen(
+                        place: Place(
+                          id: y.postId,
+                          name: y.uye.adSoyad,
+                          category: '',
+                          subtitle: '',
+                          rating: 0,
+                          distance: '',
+                          price: '',
+                          image: y.uye.avatar,
+                        ),
+                      ),
+                    ),
+                  )
+              : null,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(y.isletme ? 12 : 999),
+            child: SizedBox(
+              width: 38,
+              height: 38,
+              child: y.uye.avatar.isNotEmpty
+                  ? NetImage(y.uye.avatar)
+                  : Container(
+                      color: AppColors.primarySoft,
+                      alignment: Alignment.center,
+                      child: const AppSvgIcon(AppIcons.user,
+                          size: 18, color: AppColors.primary),
+                    ),
+            ),
           ),
         ),
         const SizedBox(width: 12),
@@ -5055,6 +5076,26 @@ class _YorumSheetState extends State<_YorumSheet> {
                           fontSize: 13.5, fontWeight: FontWeight.w700),
                     ),
                   ),
+                  // İşletme yorumu → mavi tik + "İşletme" rozeti.
+                  if (y.isletme) ...[
+                    const SizedBox(width: 4),
+                    const Icon(Icons.verified,
+                        size: 15, color: Color(0xFF3897F0)),
+                    const SizedBox(width: 5),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3897F0).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: const Text('İşletme',
+                          style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF3897F0))),
+                    ),
+                  ],
                   const SizedBox(width: 8),
                   Text(_yorumZaman(y.createdAt),
                       style: const TextStyle(

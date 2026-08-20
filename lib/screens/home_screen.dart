@@ -402,7 +402,7 @@ class _HomeScreenState extends State<HomeScreen> {
           if (i == 0) {
             return CategoryPill(
               icon: Icons.explore, // yedek; asıl ikon iconWidget ile çizilir
-              iconWidget: const ShipWheelIcon(size: 8),
+              iconWidget: const ShipWheelIcon(size: 15),
               label: 'Gezi Rotaları',
               onTap: () => openDiscoverRoutes(context),
             );
