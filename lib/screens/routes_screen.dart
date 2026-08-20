@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
@@ -804,6 +806,40 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+          // Başkasının rotasıysa sahip — başlığın ÜSTÜNDE, sola yaslı,
+          // profiline tıklanabilir sade satır.
+          if (!r.benim && r.sahip != null) ...[
+            GestureDetector(
+              onTap: () => openMemberProfile(
+                context,
+                uyeId: r.sahip!.uyeId,
+                isim: r.sahip!.isim,
+                soyisim: r.sahip!.soyisim,
+                avatar: r.sahip!.avatar,
+                takipEdiyorum: r.sahip!.takipEdiyorum,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _ownerAvatar(r.sahip!.avatar, 22),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      r.sahip!.adSoyad.isEmpty ? 'Üye' : r.sahip!.adSoyad,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.ink),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+          // Başlık + takip butonu (başkasının rotası) / Gizli rozeti.
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -813,8 +849,6 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                         fontSize: 19, fontWeight: FontWeight.w600)),
               ),
               const SizedBox(width: 10),
-              // Başkasının rotası → ismin en sağında takip butonu; kendi gizli
-              // rotanda → "Gizli" rozeti.
               if (!r.benim && r.sahip != null)
                 _followButtonCompact(r.sahip!)
               else if (!r.herkeseAcik)
@@ -848,56 +882,27 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                     fontSize: 13.5, height: 1.5, color: AppColors.muted)),
           ],
           const SizedBox(height: 12),
-          // İstatistikler — ikon ağırlıklı, sade (satıra sığmazsa alt satıra).
-          Wrap(
-            spacing: 16,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              _stat(Icons.place_outlined, '${r.duraklar.length} durak'),
-              if (r.fiyatLabel.isNotEmpty)
-                _stat(Icons.sell_outlined, r.fiyatLabel, primary: true),
-              // Görüntülenme herkese; gösterim (listeleme) yalnız sahibe.
-              _stat(Icons.visibility_outlined, '${r.goruntulenme} görüntülenme'),
-              if (r.benim)
-                _stat(Icons.bar_chart_outlined, '${r.gosterim} gösterim'),
-            ],
-          ),
-          // Başkasının rotasıysa sahip — profiline tıklanabilir sade satır.
-          if (!r.benim && r.sahip != null) ...[
-            const SizedBox(height: 12),
-            GestureDetector(
-              onTap: () => openMemberProfile(
-                context,
-                uyeId: r.sahip!.uyeId,
-                isim: r.sahip!.isim,
-                soyisim: r.sahip!.soyisim,
-                avatar: r.sahip!.avatar,
-                takipEdiyorum: r.sahip!.takipEdiyorum,
-              ),
-              child: Row(
-                children: [
-                  _ownerAvatar(r.sahip!.avatar, 22),
-                  const SizedBox(width: 8),
-                  const Text('Oluşturan',
-                      style:
-                          TextStyle(fontSize: 12.5, color: AppColors.muted)),
-                  const SizedBox(width: 5),
-                  Flexible(
-                    child: Text(
-                      r.sahip!.adSoyad.isEmpty ? 'Üye' : r.sahip!.adSoyad,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.ink),
-                    ),
-                  ),
-                ],
-              ),
+          // İstatistikler — ortalı; tutar (fiyat) en sonda.
+          SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 16,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _stat(Icons.place_outlined, '${r.duraklar.length} durak'),
+                // Görüntülenme herkese; gösterim (listeleme) yalnız sahibe.
+                _stat(Icons.visibility_outlined,
+                    '${r.goruntulenme} görüntülenme'),
+                if (r.benim)
+                  _stat(Icons.bar_chart_outlined, '${r.gosterim} gösterim'),
+                // Tutar en sonda.
+                if (r.fiyatLabel.isNotEmpty)
+                  _stat(Icons.sell_outlined, r.fiyatLabel, primary: true),
+              ],
             ),
-          ],
+          ),
           const SizedBox(height: 16),
           _actions(r),
               ],
@@ -925,81 +930,165 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     );
   }
 
-  /// Beğen + Yorum aksiyonları (SOSYAL §1, rota-yorumlar.md). İkon ağırlıklı,
-  /// sabit yükseklikli, minimal renk (sayı küçük rozette). Takip butonu başlık
-  /// satırının en sağına taşındı.
+  /// Instagram kartı tarzı aksiyon barı: beğeni · yorum · paylaşım (soldan),
+  /// harita (sağda). Yalnız ikon + rakam (etiket yok). rota-paylasim-gorseli.md.
   Widget _actions(GeziRota r) {
     return Row(
       children: [
-        Expanded(
-          child: _actionBtn(
-            icon: r.begendim ? Icons.favorite : Icons.favorite_border,
-            iconColor: r.begendim ? AppColors.heart : AppColors.primary,
-            label: 'Beğen',
-            count: r.begeniSayisi,
-            onTap: _toggleLike,
-          ),
+        _igAction(
+          icon: r.begendim ? Icons.favorite : Icons.favorite_border,
+          color: r.begendim ? AppColors.heart : AppColors.ink,
+          count: r.begeniSayisi,
+          onTap: _toggleLike,
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _actionBtn(
-            icon: Icons.mode_comment_outlined,
-            iconColor: AppColors.primary,
-            label: 'Yorum',
-            count: r.yorumSayisi,
-            onTap: () => _openComments(r),
-          ),
+        const SizedBox(width: 22),
+        _igAction(
+          icon: Icons.mode_comment_outlined,
+          count: r.yorumSayisi,
+          onTap: () => _openComments(r),
         ),
+        const SizedBox(width: 22),
+        _igAction(
+          icon: Icons.send_outlined,
+          onTap: () => _openShareSheet(r),
+        ),
+        const Spacer(),
+        // Haritada aç (uygulama içi harita) — koordinat varsa.
+        if (r.haritadaGosterilebilir)
+          _igAction(
+            icon: Icons.map_outlined,
+            onTap: () => openRouteMap(context, r),
+          ),
       ],
     );
   }
 
-  Widget _actionBtn({
+  Widget _igAction({
     required IconData icon,
-    required Color iconColor,
-    required String label,
-    required int count,
+    int? count,
+    Color? color,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        height: 48,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.line),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 20, color: iconColor),
-            const SizedBox(width: 8),
-            Text(label,
+      behavior: HitTestBehavior.opaque,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 25, color: color ?? AppColors.ink),
+          if (count != null && count > 0) ...[
+            const SizedBox(width: 6),
+            Text('$count',
                 style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: AppColors.ink)),
-            if (count > 0) ...[
-              const SizedBox(width: 7),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Paylaşım seçenekleri (alttan sheet): Instagram'da Paylaş / Harita Olarak
+  /// Paylaş. Tasarım rota ayar menüsüyle tutarlı.
+  Future<void> _openShareSheet(GeziRota r) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 10, bottom: 6),
+              child: Container(
+                width: 40,
+                height: 4,
                 decoration: BoxDecoration(
-                  color: AppColors.primarySoft,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text('$count',
-                    style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary)),
+                    color: AppColors.line,
+                    borderRadius: BorderRadius.circular(2)),
               ),
-            ],
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined,
+                  color: AppColors.primary),
+              title: const Text('Instagram\u2019da Paylaş',
+                  style: TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w500)),
+              onTap: () => Navigator.pop(ctx, 'ig'),
+            ),
+            const Divider(height: 1, thickness: 1, color: AppColors.line),
+            ListTile(
+              leading: const Icon(Icons.map_outlined, color: AppColors.primary),
+              title: const Text('Harita Olarak Paylaş',
+                  style: TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w500)),
+              onTap: () => Navigator.pop(ctx, 'map'),
+            ),
+            const Divider(height: 1, thickness: 1, color: AppColors.line),
+            const SizedBox(height: 8),
           ],
         ),
       ),
     );
+    if (action == null || !mounted) return;
+    if (action == 'ig') {
+      await _shareToInstagram(r);
+    } else if (action == 'map') {
+      await _shareRoute(r);
+    }
+  }
+
+  /// Rota için paylaşım görsel(ler)ini üretir, indirir ve native paylaşım
+  /// sayfasıyla (Instagram vb.) paylaşır.
+  Future<void> _shareToInstagram(GeziRota r) async {
+    // Hazırlanıyor göstergesi.
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      ),
+    );
+    try {
+      final urls =
+          await RotaRepository.instance.paylasimGorseli(r.id, format: 'story');
+      if (urls.isEmpty) {
+        if (mounted) Navigator.pop(context); // spinner
+        _snack('Paylaşım görseli oluşturulamadı.');
+        return;
+      }
+      final dio = Dio();
+      final files = <XFile>[];
+      final dir = Directory.systemTemp;
+      for (var i = 0; i < urls.length; i++) {
+        try {
+          final path = '${dir.path}/gezgah_rota_${r.id}_$i.jpg';
+          await dio.download(urls[i], path);
+          files.add(XFile(path));
+        } catch (_) {}
+      }
+      if (!mounted) return;
+      Navigator.pop(context); // spinner
+      if (files.isEmpty) {
+        _snack('Görseller indirilemedi.');
+        return;
+      }
+      final box = context.findRenderObject() as RenderBox?;
+      await Share.shareXFiles(
+        files,
+        text: 'Gezgah\u2019taki gezi rotama gözat! @gezgah.app',
+        sharePositionOrigin:
+            box != null ? box.localToGlobal(Offset.zero) & box.size : null,
+      );
+    } catch (_) {
+      if (mounted) Navigator.pop(context); // spinner
+      _snack('Paylaşım sırasında bir hata oluştu.');
+    }
   }
 
   /// Başlık satırı için kompakt takip pili (ismin en sağında).
@@ -1327,51 +1416,32 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     );
   }
 
-  /// Durak fotoğrafları — tek küçük görsel; birden fazlaysa sağ üstte tam
-  /// yuvarlak sayı rozeti (toplam adet). Dokununca tam ekran görüntüleyici
-  /// (tüm fotoğraflar) açılır.
+  /// Durak fotoğrafları — yemek rozeti gibi sade çip: gri zemin, görsel ikonu +
+  /// "N resim" (lacivert). Dokununca tüm fotoğrafları gösteren görüntüleyici açılır.
   Widget _fotoStrip(RotaDurak d) {
     final fotos = d.gorseller;
     if (fotos.isEmpty) return const SizedBox.shrink();
-    final count = fotos.length;
     return Align(
       alignment: Alignment.centerLeft,
       child: GestureDetector(
         onTap: () => _openFotoViewer(fotos, 0),
-        child: SizedBox(
-          width: 72,
-          height: 72,
-          child: Stack(
-            clipBehavior: Clip.none,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppColors.primarySoft,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: SizedBox(
-                  width: 68,
-                  height: 68,
-                  child: NetImage(fotos.first.url),
-                ),
-              ),
-              if (count > 1)
-                Positioned(
-                  top: -4,
-                  right: -4,
-                  child: Container(
-                    width: 24,
-                    height: 24,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
-                    ),
-                    child: Text('$count',
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700)),
-                  ),
-                ),
+              const Icon(Icons.image_outlined,
+                  size: 15, color: AppColors.primary),
+              const SizedBox(width: 6),
+              Text('${fotos.length} resim',
+                  style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary)),
             ],
           ),
         ),

@@ -2707,6 +2707,28 @@ class RotaRepository {
     return YorumTepki.fromData(data);
   }
 
+  /// `GET /uye/rotalar/{id}/paylasim` — Instagram paylaşım görsel(ler)i üretir
+  /// (rota-paylasim-gorseli.md). [format]: `story` (1080×1920) | `post`
+  /// (1080×1350). Sıralı görsel URL listesini döner (hata/boşta boş liste).
+  Future<List<String>> paylasimGorseli(int id, {String format = 'story'}) async {
+    if (id <= 0) return const [];
+    try {
+      final res = await _dio.get('/uye/rotalar/$id/paylasim',
+          queryParameters: {'format': format}, options: await _uyeAuth());
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return const [];
+      final data = body['data'];
+      final list = data is Map ? data['gorseller'] : null;
+      if (list is! List) return const [];
+      return list
+          .whereType<String>()
+          .where((u) => u.trim().isNotEmpty)
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
   /// `DELETE /uye/rotalar/{id}` — rota sil (Plus şartı yok).
   Future<void> sil(int id) async {
     await _send(() async =>
