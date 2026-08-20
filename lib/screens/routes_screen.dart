@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
@@ -882,28 +883,24 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                     fontSize: 13.5, height: 1.5, color: AppColors.muted)),
           ],
           const SizedBox(height: 12),
-          // İstatistikler — ortalı; tutar (fiyat) en sonda.
-          SizedBox(
-            width: double.infinity,
-            child: Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 16,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _stat(Icons.place_outlined, '${r.duraklar.length} durak'),
-                // Görüntülenme herkese; gösterim (listeleme) yalnız sahibe.
-                _stat(Icons.visibility_outlined,
-                    '${r.goruntulenme} görüntülenme'),
-                if (r.benim)
-                  _stat(Icons.bar_chart_outlined, '${r.gosterim} gösterim'),
-                // Tutar en sonda.
-                if (r.fiyatLabel.isNotEmpty)
-                  _stat(Icons.sell_outlined, r.fiyatLabel, primary: true),
-              ],
-            ),
+          // İstatistikler — sola yaslı; tutar (fiyat) en sonda.
+          Wrap(
+            spacing: 16,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _stat(Icons.place_outlined, '${r.duraklar.length} durak'),
+              // Görüntülenme herkese; gösterim (listeleme) yalnız sahibe.
+              _stat(Icons.visibility_outlined,
+                  '${r.goruntulenme} görüntülenme'),
+              if (r.benim)
+                _stat(Icons.bar_chart_outlined, '${r.gosterim} gösterim'),
+              // Tutar en sonda.
+              if (r.fiyatLabel.isNotEmpty)
+                _stat(Icons.sell_outlined, r.fiyatLabel, primary: true),
+            ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 22),
           _actions(r),
               ],
             ),
@@ -936,37 +933,46 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     return Row(
       children: [
         _igAction(
-          icon: r.begendim ? Icons.favorite : Icons.favorite_border,
-          color: r.begendim ? AppColors.heart : AppColors.ink,
+          // Beğenince dolu kırmızı kalp; değilse outline SVG.
+          icon: r.begendim
+              ? const Icon(Icons.favorite, size: 23, color: AppColors.heart)
+              : _igSvg(_svgLike),
           count: r.begeniSayisi,
           onTap: _toggleLike,
         ),
         const SizedBox(width: 22),
         _igAction(
-          icon: Icons.mode_comment_outlined,
+          icon: _igSvg(_svgComment),
           count: r.yorumSayisi,
           onTap: () => _openComments(r),
         ),
         const SizedBox(width: 22),
         _igAction(
-          icon: Icons.send_outlined,
+          icon: _igSvg(_svgShare),
           onTap: () => _openShareSheet(r),
         ),
         const Spacer(),
         // Haritada aç (uygulama içi harita) — koordinat varsa.
         if (r.haritadaGosterilebilir)
           _igAction(
-            icon: Icons.map_outlined,
+            icon: _igSvg(_svgMap),
             onTap: () => openRouteMap(context, r),
           ),
       ],
     );
   }
 
+  Widget _igSvg(String svg, {Color color = AppColors.ink, double size = 23}) =>
+      SvgPicture.string(
+        svg,
+        width: size,
+        height: size,
+        colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      );
+
   Widget _igAction({
-    required IconData icon,
+    required Widget icon,
     int? count,
-    Color? color,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
@@ -975,7 +981,7 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 25, color: color ?? AppColors.ink),
+          icon,
           if (count != null && count > 0) ...[
             const SizedBox(width: 6),
             Text('$count',
@@ -988,6 +994,16 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
       ),
     );
   }
+
+  // Instagram tarzı aksiyon ikonları (Font Awesome path'leri).
+  static const String _svgLike =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M378.9 80c-27.3 0-53 13.1-69 35.2l-34.4 47.6c-4.5 6.2-11.7 9.9-19.4 9.9s-14.9-3.7-19.4-9.9l-34.4-47.6c-16-22.1-41.7-35.2-69-35.2-47 0-85.1 38.1-85.1 85.1 0 49.9 32 98.4 68.1 142.3 41.1 50 91.4 94 125.9 120.3 3.2 2.4 7.9 4.2 14 4.2s10.8-1.8 14-4.2c34.5-26.3 84.8-70.4 125.9-120.3 36.2-43.9 68.1-92.4 68.1-142.3 0-47-38.1-85.1-85.1-85.1zM271 87.1c25-34.6 65.2-55.1 107.9-55.1 73.5 0 133.1 59.6 133.1 133.1 0 68.6-42.9 128.9-79.1 172.8-44.1 53.6-97.3 100.1-133.8 127.9-12.3 9.4-27.5 14.1-43.1 14.1s-30.8-4.7-43.1-14.1C176.4 438 123.2 391.5 79.1 338 42.9 294.1 0 233.7 0 165.1 0 91.6 59.6 32 133.1 32 175.8 32 216 52.5 241 87.1l15 20.7 15-20.7z"/></svg>';
+  static const String _svgComment =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M51.9 384.9C19.3 344.6 0 294.4 0 240 0 107.5 114.6 0 256 0S512 107.5 512 240 397.4 480 256 480c-36.5 0-71.2-7.2-102.6-20L37 509.9c-3.7 1.6-7.5 2.1-11.5 2.1-14.1 0-25.5-11.4-25.5-25.5 0-4.3 1.1-8.5 3.1-12.2l48.8-89.4zm37.3-30.2c12.2 15.1 14.1 36.1 4.8 53.2l-18 33.1 58.5-25.1c11.8-5.1 25.2-5.2 37.1-.3 25.7 10.5 54.2 16.4 84.3 16.4 117.8 0 208-88.8 208-192S373.8 48 256 48 48 136.8 48 240c0 42.8 15.1 82.4 41.2 114.7z"/></svg>';
+  static const String _svgShare =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M296 160c13.3 0 24-10.7 24-24l0-88 160 160-160 160 0-88c0-13.3-10.7-24-24-24l-104 0c-70.7 0-128 57.3-128 128 0 8.3 .7 16.1 2 23.2-18.2-23.4-34-57.1-34-103.2 0-79.5 64.5-144 144-144l120 0zm-8 144l0 64c0 12.9 7.8 24.6 19.8 29.6s25.7 2.2 34.9-6.9l160-160c12.5-12.5 12.5-32.8 0-45.3l-160-160c-9.2-9.2-22.9-11.9-34.9-6.9S288 35.1 288 48l0 80-112 0c-97.2 0-176 78.8-176 176 0 113.3 81.5 163.9 100.2 174.1 2.5 1.4 5.3 1.9 8.1 1.9 10.9 0 19.7-8.9 19.7-19.7 0-7.5-4.3-14.4-9.8-19.5-9.4-8.8-22.2-26.4-22.2-56.7 0-53 43-96 96-96l96 0 0 16z"/></svg>';
+  static const String _svgMap =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M512 26.7c0-5.6-2.9-10.7-7.6-13.6s-10.6-3.2-15.6-.7L352.9 80.7 178.6 22.6c-11.5-3.8-24-3.2-35 1.8L9.4 85.3C3.7 87.9 0 93.6 0 99.9L0 485.3C0 490.9 2.9 496 7.6 499s10.6 3.2 15.6 .7l135.9-68.4 174.3 58.1c11.5 3.8 24 3.2 35-1.8l134.2-60.9c5.7-2.6 9.4-8.3 9.4-14.6l0-385.4zM368 109l112-56.4 0 349.2-112 50.8 0-343.6zm-32-.2l0 347.7-160-53.3 0-347.7 160 53.3zM144 403L32 459.4 32 110.2 144 59.4 144 403z"/></svg>';
 
   /// Paylaşım seçenekleri (alttan sheet): Instagram'da Paylaş / Harita Olarak
   /// Paylaş. Tasarım rota ayar menüsüyle tutarlı.
