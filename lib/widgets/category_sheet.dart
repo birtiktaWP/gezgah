@@ -42,10 +42,22 @@ class _CategorySheetState extends State<_CategorySheet> {
     _load();
   }
 
+  /// Otopark/İspark ile ilgili kategorileri gizle (id 62 = Otopark; ad/slug'da
+  /// "otopark" veya "ispark" geçenler).
+  bool _gizli(Category c) {
+    if (c.id == 62) return true;
+    // Türkçe "İ" küçültme farkını atlamak için 'spark' alt dizesi ispark/
+    // İspark/İSPARK varyantlarını yakalar.
+    final s = '${c.name} ${c.slug}'.toLowerCase();
+    return s.contains('otopark') || s.contains('spark');
+  }
+
   Future<void> _load() async {
     try {
       // Tüm kategoriler + mekan sayıları (/kategoriler/agac).
-      final all = await HomeRepository.instance.kategorilerAgac();
+      final all = (await HomeRepository.instance.kategorilerAgac())
+          .where((c) => !_gizli(c))
+          .toList();
       // Mekanı olanları öne al ve mekan sayısına göre azalan sırala.
       final withCounts = all.where((c) => c.mekanSayisi > 0).toList()
         ..sort((a, b) => b.mekanSayisi.compareTo(a.mekanSayisi));
