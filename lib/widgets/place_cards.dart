@@ -191,19 +191,25 @@ class GridTile2 extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Flexible(
-                        child: Text(place.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600)),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Text(place.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600)),
+                            ),
+                            if (place.verified) ...[
+                              const SizedBox(width: 4),
+                              const VerifiedTick(size: 12),
+                            ],
+                          ],
+                        ),
                       ),
-                      if (place.verified) ...[
-                        const SizedBox(width: 4),
-                        const VerifiedTick(size: 12),
-                      ],
-                      const Spacer(),
+                      const SizedBox(width: 6),
                       const Icon(Icons.star_rounded,
                           size: 12, color: AppColors.star),
                       const SizedBox(width: 3),
@@ -255,8 +261,15 @@ class ListTileCard extends StatelessWidget {
   final VoidCallback? onTap;
   final Object? heroTag;
 
+  /// Görsel alanını tamamen gizler (ör. otopark listesi — görsel gereksiz).
+  final bool hideImage;
+
   const ListTileCard(
-      {super.key, required this.place, this.onTap, this.heroTag});
+      {super.key,
+      required this.place,
+      this.onTap,
+      this.heroTag,
+      this.hideImage = false});
 
   @override
   Widget build(BuildContext context) {
@@ -264,7 +277,7 @@ class ListTileCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 108,
+        height: hideImage ? 86 : 108,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(18),
@@ -273,43 +286,49 @@ class ListTileCard extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: Row(
           children: [
-            SizedBox(
-              width: 108,
-              height: 108,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  heroImage(heroTag, place.thumb(ThumbSize.square)),
-                  Positioned(
-                    left: 8,
-                    top: 8,
-                    child: OpenDot(open: place.state != OpenState.closing),
-                  ),
-                ],
+            if (!hideImage)
+              SizedBox(
+                width: 108,
+                height: 108,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    heroImage(heroTag, place.thumb(ThumbSize.square)),
+                    Positioned(
+                      left: 8,
+                      top: 8,
+                      child: OpenDot(open: place.state != OpenState.closing),
+                    ),
+                  ],
+                ),
               ),
-            ),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+                padding: EdgeInsets.fromLTRB(hideImage ? 16 : 12, 0, 12, 0),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        Flexible(
-                          child: Text(place.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600)),
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: Text(place.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600)),
+                              ),
+                              if (place.verified) ...[
+                                const SizedBox(width: 4),
+                                const VerifiedTick(size: 13),
+                              ],
+                            ],
+                          ),
                         ),
-                        if (place.verified) ...[
-                          const SizedBox(width: 4),
-                          const VerifiedTick(size: 13),
-                        ],
-                        const Spacer(),
                         FavHeart(postId: place.id, circle: false, size: 20),
                       ],
                     ),

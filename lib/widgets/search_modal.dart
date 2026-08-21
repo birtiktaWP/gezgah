@@ -10,7 +10,9 @@ import '../data/user_service.dart';
 import 'filter_sheet.dart';
 import '../screens/category_screen.dart';
 import '../theme/app_theme.dart';
+import 'app_icons.dart';
 import 'common.dart';
+import 'kedy_chat.dart';
 import 'place_cards.dart';
 
 /// Gelişmiş arama — tam ekran açılan modal.
@@ -674,8 +676,63 @@ class _SearchModalState extends State<_SearchModal>
     return Column(
       children: [
         _placeToolbar(),
+        _filterChips(_placeFilters, (id) {
+          setState(() => _placeFilters.remove(id));
+          final term = _query.trim();
+          if (term.length >= 2) _runMekan(term);
+        }),
         Expanded(child: _placesContent()),
       ],
+    );
+  }
+
+  /// Seçili filtreleri ikonsuz badge olarak gösterir; her badge'deki × ile o
+  /// filtre kaldırılır (kategori listelemesindeki davranışla aynı).
+  Widget _filterChips(Set<int> selected, void Function(int id) onRemove) {
+    if (selected.isEmpty || _allFilters.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final byId = {for (final f in _allFilters) f.id: f};
+    final chips = [
+      for (final id in selected)
+        if (byId[id] != null) byId[id]!,
+    ];
+    if (chips.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final f in chips)
+              GestureDetector(
+                onTap: () => onRemove(f.id),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(12, 7, 9, 7),
+                  decoration: BoxDecoration(
+                    color: AppColors.primarySoft,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(f.name,
+                          style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary)),
+                      const SizedBox(width: 6),
+                      const AppSvgIcon(AppIcons.xmark,
+                          size: 10, color: AppColors.primary),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -719,6 +776,11 @@ class _SearchModalState extends State<_SearchModal>
     return Column(
       children: [
         _foodToolbar(),
+        _filterChips(_foodFilters, (id) {
+          setState(() => _foodFilters.remove(id));
+          final term = _query.trim();
+          if (term.length >= 2) _runFood(term);
+        }),
         Expanded(child: _foodsContent()),
       ],
     );
@@ -1160,7 +1222,7 @@ class _SearchModalState extends State<_SearchModal>
       itemBuilder: (_, i) {
         final tip = _kedyTips[i];
         return GestureDetector(
-          onTap: () => _applyTerm(tip.$2),
+          onTap: () => showKedyChat(context, initialMessage: tip.$2),
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(

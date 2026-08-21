@@ -410,6 +410,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                         const SizedBox(height: 18),
                       ],
                       _listHead(),
+                      if (_hasActiveFilter) _selectedChips(),
                       if (_visiblePinned != null)
                         Padding(
                           padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
@@ -438,6 +439,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                   child: ListTileCard(
                     place: p,
                     heroTag: tag,
+                    hideImage: widget.type == 'otopark',
                     onTap: () => _openDetail(p, heroTag: tag),
                   ),
                 );
@@ -605,6 +607,63 @@ class _CategoryScreenState extends State<CategoryScreen> {
               ],
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Seçili filtre/özellikleri liste başlığının altında ikonsuz badge olarak
+  /// gösterir; her badge'deki × ile o filtre/özellik kaldırılır.
+  Widget _selectedChips() {
+    // Seçili id'leri (filtre + özellik) ad + kaynak kümesiyle eşle.
+    final chips = <({int id, String name, bool ozellik})>[];
+    for (final f in _filters) {
+      if (_selectedFilters.contains(f.id)) {
+        chips.add((id: f.id, name: f.name, ozellik: false));
+      }
+    }
+    for (final f in _ozellikler) {
+      if (_selectedOzellikler.contains(f.id)) {
+        chips.add((id: f.id, name: f.name, ozellik: true));
+      }
+    }
+    if (chips.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final c in chips)
+            GestureDetector(
+              onTap: () => setState(() {
+                if (c.ozellik) {
+                  _selectedOzellikler.remove(c.id);
+                } else {
+                  _selectedFilters.remove(c.id);
+                }
+              }),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(12, 7, 9, 7),
+                decoration: BoxDecoration(
+                  color: AppColors.primarySoft,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(c.name,
+                        style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary)),
+                    const SizedBox(width: 6),
+                    const AppSvgIcon(AppIcons.xmark,
+                        size: 10, color: AppColors.primary),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );

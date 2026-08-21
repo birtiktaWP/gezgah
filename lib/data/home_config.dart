@@ -18,7 +18,6 @@ class HomeConfig {
   /// "Tümü" (id 0) kaldırıldı; alan doğrudan kategori kısayolları ile başlar.
   static const List<HomeShortcut> tumu = [
     HomeShortcut(62, 'Otopark', type: 'otopark'),
-    HomeShortcut(139, 'Müze', type: 'muze'),
     HomeShortcut(140, 'Mesire', type: 'mesire'),
     HomeShortcut(0, 'Plaj', type: 'plaj'),
   ];

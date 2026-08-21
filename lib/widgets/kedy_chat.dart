@@ -9,15 +9,19 @@ import 'common.dart';
 
 /// Kedy yapay zeka asistanı — alttan açılan tam yükseklikli sohbet paneli
 /// (app-kedy.md). [postId] verilirse "bu işletme" bağlamı olarak gönderilir.
+/// [initialMessage] verilirse (ör. arama sayfası Kedy tavsiyeleri) panel açılıp
+/// üye Plus ise bu mesaj otomatik olarak Kedy'ye gönderilir.
 /// Tasarım: tasarim/index.html içindeki koyu (siyah) temalı chatbot paneli.
-Future<void> showKedyChat(BuildContext context, {int? postId}) {
+Future<void> showKedyChat(BuildContext context,
+    {int? postId, String? initialMessage}) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     useRootNavigator: true,
     backgroundColor: Colors.transparent,
     barrierColor: Colors.black.withValues(alpha: 0.45),
-    builder: (_) => _KedyChatSheet(postId: postId),
+    builder: (_) =>
+        _KedyChatSheet(postId: postId, initialMessage: initialMessage),
   );
 }
 
@@ -45,7 +49,8 @@ class _K {
 
 class _KedyChatSheet extends StatefulWidget {
   final int? postId;
-  const _KedyChatSheet({this.postId});
+  final String? initialMessage;
+  const _KedyChatSheet({this.postId, this.initialMessage});
 
   @override
   State<_KedyChatSheet> createState() => _KedyChatSheetState();
@@ -64,12 +69,30 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
 
   bool _sending = false; // Kedy yanıtı bekleniyor (yazıyor…)
   bool _loadingHistory = false;
+  String? _pending; // açılışta otomatik gönderilecek mesaj (Kedy tavsiyesi)
 
   @override
   void initState() {
     super.initState();
+    _pending = widget.initialMessage?.trim();
     // Geçmiş yalnız aktif Plus üyesi için var (UYELIK_PLUS.md §7).
-    if (AuthService.instance.user.value?.isPlus ?? false) _loadHistory();
+    if (AuthService.instance.user.value?.isPlus ?? false) _init();
+  }
+
+  /// Geçmişi yükle, ardından (varsa) bekleyen tavsiye mesajını gönder.
+  Future<void> _init() async {
+    await _loadHistory();
+    _maybeSendPending();
+  }
+
+  /// Açılışta iletilen tavsiye mesajını (yalnız Plus üyede) bir kez gönderir.
+  void _maybeSendPending() {
+    if (!(AuthService.instance.user.value?.isPlus ?? false)) return;
+    final p = _pending;
+    if (p != null && p.isNotEmpty && !_sending) {
+      _pending = null;
+      _send(p);
+    }
   }
 
   /// Giriş yapmış Plus üyesinin sunucudaki Kedy geçmişini yükler (app-kedy.md).
@@ -259,7 +282,7 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
   Future<void> _openLogin() async {
     final ok = await openLogin(context);
     if (ok == true && mounted && AuthService.instance.isLoggedIn) {
-      _loadHistory();
+      _init();
     }
   }
 
@@ -319,7 +342,7 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
   Future<void> _openPlus() async {
     final ok = await openPlus(context);
     if (ok == true && mounted && (AuthService.instance.user.value?.isPlus ?? false)) {
-      _loadHistory();
+      _init();
     }
   }
 
