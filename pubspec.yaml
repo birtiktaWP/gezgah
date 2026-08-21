@@ -1,7 +1,7 @@
 name: gezgah
 description: "Gezgah - yakınındaki en iyi yerleri keşfet."
 publish_to: 'none'
-version: 1.0.4+32
+version: 1.0.4+33
 
 environment:
   sdk: ^3.11.4
@@ -66,12 +66,11 @@ flutter:
     - assets/kedy.svg
 
   fonts:
-    - family: gez_gah
+    # UberMove ("gezgah-pro") — yalnız Medium (500) ve Bold (700).
+    # 400/500 istekleri Medium, 600/700 istekleri Bold yüzüne düşer.
+    - family: gezgah_pro
       fonts:
-        - asset: assets/fonts/gezgah_latin.ttf
-    - family: gez_gah_ext
-      fonts:
-        - asset: assets/fonts/gezgah_ext.ttf
-    - family: gez_gah_viet
-      fonts:
-        - asset: assets/fonts/gezgah_viet.ttf
+        - asset: assets/fonts/new-font/UberMove-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/new-font/UberMove-Bold.ttf
+          weight: 700

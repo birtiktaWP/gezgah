@@ -11,6 +11,7 @@ import '../navigation/main_nav.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
+import '../widgets/onayli_modal.dart';
 import '../widgets/confetti.dart';
 import '../widgets/kedy_chat.dart';
 import '../widgets/reservation_sheet.dart';
@@ -466,12 +467,28 @@ class _DetailScreenState extends State<DetailScreen> {
               : _badge(Icons.storefront_outlined, _typeLabel);
         }(),
         const SizedBox(height: 12),
-        Text(_name,
-            style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.4,
-                color: AppColors.primary)),
+        // İsim + (onaylıysa) mavi tik → dokununca "Onaylı İşletme" modalı.
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Flexible(
+              child: Text(_name,
+                  style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.4,
+                      color: AppColors.primary)),
+            ),
+            const SizedBox(width: 8),
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: GestureDetector(
+                onTap: () => showOnayliIsletmeModal(context),
+                child: const Icon(Icons.verified, size: 22, color: kOnayliMavi),
+              ),
+            ),
+          ],
+        ),
         if (_location.isNotEmpty) ...[
           const SizedBox(height: 6),
           Row(
@@ -492,8 +509,6 @@ class _DetailScreenState extends State<DetailScreen> {
             ],
           ),
         ],
-        const SizedBox(height: 16),
-        _verifiedBanner(),
         const SizedBox(height: 18),
         if (_loading)
           const Padding(
@@ -534,7 +549,7 @@ class _DetailScreenState extends State<DetailScreen> {
       ..._infoRows(d),
       const SizedBox(height: 16),
       _reviewButton(),
-      if (d.filtreler.isNotEmpty) ...[
+      if (d.filtreler.isNotEmpty || d.ozellikler.isNotEmpty) ...[
         _divider(),
         _sectionH('Olanaklar'),
         _olanaklar(d),
@@ -657,53 +672,6 @@ class _DetailScreenState extends State<DetailScreen> {
     );
   }
 
-  /// "Gezgah Onaylı Mekan" rozet bannerı (koyu mor, beyaz metin + onay rozeti).
-  Widget _verifiedBanner() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.primary, AppColors.primary2],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.16),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.verified_outlined,
-                size: 22, color: Colors.white),
-          ),
-          const SizedBox(width: 13),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Gezgah Onaylı Mekan',
-                    style: TextStyle(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white)),
-                const SizedBox(height: 3),
-                Text('Kalite ve hizmet ekibimizce doğrulandı',
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white.withValues(alpha: 0.85))),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// Başlık üstündeki kategori rozetleri (`kategoriler`). Birden fazlaysa hepsi
   /// gösterilir; kategori ikonu id'ye göre (HomeConfig) belirlenir.
   Widget _categoryBadges(List<Category> cats) {
@@ -753,8 +721,8 @@ class _DetailScreenState extends State<DetailScreen> {
           () {}));
     }
     final hasActions = actions.isNotEmpty;
-    final hasOzellik = d.ozellikler.isNotEmpty;
-    if (!hasActions && !hasOzellik) return const SizedBox.shrink();
+    // Özellikler (ozellikler) artık "Olanaklar" bölümünde gösteriliyor.
+    if (!hasActions) return const SizedBox.shrink();
 
     final row = <Widget>[];
     for (var i = 0; i < actions.length; i++) {
@@ -771,31 +739,7 @@ class _DetailScreenState extends State<DetailScreen> {
         border: Border.all(color: AppColors.line),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          if (hasActions) IntrinsicHeight(child: Row(children: row)),
-          if (hasActions && hasOzellik)
-            const Divider(height: 1, color: AppColors.line),
-          if (hasOzellik)
-            Container(
-              width: double.infinity,
-              color: AppColors.primarySoft, // rgba(18,12,99,0.07)
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              // Tek satır, yatay kaydırmalı (görünmez scrollbar) özellik şeridi.
-              child: SizedBox(
-                height: 74,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemCount: d.ozellikler.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (_, i) => _feat(
-                      _ozellikIcon(d.ozellikler[i]), d.ozellikler[i].name),
-                ),
-              ),
-            ),
-        ],
-      ),
+      child: IntrinsicHeight(child: Row(children: row)),
     );
   }
 
@@ -810,25 +754,6 @@ class _DetailScreenState extends State<DetailScreen> {
 
   static const String _qrSvg =
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><line x1="14" y1="14" x2="14" y2="17"></line><line x1="17" y1="14" x2="17" y2="14.01"></line><line x1="21" y1="14" x2="21" y2="17"></line><line x1="14" y1="21" x2="17" y2="21"></line><line x1="21" y1="20" x2="21" y2="21"></line></svg>';
-
-  /// Kart içi tekil özellik öğesi (ikon + etiket).
-  Widget _feat(IconData icon, String label) {
-    return SizedBox(
-      width: 74,
-      child: Column(
-        children: [
-          Icon(icon, size: 25, color: AppColors.primary),
-          const SizedBox(height: 6),
-          Text(label,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                  fontSize: 13, height: 1.2, color: AppColors.primary)),
-        ],
-      ),
-    );
-  }
 
   /// Mekana ait aktif etkinlikler (canlı: `/mekanlar/{id}` → `etkinlikler`).
   Widget _eventsRail(List<Etkinlik> events) {
@@ -1274,10 +1199,15 @@ class _DetailScreenState extends State<DetailScreen> {
     );
   }
 
-  /// Alttan açılan değerlendirme modalı (yıldız + yorum). Gönderilirse fake
-  /// başarı modalı gösterilir.
+  /// Alttan açılan değerlendirme modalı (yıldız + yorum) →
+  /// `POST /mekanlar/{id}/degerlendirme` (MEKAN_DEGERLENDIRME.md).
   Future<void> _openReviewSheet() async {
-    final ok = await showModalBottomSheet<bool>(
+    // Giriş gerekli.
+    if (!AuthService.instance.isLoggedIn) {
+      final ok = await openLogin(context);
+      if (ok != true || !mounted || !AuthService.instance.isLoggedIn) return;
+    }
+    final res = await showModalBottomSheet<({int puan, String yorum})>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
@@ -1286,7 +1216,22 @@ class _DetailScreenState extends State<DetailScreen> {
       ),
       builder: (_) => _ReviewSheet(placeName: _name),
     );
-    if (ok == true && mounted) _showReviewSuccess();
+    if (res == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await HomeRepository.instance.degerlendirmeGonder(
+        widget.place.id,
+        puan: res.puan,
+        yorum: res.yorum,
+      );
+      if (!mounted) return;
+      _showReviewSuccess();
+    } on AuthException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Değerlendirme gönderilemedi.')));
+    }
   }
 
   /// Değerlendirme gönderildiğinde gösterilen (fake) başarı modalı.
@@ -1455,11 +1400,15 @@ class _DetailScreenState extends State<DetailScreen> {
   /// filtreleri döndürdüğü için tümü onaylı gösterilir.
   Widget _olanaklar(PlaceDetail d) {
     return Column(
-      children: [for (final f in d.filtreler) _olanakRow(f)],
+      children: [
+        // Önce mekan özellikleri (Teras, Bahçe, Manzara vb.), sonra filtreler.
+        for (final o in d.ozellikler) _olanakRow(_ozellikIcon(o), o.name),
+        for (final f in d.filtreler) _olanakRow(_filterIcon(f), f.name),
+      ],
     );
   }
 
-  Widget _olanakRow(Filter f) {
+  Widget _olanakRow(IconData icon, String name) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 13),
       decoration: const BoxDecoration(
@@ -1470,14 +1419,15 @@ class _DetailScreenState extends State<DetailScreen> {
           Container(
             width: 40,
             height: 40,
+            alignment: Alignment.center,
             decoration: BoxDecoration(
                 color: AppColors.primarySoft,
                 borderRadius: BorderRadius.circular(11)),
-            child: Icon(_filterIcon(f), size: 20, color: AppColors.primary),
+            child: Icon(icon, size: 20, color: AppColors.primary),
           ),
           const SizedBox(width: 14),
           Expanded(
-            child: Text(f.name,
+            child: Text(name,
                 style: const TextStyle(
                     fontSize: 14.5,
                     fontWeight: FontWeight.w600,
@@ -1832,7 +1782,7 @@ class _GalleryGridScreen extends StatelessWidget {
 }
 
 /// Alttan açılan değerlendirme modalı: yıldız puanı + yorum alanı + Gönder.
-/// Gönderilince `Navigator.pop(context, true)` ile kapanır (fake akış).
+/// Gönderilince `(puan, yorum)` ile kapanır; çağıran API'ye yollar.
 class _ReviewSheet extends StatefulWidget {
   final String placeName;
   const _ReviewSheet({required this.placeName});
@@ -1928,7 +1878,10 @@ class _ReviewSheetState extends State<_ReviewSheet> {
               ),
               const SizedBox(height: 18),
               GestureDetector(
-                onTap: canSend ? () => Navigator.pop(context, true) : null,
+                onTap: canSend
+                    ? () => Navigator.pop(context,
+                        (puan: _rating, yorum: _comment.text.trim()))
+                    : null,
                 child: Opacity(
                   opacity: canSend ? 1 : 0.5,
                   child: Container(

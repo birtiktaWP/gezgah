@@ -1211,6 +1211,49 @@ class HomeRepository {
     }
   }
 
+  /// `POST /mekanlar/{id}/degerlendirme` — mekana 1–5 puan + opsiyonel yorum
+  /// (MEKAN_DEGERLENDIRME.md). Üyenin tek değerlendirmesi olur (upsert). Başarıda
+  /// güncel özet (ortalama + sayı) döner. Giriş yoksa/hatada [AuthException].
+  Future<({double ortalama, int sayi})> degerlendirmeGonder(
+    int postId, {
+    required int puan,
+    String? yorum,
+  }) async {
+    final token = await Api.instance.uyeToken;
+    if (token == null || token.isEmpty) {
+      throw AuthException('Değerlendirme için giriş yapmalısın.');
+    }
+    try {
+      final res = await _dio.post(
+        '/mekanlar/$postId/degerlendirme',
+        data: {
+          'puan': puan,
+          if (yorum != null && yorum.trim().isNotEmpty) 'yorum': yorum.trim(),
+        },
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+      final body = res.data;
+      if (body is! Map || body['success'] != true) {
+        String? msg;
+        final err = body is Map ? body['error'] : null;
+        if (err is Map && err['message'] is String) {
+          msg = err['message'] as String;
+        }
+        throw AuthException(msg ?? 'Değerlendirme gönderilemedi.');
+      }
+      final data = body['data'];
+      final ozet = data is Map ? data['ozet'] : null;
+      return (
+        ortalama: (ozet is Map ? (ozet['ortalama'] as num?)?.toDouble() : null) ?? 0,
+        sayi: (ozet is Map ? (ozet['sayi'] as num?)?.toInt() : null) ?? 0,
+      );
+    } on AuthException {
+      rethrow;
+    } on DioException {
+      throw AuthException('Sunucuya ulaşılamadı. Lütfen tekrar dene.');
+    }
+  }
+
   /// Sponsorlu restoranlar — id'lere göre paralel detay çekimi.
   Future<List<ApiPlace>> sponsorluRestoranlar(List<int> ids) async {
     final results = await Future.wait(ids.map(mekan));

@@ -27,14 +27,13 @@ class AppRadius {
 
 class AppTheme {
   static ThemeData get light {
-    const family = 'gez_gah';
-    const fallback = ['gez_gah_ext', 'gez_gah_viet'];
+    // UberMove ailesi (README: assets/fonts/new-font). Tüm uygulama bunu kullanır.
+    const family = 'gezgah_pro';
 
     final base = ThemeData(
       useMaterial3: true,
       scaffoldBackgroundColor: AppColors.pageBg,
       fontFamily: family,
-      fontFamilyFallback: fallback,
       colorScheme: ColorScheme.fromSeed(
         seedColor: AppColors.primary,
         primary: AppColors.primary,

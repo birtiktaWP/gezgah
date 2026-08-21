@@ -16,6 +16,7 @@ import '../data/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
+import '../widgets/onayli_modal.dart';
 import 'detail_screen.dart';
 import 'login_screen.dart';
 import 'member_profile_screen.dart';
@@ -5076,24 +5077,13 @@ class _YorumSheetState extends State<_YorumSheet> {
                           fontSize: 13.5, fontWeight: FontWeight.w700),
                     ),
                   ),
-                  // İşletme yorumu → mavi tik + "İşletme" rozeti.
+                  // İşletme yorumu → mavi tik (dokununca Onaylı İşletme modalı).
                   if (y.isletme) ...[
                     const SizedBox(width: 4),
-                    const Icon(Icons.verified,
-                        size: 15, color: Color(0xFF3897F0)),
-                    const SizedBox(width: 5),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF3897F0).withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: const Text('İşletme',
-                          style: TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF3897F0))),
+                    GestureDetector(
+                      onTap: () => showOnayliIsletmeModal(context),
+                      child: const Icon(Icons.verified,
+                          size: 15, color: kOnayliMavi),
                     ),
                   ],
                   const SizedBox(width: 8),

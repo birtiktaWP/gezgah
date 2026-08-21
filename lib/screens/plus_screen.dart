@@ -9,12 +9,13 @@ import '../data/api.dart';
 import '../data/auth_service.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
+import '../widgets/legal_sheet.dart';
 import 'login_screen.dart';
 
 /// Geliştirme sırasında IAP akışını ekranda izlemek için debug konsolunu açar.
 /// Yayına çıkarken `false` yap (TestFlight/Release'te de görünür, kDebugMode'a
 /// bağlı değildir — çünkü TestFlight release moddadır).
-const bool kIapDebug = true;
+const bool kIapDebug = false;
 
 /// Gezgah Plus satın alma (paywall) sayfasını **alttan açılan sheet** olarak
 /// gösterir. Kullanıcı Plus üyesi olursa (satın alma / geri yükleme başarılı)
@@ -747,13 +748,40 @@ class _PlusScreenState extends State<PlusScreen> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Abonelik yıllık yenilenir. İstediğin zaman mağaza '
-                  'hesabından iptal edebilirsin.',
+                  'Abonelik yıllık yenilenir ve dönem sonunda otomatik olarak '
+                  'yenilenir. İstediğin zaman mağaza hesabından iptal '
+                  'edebilirsin.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 11, color: AppColors.muted),
                 ),
+                const SizedBox(height: 8),
+                _legalLinks(),
               ],
             ),
+    );
+  }
+
+  /// Abonelik zorunluluğu: Kullanım Koşulları + Gizlilik Politikası linkleri.
+  Widget _legalLinks() {
+    const linkStyle = TextStyle(
+        fontSize: 11,
+        color: AppColors.primary,
+        fontWeight: FontWeight.w600,
+        decoration: TextDecoration.underline);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        GestureDetector(
+          onTap: () => showLegalSheet(context, 'Kullanıcı Sözleşmesi'),
+          child: const Text('Kullanım Koşulları', style: linkStyle),
+        ),
+        const Text('  ·  ',
+            style: TextStyle(fontSize: 11, color: AppColors.muted)),
+        GestureDetector(
+          onTap: () => showLegalSheet(context, 'Gizlilik Politikası'),
+          child: const Text('Gizlilik Politikası', style: linkStyle),
+        ),
+      ],
     );
   }
 }
