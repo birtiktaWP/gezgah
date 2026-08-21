@@ -86,7 +86,6 @@ class EventDetailScreen extends StatelessWidget {
             style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w600,
-                letterSpacing: -0.3,
                 color: AppColors.primary)),
         const SizedBox(height: 14),
         Wrap(

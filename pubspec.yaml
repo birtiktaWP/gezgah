@@ -1,7 +1,7 @@
 name: gezgah
 description: "Gezgah - yakınındaki en iyi yerleri keşfet."
 publish_to: 'none'
-version: 1.0.4+33
+version: 1.0.4+34
 
 environment:
   sdk: ^3.11.4
@@ -70,7 +70,14 @@ flutter:
     # 400/500 istekleri Medium, 600/700 istekleri Bold yüzüne düşer.
     - family: gezgah_pro
       fonts:
+        # 400/500 → Medium; 600/700/800 → Bold (w600 başlıklar da kalın gelsin).
+        - asset: assets/fonts/new-font/UberMove-Medium.ttf
+          weight: 400
         - asset: assets/fonts/new-font/UberMove-Medium.ttf
           weight: 500
         - asset: assets/fonts/new-font/UberMove-Bold.ttf
+          weight: 600
+        - asset: assets/fonts/new-font/UberMove-Bold.ttf
           weight: 700
+        - asset: assets/fonts/new-font/UberMove-Bold.ttf
+          weight: 800

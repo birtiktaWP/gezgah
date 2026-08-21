@@ -223,7 +223,6 @@ class SectionHead extends StatelessWidget {
                 style: const TextStyle(
                     fontSize: 19,
                     fontWeight: FontWeight.w600,
-                    letterSpacing: -0.3,
                     color: AppColors.ink)),
           ),
           if (onAll != null)

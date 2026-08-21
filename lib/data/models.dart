@@ -24,6 +24,7 @@ class Place {
   final bool sponsored;
   final String date; // eklenme tarihi (ISO "2026-06-20"); sıralama için
   final List<int> filterIds; // aktif filtre id'leri (filtre_{id}=1)
+  final List<int> ozellikIds; // mekanın özellik id'leri (restoran_ozellik)
   bool favorite;
 
   // Önceden üretilmiş thumbnail'ler (thumbnail-update.md). Öne çıkan görseli
@@ -50,6 +51,7 @@ class Place {
     this.sponsored = false,
     this.date = '',
     this.filterIds = const [],
+    this.ozellikIds = const [],
     this.favorite = false,
     this.thumbnail,
     this.thumbSquare,
@@ -1186,6 +1188,7 @@ class PlaceDetail {
   final int goruntulenme;
   final int tiklama;
   final bool qrSistemi;
+  final bool dogrulanmis; // ERP doğrulama (onaylı) — mavi tik (MEKAN_DOGRULAMA.md)
   final Map<String, String> calismaSaatleri; // gün → "18:00–01:00"
   final List<Category> kategoriler; // çözülmüş kategoriler {id, name, slug}
   final List<OzellikItem> ozellikler; // nitelik/ortam etiketleri (type='ozellik')
@@ -1210,6 +1213,7 @@ class PlaceDetail {
     this.goruntulenme = 0,
     this.tiklama = 0,
     this.qrSistemi = false,
+    this.dogrulanmis = false,
     this.calismaSaatleri = const {},
     this.kategoriler = const [],
     this.ozellikler = const [],
@@ -1278,6 +1282,7 @@ class PlaceDetail {
       goruntulenme: (j['goruntulenme'] as num?)?.toInt() ?? 0,
       tiklama: (j['tiklama'] as num?)?.toInt() ?? 0,
       qrSistemi: j['qr_sistemi'] == true,
+      dogrulanmis: j['dogrulanmis'] == true,
       calismaSaatleri: cs,
       kategoriler: parseList(j['kategoriler'], Category.fromJson),
       ozellikler: parseList(j['ozellikler'], OzellikItem.fromJson),

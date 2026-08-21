@@ -77,8 +77,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   style: TextStyle(
                       fontSize: 30,
                       fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                      letterSpacing: -0.5),
+                      color: Colors.white),
                 ),
                 const SizedBox(height: 12),
                 Text(

@@ -176,6 +176,10 @@ class _DetailScreenState extends State<DetailScreen> {
       ? _detail!.name
       : widget.place.name;
 
+  /// Doğrulanmış (onaylı) mekan mı? Detay gelince taze değeri kullanılır,
+  /// yoksa liste kartından gelen `verified` (MEKAN_DOGRULAMA.md).
+  bool get _verified => _detail?.dogrulanmis ?? widget.place.verified;
+
   String get _typeLabel {
     final t = _detail?.type ?? '';
     return switch (t) {
@@ -469,24 +473,22 @@ class _DetailScreenState extends State<DetailScreen> {
         const SizedBox(height: 12),
         // İsim + (onaylıysa) mavi tik → dokununca "Onaylı İşletme" modalı.
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Flexible(
               child: Text(_name,
                   style: const TextStyle(
                       fontSize: 24,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.4,
+                      fontWeight: FontWeight.w700,
                       color: AppColors.primary)),
             ),
-            const SizedBox(width: 8),
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: GestureDetector(
+            if (_verified) ...[
+              const SizedBox(width: 8),
+              GestureDetector(
                 onTap: () => showOnayliIsletmeModal(context),
                 child: const Icon(Icons.verified, size: 22, color: kOnayliMavi),
               ),
-            ),
+            ],
           ],
         ),
         if (_location.isNotEmpty) ...[
@@ -544,7 +546,8 @@ class _DetailScreenState extends State<DetailScreen> {
         _sectionH('Etkinlikler'),
         _eventsRail(d.etkinlikler),
       ],
-      _divider(),
+      // QR/Yol Tarifi kartı ile Bilgiler arasında çizgi yok, yalnız boşluk.
+      const SizedBox(height: 22),
       _sectionH('Bilgiler'),
       ..._infoRows(d),
       const SizedBox(height: 16),

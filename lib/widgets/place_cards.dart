@@ -4,6 +4,18 @@ import '../theme/app_theme.dart';
 import 'app_icons.dart';
 import 'common.dart';
 import 'fav_heart.dart';
+import 'onayli_modal.dart';
+
+/// Doğrulanmış (onaylı) mekan mavi tiki — kart adının yanında (MEKAN_DOGRULAMA.md).
+/// Yalnızca `place.verified == true` iken gösterilir.
+class VerifiedTick extends StatelessWidget {
+  final double size;
+  const VerifiedTick({super.key, this.size = 14});
+
+  @override
+  Widget build(BuildContext context) =>
+      Icon(Icons.verified, size: size, color: kOnayliMavi);
+}
 
 /// Yatay rail'deki kompakt popüler mekan kartı (.pop)
 class PopCard extends StatelessWidget {
@@ -68,13 +80,22 @@ class PopCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(place.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: -0.2)),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(place.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w600)),
+                      ),
+                      if (place.verified) ...[
+                        const SizedBox(width: 4),
+                        const VerifiedTick(size: 13),
+                      ],
+                    ],
+                  ),
                   const SizedBox(height: 5),
                   Row(
                     children: [
@@ -170,15 +191,19 @@ class GridTile2 extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Expanded(
+                      Flexible(
                         child: Text(place.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                                 fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: -0.2)),
+                                fontWeight: FontWeight.w600)),
                       ),
+                      if (place.verified) ...[
+                        const SizedBox(width: 4),
+                        const VerifiedTick(size: 12),
+                      ],
+                      const Spacer(),
                       const Icon(Icons.star_rounded,
                           size: 12, color: AppColors.star),
                       const SizedBox(width: 3),
@@ -272,15 +297,19 @@ class ListTileCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Expanded(
+                        Flexible(
                           child: Text(place.name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                   fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: -0.2)),
+                                  fontWeight: FontWeight.w600)),
                         ),
+                        if (place.verified) ...[
+                          const SizedBox(width: 4),
+                          const VerifiedTick(size: 13),
+                        ],
+                        const Spacer(),
                         FavHeart(postId: place.id, circle: false, size: 20),
                       ],
                     ),
@@ -356,8 +385,7 @@ class ListTileCard extends StatelessWidget {
                       Text(place.name,
                           style: const TextStyle(
                               fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: -0.2)),
+                              fontWeight: FontWeight.w600)),
                       const SizedBox(width: 7),
                       Container(
                         width: 22,
@@ -388,7 +416,6 @@ class ListTileCard extends StatelessWidget {
                             style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
-                                letterSpacing: 0.3,
                                 color: AppColors.primary)),
                       ),
                       Text(place.price,

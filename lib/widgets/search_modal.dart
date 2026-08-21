@@ -11,6 +11,7 @@ import 'filter_sheet.dart';
 import '../screens/category_screen.dart';
 import '../theme/app_theme.dart';
 import 'common.dart';
+import 'place_cards.dart';
 
 /// Gelişmiş arama — tam ekran açılan modal.
 void showSearchModal(BuildContext context,
@@ -468,7 +469,8 @@ class _SearchModalState extends State<_SearchModal>
   /// Yemekler sekmesi filtre seçimi (bottom sheet, /filtreler).
   Future<void> _openFoodFilter() async {
     if (_allFilters.isEmpty) {
-      _allFilters = await HomeRepository.instance.filtreler(type: 'restoran');
+      _allFilters =
+          (await HomeRepository.instance.filtreler(type: 'restoran')).filtreler;
     }
     if (!mounted) return;
     if (_allFilters.isEmpty) {
@@ -483,7 +485,7 @@ class _SearchModalState extends State<_SearchModal>
       setState(() {
         _foodFilters
           ..clear()
-          ..addAll(result);
+          ..addAll(result.filters);
       });
       final term = _query.trim();
       if (term.length >= 2) _runFood(term);
@@ -493,7 +495,8 @@ class _SearchModalState extends State<_SearchModal>
   /// Mekanlar sekmesi filtre seçimi (ortak `showFilterSheet`).
   Future<void> _openPlaceFilter() async {
     if (_allFilters.isEmpty) {
-      _allFilters = await HomeRepository.instance.filtreler(type: 'restoran');
+      _allFilters =
+          (await HomeRepository.instance.filtreler(type: 'restoran')).filtreler;
     }
     if (!mounted) return;
     if (_allFilters.isEmpty) {
@@ -508,7 +511,7 @@ class _SearchModalState extends State<_SearchModal>
       setState(() {
         _placeFilters
           ..clear()
-          ..addAll(result);
+          ..addAll(result.filters);
       });
       final term = _query.trim();
       if (term.length >= 2) _runMekan(term);
@@ -926,11 +929,21 @@ class _SearchModalState extends State<_SearchModal>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(p.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 14.5, fontWeight: FontWeight.w600)),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(p.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 14.5, fontWeight: FontWeight.w600)),
+                      ),
+                      if (p.verified) ...[
+                        const SizedBox(width: 4),
+                        const VerifiedTick(size: 13),
+                      ],
+                    ],
+                  ),
                   if (metaText.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Row(

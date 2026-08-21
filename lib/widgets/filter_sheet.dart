@@ -4,22 +4,34 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
 
+/// Filtre bottom sheet sonucu: seçili filtre id'leri + seçili özellik id'leri.
+typedef FilterResult = ({Set<int> filters, Set<int> ozellikler});
+
 /// Ortak filtre bottom sheet'i — kategori listeleme ve arama (Mekanlar/Yemekler)
-/// ekranlarında birebir aynı görünüm. Uygulanırsa yeni seçili filtre id kümesini
+/// ekranlarında birebir aynı görünüm. Filtreler + (varsa) özellikler iki grup
+/// halinde gösterilir. Uygulanırsa seçili filtre ve özellik id kümelerini
 /// döndürür; kapatılırsa `null`.
-Future<Set<int>?> showFilterSheet(
+Future<FilterResult?> showFilterSheet(
   BuildContext context, {
   required List<Filter> filters,
   required Set<int> selected,
+  List<Filter> ozellikler = const [],
+  Set<int> selectedOzellikler = const {},
 }) {
   final temp = Set<int>.from(selected);
-  // Açılışta seçili filtreleri en üste al (orijinal göreli sıra korunur).
+  final tempOz = Set<int>.from(selectedOzellikler);
+  // Açılışta seçili öğeleri en üste al (orijinal göreli sıra korunur).
   // Sıra açılış anındaki seçime göre sabittir; toggle sırasında öğeler zıplamaz.
   final ordered = <Filter>[
     ...filters.where((f) => selected.contains(f.id)),
     ...filters.where((f) => !selected.contains(f.id)),
   ];
-  return showModalBottomSheet<Set<int>>(
+  final orderedOz = <Filter>[
+    ...ozellikler.where((f) => selectedOzellikler.contains(f.id)),
+    ...ozellikler.where((f) => !selectedOzellikler.contains(f.id)),
+  ];
+  final hasOzellik = orderedOz.isNotEmpty;
+  return showModalBottomSheet<FilterResult>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.white,
@@ -31,8 +43,9 @@ Future<Set<int>?> showFilterSheet(
         builder: (ctx, setSheet) {
           return SafeArea(
             child: ConstrainedBox(
-              constraints:
-                  BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.45),
+              constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(ctx).size.height *
+                      (hasOzellik ? 0.7 : 0.45)),
               child: Padding(
                 padding:
                     EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
@@ -56,7 +69,10 @@ Future<Set<int>?> showFilterSheet(
                               style: TextStyle(
                                   fontSize: 17, fontWeight: FontWeight.w600)),
                           GestureDetector(
-                            onTap: () => setSheet(() => temp.clear()),
+                            onTap: () => setSheet(() {
+                              temp.clear();
+                              tempOz.clear();
+                            }),
                             child: const Text('Temizle',
                                 style: TextStyle(
                                     fontSize: 13,
@@ -70,7 +86,9 @@ Future<Set<int>?> showFilterSheet(
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            if (hasOzellik) const _GroupHeader('Filtreler'),
                             for (final f in ordered)
                               FilterRow(
                                 filter: f,
@@ -83,6 +101,21 @@ Future<Set<int>?> showFilterSheet(
                                   }
                                 }),
                               ),
+                            if (hasOzellik) ...[
+                              const _GroupHeader('Özellikler'),
+                              for (final f in orderedOz)
+                                FilterRow(
+                                  filter: f,
+                                  selected: tempOz.contains(f.id),
+                                  onToggle: () => setSheet(() {
+                                    if (tempOz.contains(f.id)) {
+                                      tempOz.remove(f.id);
+                                    } else {
+                                      tempOz.add(f.id);
+                                    }
+                                  }),
+                                ),
+                            ],
                           ],
                         ),
                       ),
@@ -100,7 +133,8 @@ Future<Set<int>?> showFilterSheet(
                                 borderRadius: BorderRadius.circular(14)),
                             elevation: 0,
                           ),
-                          onPressed: () => Navigator.pop(sheetCtx, temp),
+                          onPressed: () => Navigator.pop(
+                              sheetCtx, (filters: temp, ozellikler: tempOz)),
                           child: const Text('Uygula',
                               style: TextStyle(
                                   fontSize: 15, fontWeight: FontWeight.w600)),
@@ -116,6 +150,27 @@ Future<Set<int>?> showFilterSheet(
       );
     },
   );
+}
+
+/// Filtre/Özellik grup başlığı.
+class _GroupHeader extends StatelessWidget {
+  final String title;
+  const _GroupHeader(this.title);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 2),
+      child: Text(
+        title,
+        style: const TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            color: AppColors.muted,
+            height: 1.4),
+      ),
+    );
+  }
 }
 
 /// Filtre satırı — solda ikon (API SVG; yoksa isme göre Material ikon), ortada

@@ -45,6 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late final Future<List<Place>> _sponsoredFuture;
   late final Future<List<Place>> _nearbyFuture;
   late final Future<List<Place>> _newestFuture;
+  late final Future<List<GeziRota>> _popularRoutesFuture; // Gezi Rotaları
   late final Future<List<FeaturedEvent>> _eventsFuture;
 
   // Disk önbelleğinden hazır (anında gösterilecek) başlangıç verileri.
@@ -74,6 +75,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _sponsoredFuture = _loadSponsored();
     _nearbyFuture = _loadNearby();
     _newestFuture = _loadNewest();
+    _popularRoutesFuture = RotaRepository.instance.populer(limit: 10);
     _eventsFuture = store.etkinlikler();
   }
 
@@ -236,9 +238,10 @@ class _HomeScreenState extends State<HomeScreen> {
             initial: _nearInit, fallback: MockData.nearby),
         const SizedBox(height: 18),
         _placeRail('Yeni Eklenenler', _newestFuture, initial: _newInit),
-        const SizedBox(height: 26),
+        const SizedBox(height: 18),
+        _routesRail(), // Gezi Rotaları (popüler) — yeni eklenenler şablonuyla
         _featuredEventsSection(), // Öne Çıkan Etkinlikler (sponsorlu kart tasarımı)
-        const SizedBox(height: 50),
+        const SizedBox(height: 24),
       ],
     );
   }
@@ -308,7 +311,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontSize: 24,
                     fontWeight: FontWeight.w600,
                     height: 1.25,
-                    letterSpacing: -0.5,
                     color: Colors.white)),
             SizedBox(
               height: 34,
@@ -317,7 +319,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: const TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w600,
-                    letterSpacing: -0.5,
                     color: Colors.white),
               ),
             ),
@@ -549,6 +550,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (events.isEmpty) return const SizedBox.shrink();
         return Column(
           children: [
+            const SizedBox(height: 26),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 22),
               child: SectionHead('Öne Çıkan Etkinlikler'),
@@ -771,7 +773,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: const TextStyle(
                               fontSize: 10.5,
                               fontWeight: FontWeight.w600,
-                              letterSpacing: 0.3,
                               color: AppColors.primary)),
                     ],
                   ),
@@ -837,6 +838,72 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Yatay kaydırmalı kompakt mekan rayı (PopCard).
+  /// Popüler gezi rotaları rayı — "Yeni Eklenenler" ile aynı şablon (yatay
+  /// kaydırmalı kompakt kartlar). Rota yoksa bölüm tamamen gizlenir.
+  Widget _routesRail() {
+    return FutureBuilder<List<GeziRota>>(
+      future: _popularRoutesFuture,
+      builder: (context, snapshot) {
+        final routes = snapshot.data ?? const <GeziRota>[];
+        // Henüz yükleniyorsa yer tutucu göster; boş sonuçta bölümü gizle.
+        if (routes.isEmpty) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 22),
+                  child: SectionHead('Gezi Rotaları',
+                      onAll: () => openDiscoverRoutes(context)),
+                ),
+                const SizedBox(
+                  height: 186,
+                  child: Center(
+                    child: SizedBox(
+                      width: 26,
+                      height: 26,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.5, color: AppColors.primary),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }
+          return const SizedBox.shrink();
+        }
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 22),
+              child: SectionHead('Gezi Rotaları',
+                  onAll: () => openDiscoverRoutes(context)),
+            ),
+            SizedBox(
+              height: 186,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 22),
+                itemCount: routes.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 14),
+                itemBuilder: (_, i) {
+                  final r = routes[i];
+                  return _RouteRailCard(
+                    rota: r,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => RouteDetailScreen(rotaId: r.id)),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _placeRail(
     String title,
     Future<List<Place>> future, {
@@ -894,6 +961,103 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Popüler gezi rotası kompakt kartı — ana sayfadaki "Gezi Rotaları" rayı için
+/// (PopCard/"Yeni Eklenenler" şablonuyla birebir aynı ölçü ve stil).
+class _RouteRailCard extends StatelessWidget {
+  final GeziRota rota;
+  final VoidCallback? onTap;
+  const _RouteRailCard({required this.rota, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 168,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppColors.line),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              height: 116,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  rota.kapakGorsel.isNotEmpty
+                      ? NetImage(rota.kapakGorsel)
+                      : Container(
+                          color: AppColors.primarySoft,
+                          child: const Center(child: ShipWheelIcon(size: 34)),
+                        ),
+                  // Beğeni rozeti (sol alt) — kart üzerinde küçük çip.
+                  Positioned(
+                    left: 10,
+                    bottom: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const AppSvgIcon(AppIcons.heart,
+                              size: 11, color: Colors.white),
+                          const SizedBox(width: 4),
+                          Text('${rota.begeniSayisi}',
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(13, 11, 13, 13),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(rota.baslik.isEmpty ? 'Adsız rota' : rota.baslik,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 14.5, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 5),
+                  Row(
+                    children: [
+                      const AppSvgIcon(AppIcons.pin,
+                          size: 12, color: AppColors.primary),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text('${rota.durakSayisi} durak',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 12, color: AppColors.muted)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

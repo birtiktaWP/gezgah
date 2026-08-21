@@ -720,6 +720,7 @@ class ApiPlace {
   final double? lng;
   final String sehir; // il
   final String ilce; // ilçe
+  final bool verified; // ERP doğrulama (dogrulanmis) — mavi tik
   final List<int> categoryIds;
 
   /// API'den gelen işletmeye özel harita ikonu anahtarı (`custom_ikon`).
@@ -741,6 +742,7 @@ class ApiPlace {
     this.lng,
     this.sehir = '',
     this.ilce = '',
+    this.verified = false,
     this.categoryIds = const [],
     this.customIcon = '',
     this.thumbnail,
@@ -782,6 +784,7 @@ class ApiPlace {
         lat: lat ?? 41.0082,
         lng: lng ?? 28.9784,
         tags: const ['restoran'],
+        verified: verified,
         thumbnail: thumbnail,
         thumbSquare: thumbSquare,
         thumbCard: thumbCard,
@@ -797,6 +800,7 @@ class ApiPlace {
         'lng': lng,
         'sehir': sehir,
         'ilce': ilce,
+        'dogrulanmis': verified,
         'category_ids': categoryIds,
         'custom_ikon': customIcon,
       };
@@ -809,6 +813,7 @@ class ApiPlace {
         lng: (j['lng'] as num?)?.toDouble(),
         sehir: (j['sehir'] as String?) ?? '',
         ilce: (j['ilce'] as String?) ?? '',
+        verified: j['dogrulanmis'] == true,
         categoryIds: (j['category_ids'] as List?)
                 ?.map((e) => (e as num).toInt())
                 .toList() ??
@@ -1105,9 +1110,15 @@ class HomeRepository {
       lat: ap.lat ?? double.nan,
       lng: ap.lng ?? double.nan,
       tags: const ['restoran'],
+      verified: j['dogrulanmis'] == true,
       sponsored: sponsored,
       date: (j['date'] as String?) ?? '',
       filterIds: (j['filtre_ids'] as List<dynamic>?)
+              ?.whereType<num>()
+              .map((e) => e.toInt())
+              .toList() ??
+          const [],
+      ozellikIds: (j['ozellik_ids'] as List<dynamic>?)
               ?.whereType<num>()
               .map((e) => e.toInt())
               .toList() ??
@@ -1141,23 +1152,37 @@ class HomeRepository {
     }
   }
 
-  /// Filtre listesi (FILTRELER.md). `GET /filtreler?type=`.
-  Future<List<Filter>> filtreler({String? type}) async {
+  /// Filtre + özellik listesi (KATEGORI_OZELLIK_FILTRE.md). `GET /filtreler?type=`.
+  /// `data` = filtreler (type'a göre), `meta.ozellikler` = özellikler (tipsiz).
+  Future<({List<Filter> filtreler, List<Filter> ozellikler})> filtreler(
+      {String? type}) async {
     try {
       final res = await _dio.get(
         '/filtreler',
         queryParameters: {'type': ?type},
       );
       final body = res.data as Map<String, dynamic>;
-      if (body['success'] != true) return const [];
+      if (body['success'] != true) {
+        return (filtreler: const <Filter>[], ozellikler: const <Filter>[]);
+      }
       final data = body['data'];
-      if (data is! List) return const [];
-      return data
-          .whereType<Map<String, dynamic>>()
-          .map(Filter.fromJson)
-          .toList();
+      final filtreler = data is List
+          ? data
+              .whereType<Map<String, dynamic>>()
+              .map(Filter.fromJson)
+              .toList()
+          : <Filter>[];
+      final meta = body['meta'];
+      final ozData = meta is Map<String, dynamic> ? meta['ozellikler'] : null;
+      final ozellikler = ozData is List
+          ? ozData
+              .whereType<Map<String, dynamic>>()
+              .map(Filter.fromJson)
+              .toList()
+          : <Filter>[];
+      return (filtreler: filtreler, ozellikler: ozellikler);
     } catch (_) {
-      return const [];
+      return (filtreler: const <Filter>[], ozellikler: const <Filter>[]);
     }
   }
 
@@ -1922,6 +1947,7 @@ class HomeRepository {
       lng: lng,
       sehir: (j['sehir'] as String?)?.trim() ?? '',
       ilce: (j['ilce'] as String?)?.trim() ?? '',
+      verified: j['dogrulanmis'] == true,
       categoryIds: (j['kategori_ids'] as List<dynamic>?)
               ?.map((e) => (e as num).toInt())
               .toList() ??
@@ -2099,8 +2125,14 @@ class FavRepository {
       lat: lat,
       lng: lng,
       tags: const ['restoran'],
+      verified: j['dogrulanmis'] == true,
       favorite: true,
       filterIds: (j['filtre_ids'] as List<dynamic>?)
+              ?.whereType<num>()
+              .map((e) => e.toInt())
+              .toList() ??
+          const [],
+      ozellikIds: (j['ozellik_ids'] as List<dynamic>?)
               ?.whereType<num>()
               .map((e) => e.toInt())
               .toList() ??
@@ -2561,6 +2593,26 @@ class RotaRepository {
       );
     } catch (_) {
       return empty;
+    }
+  }
+
+  /// `GET /rotalar/populer` — en çok etkileşim (beğeni + yorum) alan herkese
+  /// açık rotalar (ROTA_POPULER.md). Cihaz/üye token'ı yeterli; hatada boş liste.
+  Future<List<GeziRota>> populer({int limit = 10}) async {
+    try {
+      final res = await _dio.get('/rotalar/populer',
+          queryParameters: {'limit': limit});
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return const [];
+      final data = body['data'];
+      if (data is! List) return const [];
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map((j) => GeziRota.fromJson(j, host: kApiHost))
+          .where((r) => r.id > 0)
+          .toList();
+    } catch (_) {
+      return const [];
     }
   }
 

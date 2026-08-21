@@ -53,8 +53,10 @@ class _CategoryScreenState extends State<CategoryScreen> {
   _Loc? _loc; // cihaz konumu (bir kez çözülür)
   _SortMode _sort = _SortMode.yakinlik; // varsayılan: yakınlık
 
-  List<Filter> _filters = const []; // /filtreler
+  List<Filter> _filters = const []; // /filtreler → data
   final Set<int> _selectedFilters = {}; // seçili filtre id'leri
+  List<Filter> _ozellikler = const []; // /filtreler → meta.ozellikler
+  final Set<int> _selectedOzellikler = {}; // seçili özellik id'leri
 
   @override
   void initState() {
@@ -153,11 +155,12 @@ class _CategoryScreenState extends State<CategoryScreen> {
         HomeRepository.instance.filtreler(type: 'restoran'),
       ]);
       final d = results[0] as CategoryDetail;
-      final filters = results[1] as List<Filter>;
+      final f = results[1] as ({List<Filter> filtreler, List<Filter> ozellikler});
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _filters = filters;
+        _filters = f.filtreler;
+        _ozellikler = f.ozellikler;
         _category = d.category;
         _subs = d.subCategories;
         _pinned = d.pinned;
@@ -251,14 +254,19 @@ class _CategoryScreenState extends State<CategoryScreen> {
     }
   }
 
+  bool get _hasActiveFilter =>
+      _selectedFilters.isNotEmpty || _selectedOzellikler.isNotEmpty;
+
   bool _matchesFilters(Place p) {
-    if (_selectedFilters.isEmpty) return true;
-    return _selectedFilters.every((id) => p.filterIds.contains(id));
+    if (!_hasActiveFilter) return true;
+    // AND mantığı: tüm seçili filtre + tüm seçili özellik id'leri mekanda olmalı.
+    return _selectedFilters.every((id) => p.filterIds.contains(id)) &&
+        _selectedOzellikler.every((id) => p.ozellikIds.contains(id));
   }
 
-  /// Seçili filtrelere göre görünecek mekanlar.
+  /// Seçili filtre/özelliklere göre görünecek mekanlar.
   List<Place> get _visiblePlaces =>
-      _selectedFilters.isEmpty ? _places : _places.where(_matchesFilters).toList();
+      !_hasActiveFilter ? _places : _places.where(_matchesFilters).toList();
 
   Place? get _visiblePinned {
     final p = _pinned;
@@ -268,14 +276,22 @@ class _CategoryScreenState extends State<CategoryScreen> {
 
   /// Filtre bottom sheet'i (ortak `showFilterSheet`) — çoklu seçim.
   Future<void> _openFilterSheet() async {
-    if (_filters.isEmpty) return;
-    final result = await showFilterSheet(context,
-        filters: _filters, selected: _selectedFilters);
+    if (_filters.isEmpty && _ozellikler.isEmpty) return;
+    final result = await showFilterSheet(
+      context,
+      filters: _filters,
+      selected: _selectedFilters,
+      ozellikler: _ozellikler,
+      selectedOzellikler: _selectedOzellikler,
+    );
     if (result != null && mounted) {
       setState(() {
         _selectedFilters
           ..clear()
-          ..addAll(result);
+          ..addAll(result.filters);
+        _selectedOzellikler
+          ..clear()
+          ..addAll(result.ozellikler);
       });
     }
   }
@@ -436,7 +452,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                       padding: const EdgeInsets.fromLTRB(22, 30, 22, 30),
                       child: Center(
                         child: Text(
-                            _selectedFilters.isEmpty
+                            !_hasActiveFilter
                                 ? 'Bu kategoride mekan bulunamadı'
                                 : 'Seçili filtrelere uygun mekan bulunamadı',
                             style: const TextStyle(
@@ -565,7 +581,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
-              _selectedFilters.isEmpty
+              !_hasActiveFilter
                   ? '$_total mekan bulundu'
                   : '${_visiblePlaces.length} mekan (filtreli)',
               style: const TextStyle(
@@ -577,13 +593,13 @@ class _CategoryScreenState extends State<CategoryScreen> {
               GestureDetector(
                   onTap: _openSortSheet,
                   child: _actBtn(Icons.swap_vert, svg: AppIcons.sort)),
-              // Filtre yoksa (ör. type modu) filtre butonunu gizle.
-              if (_filters.isNotEmpty) ...[
+              // Filtre/özellik yoksa (ör. type modu) filtre butonunu gizle.
+              if (_filters.isNotEmpty || _ozellikler.isNotEmpty) ...[
                 const SizedBox(width: 8),
                 GestureDetector(
                   onTap: _openFilterSheet,
                   child: _actBtn(Icons.filter_list,
-                      active: _selectedFilters.isNotEmpty,
+                      active: _hasActiveFilter,
                       svg: AppIcons.filter),
                 ),
               ],
