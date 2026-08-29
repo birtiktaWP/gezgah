@@ -989,6 +989,32 @@ class HomeRepository {
     }
   }
 
+  /// Kayan yazı şeridi (`GET /kayan-yazilar`, KAYAN_YAZI.md). ERP'deki
+  /// "Reklam Ayarları → Kayan Yazı" metinleri, panelde belirlenen sırayla.
+  /// Uç yayında değil / metin girilmemişse boş liste döner → şerit gizlenir.
+  Future<List<String>> kayanYazilar() async {
+    try {
+      final res = await _dio.get('/kayan-yazilar');
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return const [];
+      final data = body['data'];
+      if (data is! List) return const [];
+      return data
+          .whereType<String>()
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Yalnızca öne çıkan kategoriler — `/kategoriler` yedeğine **düşmez**.
+  /// Ana sayfa kategori vitrini bunu kullanır (yalnız kürateli liste gösterilir).
+  /// Uç yayında değil/boşsa boş liste döner → bölüm gizlenir.
+  Future<List<Category>> oneCikanKategoriler() async =>
+      await _oneCikanKategoriler() ?? const [];
+
   /// `GET /home-page-settings/one_cikan_kategoriler` → `data.settings.categories`
   /// (id, name, slug, icon). Hata/boşsa `null` döner (çağıran yedeğe düşer).
   Future<List<Category>?> _oneCikanKategoriler() async {

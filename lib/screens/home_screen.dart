@@ -47,6 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late final Future<List<Place>> _newestFuture;
   late final Future<List<GeziRota>> _popularRoutesFuture; // Gezi Rotaları
   late final Future<List<FeaturedEvent>> _eventsFuture;
+  late final Future<List<String>> _marqueeFuture; // kayan yazı şeridi
 
   // Disk önbelleğinden hazır (anında gösterilecek) başlangıç verileri.
   late final List<Category> _catInit;
@@ -77,6 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _newestFuture = _loadNewest();
     _popularRoutesFuture = RotaRepository.instance.populer(limit: 10);
     _eventsFuture = store.etkinlikler();
+    _marqueeFuture = HomeRepository.instance.kayanYazilar();
   }
 
   /// Öne çıkan kategoriler endpoint'ten seçili ve sıralı gelir; olduğu gibi
@@ -93,9 +95,11 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Önbellekteki ApiPlace'leri (mesafesiz) Place kartlarına çevirir —
   /// initialData için; gerçek mesafe konum çözülünce future ile gelir.
   List<Place> _cachedPlaces(List<ApiPlace> items) => items
-      .map((a) => a.toPlace(
-            subtitle: a.cityDistrict.isNotEmpty ? a.cityDistrict : 'Restoran',
-          ))
+      .map(
+        (a) => a.toPlace(
+          subtitle: a.cityDistrict.isNotEmpty ? a.cityDistrict : 'Restoran',
+        ),
+      )
       .toList();
 
   /// Gerçek konumdan "İl, İlçe" etiketini çözer ve hero'ya yazar.
@@ -114,13 +118,20 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Alt yazı (`subtitle`):
   ///  - [preferDistance] true ve mesafe varsa → mesafe (Yakındakiler).
   ///  - aksi halde "İl · İlçe" (yoksa mesafe, o da yoksa "Restoran").
-  List<Place> _toPlaces(List<ApiPlace> items, _Loc loc,
-      {bool preferDistance = false}) {
+  List<Place> _toPlaces(
+    List<ApiPlace> items,
+    _Loc loc, {
+    bool preferDistance = false,
+  }) {
     return items.map((a) {
       String distance = '';
       if (a.hasCoord) {
-        final m =
-            LocationService.distanceMeters(loc.lat, loc.lng, a.lat!, a.lng!);
+        final m = LocationService.distanceMeters(
+          loc.lat,
+          loc.lng,
+          a.lat!,
+          a.lng!,
+        );
         distance = LocationService.format(m);
       }
       final cd = a.cityDistrict;
@@ -189,29 +200,37 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _openDetail(Place p, {Object? heroTag}) {
     Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (_) => DetailScreen(place: p, heroTag: heroTag)));
+      context,
+      MaterialPageRoute(
+        builder: (_) => DetailScreen(place: p, heroTag: heroTag),
+      ),
+    );
   }
 
   void _openMap() {
     Navigator.push(
-        context, MaterialPageRoute(builder: (_) => const MapScreen()));
+      context,
+      MaterialPageRoute(builder: (_) => const MapScreen()),
+    );
   }
 
   void _openCategory(int id, String title) {
     Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (_) => CategoryScreen(categoryId: id, title: title)));
+      context,
+      MaterialPageRoute(
+        builder: (_) => CategoryScreen(categoryId: id, title: title),
+      ),
+    );
   }
 
   /// Post type (otopark/muze/mesire/plaj) liste ekranını açar.
   void _openType(String type, String title) {
     Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (_) => CategoryScreen(type: type, title: title)));
+      context,
+      MaterialPageRoute(
+        builder: (_) => CategoryScreen(type: type, title: title),
+      ),
+    );
   }
 
   // --- Build ------------------------------------------------------------------
@@ -224,18 +243,16 @@ class _HomeScreenState extends State<HomeScreen> {
         _heroWithSearch(),
         const SizedBox(height: 14),
         _shortcuts(), // Tümü (home_page_settings → tumu)
-        const SizedBox(height: 18),
-        _categorySection(), // Kategori (kahvalti_sokak_tatli)
+        _categorySection(), // Öne çıkan kategoriler (boşsa hiç gösterilmez)
         const SizedBox(height: 22),
         _sponsoredSection(), // Sponsorlu Restoranlar (etkinlik kartı tasarımı)
-        const SizedBox(height: 18),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 22),
-          child: Marquee(items: MockData.promos),
+        _marqueeSection(), // Kayan yazı (ERP → marquee); boşsa gösterilmez
+        _placeRail(
+          'Yakındakiler',
+          _nearbyFuture,
+          initial: _nearInit,
+          fallback: MockData.nearby,
         ),
-        const SizedBox(height: 8),
-        _placeRail('Yakındakiler', _nearbyFuture,
-            initial: _nearInit, fallback: MockData.nearby),
         const SizedBox(height: 18),
         _placeRail('Yeni Eklenenler', _newestFuture, initial: _newInit),
         const SizedBox(height: 18),
@@ -270,9 +287,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 Row(
                   children: [
                     GlassButton(
-                        icon: Icons.location_on_outlined,
-                        svg: AppIcons.pin,
-                        onTap: _openMap),
+                      icon: Icons.location_on_outlined,
+                      svg: AppIcons.pin,
+                      onTap: _openMap,
+                    ),
                     const SizedBox(width: 10),
                     GlassButton(
                       icon: Icons.notifications_none,
@@ -287,39 +305,48 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 22),
             Row(
               children: [
-                const AppSvgIcon(AppIcons.pin,
-                    size: 14, color: Colors.white70),
+                const AppSvgIcon(AppIcons.pin, size: 14, color: Colors.white70),
                 const SizedBox(width: 6),
-                Text('Konum · ',
-                    style: TextStyle(
-                        fontSize: 12.5,
-                        color: Colors.white.withValues(alpha: 0.78))),
+                Text(
+                  'Konum · ',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: Colors.white.withValues(alpha: 0.78),
+                  ),
+                ),
                 Flexible(
-                  child: Text(_locationLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white)),
+                  child: Text(
+                    _locationLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 15),
-            const Text('Şehrin en iyi',
-                style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w600,
-                    height: 1.25,
-                    color: Colors.white)),
+            const Text(
+              'Şehrin en iyi',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w600,
+                height: 1.25,
+                color: Colors.white,
+              ),
+            ),
             SizedBox(
               height: 34,
               child: Typewriter(
                 phrases: MockData.typedPhrases,
                 style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white),
+                  fontSize: 24,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
               ),
             ),
           ],
@@ -338,17 +365,9 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Column(
           mainAxisSize: MainAxisSize.min,
-          children: [
-            _hero(),
-            const SizedBox(height: 46),
-          ],
+          children: [_hero(), const SizedBox(height: 46)],
         ),
-        Positioned(
-          left: 22,
-          right: 22,
-          bottom: 12,
-          child: _searchBox(),
-        ),
+        Positioned(left: 22, right: 22, bottom: 12, child: _searchBox()),
       ],
     );
   }
@@ -369,8 +388,10 @@ class _HomeScreenState extends State<HomeScreen> {
             const Icon(Icons.search, color: AppColors.primary),
             const SizedBox(width: 12),
             const Expanded(
-              child: Text('Mekan ve yemek ara…',
-                  style: TextStyle(fontSize: 15, color: AppColors.muted)),
+              child: Text(
+                'Mekan ve yemek ara…',
+                style: TextStyle(fontSize: 15, color: AppColors.muted),
+              ),
             ),
             Container(width: 1, height: 24, color: AppColors.line),
             const SizedBox(width: 12),
@@ -378,8 +399,9 @@ class _HomeScreenState extends State<HomeScreen> {
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(12)),
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: const Icon(Icons.mic_none, color: Colors.white, size: 18),
             ),
           ],
@@ -422,72 +444,113 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Kategori vitrini (home_page_settings → kahvalti_sokak_tatli).
-  /// İçerik `GET /kategoriler`den seçili id'lerle çekilir.
+  /// Kayan yazı şeridi (`GET /kayan-yazilar`, KAYAN_YAZI.md). Metin yoksa
+  /// (veya uç yayında değilse) şerit hiç gösterilmez; yalnız bölümler arası
+  /// normal boşluk kalır.
+  Widget _marqueeSection() {
+    return FutureBuilder<List<String>>(
+      future: _marqueeFuture,
+      builder: (context, snap) {
+        final items = snap.data ?? const <String>[];
+        if (items.isEmpty) return const SizedBox(height: 18);
+        return Column(
+          children: [
+            const SizedBox(height: 18),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 22),
+              child: Marquee(items: items),
+            ),
+            const SizedBox(height: 8),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Kategori vitrini — yalnızca `GET /home-page-settings/one_cikan_kategoriler`
+  /// içeriği gösterilir (`/kategoriler` yedeğine düşülmez). Uç boş dönerse
+  /// bölüm, üst boşluğuyla birlikte hiç gösterilmez.
   Widget _categorySection() {
-    return SizedBox(
-      height: 86,
-      child: FutureBuilder<List<Category>>(
-        future: _categoriesFuture,
-        initialData: _catInit,
-        builder: (context, snap) {
-          final cats = snap.data ?? const <Category>[];
-          if (cats.isEmpty) {
-            if (snap.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2.5, color: AppColors.primary),
+    return FutureBuilder<List<Category>>(
+      future: _categoriesFuture,
+      initialData: _catInit,
+      builder: (context, snap) {
+        final cats = snap.data ?? const <Category>[];
+        if (cats.isEmpty) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const Padding(
+              padding: EdgeInsets.only(top: 18),
+              child: SizedBox(
+                height: 86,
+                child: Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: AppColors.primary,
+                    ),
+                  ),
                 ),
-              );
-            }
-            return const SizedBox.shrink();
+              ),
+            );
           }
-          return ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 22),
-            itemCount: cats.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 5),
-            itemBuilder: (_, i) {
-              final c = cats[i];
-              return GestureDetector(
-                onTap: () => _openCategory(c.id, c.name),
-                child: SizedBox(
-                  width: 72,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 58,
-                        height: 58,
-                        decoration: BoxDecoration(
+          return const SizedBox.shrink();
+        }
+        return Padding(
+          padding: const EdgeInsets.only(top: 18),
+          child: SizedBox(
+            height: 86,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 22),
+              itemCount: cats.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 5),
+              itemBuilder: (_, i) {
+                final c = cats[i];
+                return GestureDetector(
+                  onTap: () => _openCategory(c.id, c.name),
+                  child: SizedBox(
+                    width: 72,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 58,
+                          height: 58,
+                          decoration: BoxDecoration(
                             color: AppColors.primarySoft,
-                            borderRadius: BorderRadius.circular(12)),
-                        child: Center(
-                          child: CategoryIcon(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Center(
+                            child: CategoryIcon(
                               icon: c.icon,
                               id: c.id,
                               color: AppColors.primary,
-                              size: 24),
+                              size: 24,
+                            ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(c.name,
+                        const SizedBox(height: 8),
+                        Text(
+                          c.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.center,
                           style: const TextStyle(
-                              fontSize: 13, fontWeight: FontWeight.w600)),
-                    ],
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              );
-            },
-          );
-        },
-      ),
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -514,13 +577,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       width: 26,
                       height: 26,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2.5, color: AppColors.primary),
+                        strokeWidth: 2.5,
+                        color: AppColors.primary,
+                      ),
                     ),
                   );
                 }
                 return const Center(
-                  child: Text('Şu an sponsorlu restoran yok',
-                      style: TextStyle(fontSize: 13, color: AppColors.muted)),
+                  child: Text(
+                    'Şu an sponsorlu restoran yok',
+                    style: TextStyle(fontSize: 13, color: AppColors.muted),
+                  ),
                 );
               }
               return ListView.separated(
@@ -584,16 +651,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Sponsorlu restoran büyük kartı.
   Widget _sponsoredCard(Place p) => _bigCard(
-        image: p.thumb(ThumbSize.wide),
-        badgeIcon: Icons.verified,
-        badgeText: 'SPONSORLU',
-        title: p.name,
-        metaIcon: Icons.location_on_outlined,
-        metaSvg: AppIcons.pin,
-        metaText: p.subtitle, // il · ilçe (koordinat yoksa)
-        trailing: p.distance, // koordinat varsa mesafe (sağda)
-        onTap: () => _openDetail(p),
-      );
+    image: p.thumb(ThumbSize.wide),
+    badgeIcon: Icons.verified,
+    badgeText: 'SPONSORLU',
+    title: p.name,
+    metaIcon: Icons.location_on_outlined,
+    metaSvg: AppIcons.pin,
+    metaText: p.subtitle, // il · ilçe (koordinat yoksa)
+    trailing: p.distance, // koordinat varsa mesafe (sağda)
+    onTap: () => _openDetail(p),
+  );
 
   /// Öne çıkan etkinlik kartı — HTML'deki "Yaklaşan Etkinlikler" tasarımı:
   /// sol üstte tarih rozeti (gün + ay), altta tag çipi, başlık ve saat.
@@ -601,7 +668,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final d = DateTime.tryParse(e.date);
     const months = [
       'OCA', 'ŞUB', 'MAR', 'NİS', 'MAY', 'HAZ', //
-      'TEM', 'AĞU', 'EYL', 'EKİ', 'KAS', 'ARA'
+      'TEM', 'AĞU', 'EYL', 'EKİ', 'KAS', 'ARA',
     ];
     final day = d != null ? d.day.toString() : '';
     final month = d != null ? months[d.month - 1] : '';
@@ -637,26 +704,35 @@ class _HomeScreenState extends State<HomeScreen> {
                   right: 14,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 6),
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12)),
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(day,
-                            style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.primary,
-                                height: 1)),
+                        Text(
+                          day,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary,
+                            height: 1,
+                          ),
+                        ),
                         const SizedBox(height: 3),
-                        Text(month,
-                            style: const TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.primary,
-                                height: 1)),
+                        Text(
+                          month,
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary,
+                            height: 1,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -671,45 +747,60 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 9, vertical: 3),
+                        horizontal: 9,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(999),
                         border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.3)),
+                          color: Colors.white.withValues(alpha: 0.3),
+                        ),
                       ),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(Icons.music_note, size: 12, color: Colors.white),
                           SizedBox(width: 5),
-                          Text('Etkinlik',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white)),
+                          Text(
+                            'Etkinlik',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 7),
-                    Text(e.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white)),
+                    Text(
+                      e.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
                     if (e.time.trim().isNotEmpty) ...[
                       const SizedBox(height: 5),
                       Row(
                         children: [
-                          const Icon(Icons.access_time,
-                              size: 13, color: Colors.white),
+                          const Icon(
+                            Icons.access_time,
+                            size: 13,
+                            color: Colors.white,
+                          ),
                           const SizedBox(width: 5),
-                          Text(e.time,
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white.withValues(alpha: 0.9))),
+                          Text(
+                            e.time,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white.withValues(alpha: 0.9),
+                            ),
+                          ),
                         ],
                       ),
                     ],
@@ -759,21 +850,27 @@ class _HomeScreenState extends State<HomeScreen> {
                 top: 14,
                 left: 14,
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12)),
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(badgeIcon, size: 14, color: AppColors.primary),
                       const SizedBox(width: 5),
-                      Text(badgeText,
-                          style: const TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.primary)),
+                      Text(
+                        badgeText,
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -785,13 +882,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white)),
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -800,29 +900,38 @@ class _HomeScreenState extends State<HomeScreen> {
                             : Icon(metaIcon, size: 13, color: Colors.white),
                         const SizedBox(width: 5),
                         Expanded(
-                          child: Text(metaText,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white.withValues(alpha: 0.9))),
+                          child: Text(
+                            metaText,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white.withValues(alpha: 0.9),
+                            ),
+                          ),
                         ),
                         if (trailing.isNotEmpty) ...[
                           const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 9, vertical: 3),
+                              horizontal: 9,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.white.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(999),
                               border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.3)),
+                                color: Colors.white.withValues(alpha: 0.3),
+                              ),
                             ),
-                            child: Text(trailing,
-                                style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white)),
+                            child: Text(
+                              trailing,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
                           ),
                         ],
                       ],
@@ -852,8 +961,10 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 22),
-                  child: SectionHead('Gezi Rotaları',
-                      onAll: () => openDiscoverRoutes(context)),
+                  child: SectionHead(
+                    'Gezi Rotaları',
+                    onAll: () => openDiscoverRoutes(context),
+                  ),
                 ),
                 const SizedBox(
                   height: 186,
@@ -862,7 +973,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       width: 26,
                       height: 26,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2.5, color: AppColors.primary),
+                        strokeWidth: 2.5,
+                        color: AppColors.primary,
+                      ),
                     ),
                   ),
                 ),
@@ -875,8 +988,10 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 22),
-              child: SectionHead('Gezi Rotaları',
-                  onAll: () => openDiscoverRoutes(context)),
+              child: SectionHead(
+                'Gezi Rotaları',
+                onAll: () => openDiscoverRoutes(context),
+              ),
             ),
             SizedBox(
               height: 186,
@@ -892,7 +1007,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                          builder: (_) => RouteDetailScreen(rotaId: r.id)),
+                        builder: (_) => RouteDetailScreen(rotaId: r.id),
+                      ),
                     ),
                   );
                 },
@@ -931,13 +1047,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       width: 26,
                       height: 26,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2.5, color: AppColors.primary),
+                        strokeWidth: 2.5,
+                        color: AppColors.primary,
+                      ),
                     ),
                   );
                 }
                 return const Center(
-                  child: Text('Şu an gösterilecek mekan yok',
-                      style: TextStyle(fontSize: 13, color: AppColors.muted)),
+                  child: Text(
+                    'Şu an gösterilecek mekan yok',
+                    style: TextStyle(fontSize: 13, color: AppColors.muted),
+                  ),
                 );
               }
               return ListView.separated(
@@ -1004,7 +1124,9 @@ class _RouteRailCard extends StatelessWidget {
                     bottom: 10,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.55),
                         borderRadius: BorderRadius.circular(999),
@@ -1012,14 +1134,20 @@ class _RouteRailCard extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const AppSvgIcon(AppIcons.heart,
-                              size: 11, color: Colors.white),
+                          const AppSvgIcon(
+                            AppIcons.heart,
+                            size: 11,
+                            color: Colors.white,
+                          ),
                           const SizedBox(width: 4),
-                          Text('${rota.begeniSayisi}',
-                              style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white)),
+                          Text(
+                            '${rota.begeniSayisi}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -1032,23 +1160,34 @@ class _RouteRailCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(rota.baslik.isEmpty ? 'Adsız rota' : rota.baslik,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 14.5, fontWeight: FontWeight.w600)),
+                  Text(
+                    rota.baslik.isEmpty ? 'Adsız rota' : rota.baslik,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   const SizedBox(height: 5),
                   Row(
                     children: [
-                      const AppSvgIcon(AppIcons.pin,
-                          size: 12, color: AppColors.primary),
+                      const AppSvgIcon(
+                        AppIcons.pin,
+                        size: 12,
+                        color: AppColors.primary,
+                      ),
                       const SizedBox(width: 6),
                       Expanded(
-                        child: Text('${rota.durakSayisi} durak',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 12, color: AppColors.muted)),
+                        child: Text(
+                          '${rota.durakSayisi} durak',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.muted,
+                          ),
+                        ),
                       ),
                     ],
                   ),

@@ -51,9 +51,12 @@ class HomeStore {
     cachedEvents = _read(_kEvents, FeaturedEvent.fromJson);
   }
 
+  /// Ana sayfa kategori vitrini — yalnızca öne çıkan kategoriler
+  /// (`/home-page-settings/one_cikan_kategoriler`). `/kategoriler` yedeğine
+  /// düşülmez; uç boşsa bölüm gizlenir.
   Future<List<Category>> categories() => _catF ??= _fetch(
         _kCategories,
-        () => HomeRepository.instance.kategoriler(),
+        () => HomeRepository.instance.oneCikanKategoriler(),
         (c) => c.toJson(),
         () => cachedCategories,
         (v) => cachedCategories = v,
