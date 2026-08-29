@@ -565,10 +565,18 @@ class _DetailScreenState extends State<DetailScreen> {
         _sectionH('Etkinlikler'),
         _eventsRail(d.etkinlikler),
       ],
-      // QR/Yol Tarifi kartı ile Bilgiler arasında çizgi yok, yalnız boşluk.
-      const SizedBox(height: 22),
-      _sectionH('Bilgiler'),
-      ..._infoRows(d),
+      // Bilgiler (çalışma saatleri / adres / iletişim) — hiçbiri yoksa başlık
+      // dahil bölüm hiç gösterilmez.
+      ...() {
+        final rows = _infoRows(d);
+        if (rows.isEmpty) return const <Widget>[];
+        return <Widget>[
+          // QR/Yol Tarifi kartı ile Bilgiler arasında çizgi yok, yalnız boşluk.
+          const SizedBox(height: 22),
+          _sectionH('Bilgiler'),
+          ...rows,
+        ];
+      }(),
       const SizedBox(height: 16),
       _reviewButton(),
       if (d.filtreler.isNotEmpty || d.ozellikler.isNotEmpty) ...[
@@ -576,23 +584,15 @@ class _DetailScreenState extends State<DetailScreen> {
         _sectionH('Olanaklar'),
         _olanaklar(d),
       ],
-      if (d.description.isNotEmpty) ...[
+      // "Hakkımızda" — işletmenin pro panelden girdiği tanıtım metni
+      // (`description`, ISLETME_HAKKIMIZDA.md). Boşsa bölüm hiç gösterilmez.
+      if (d.description.trim().isNotEmpty) ...[
         _divider(),
-        _sectionH('Hakkında'),
-        Text(d.description,
+        _sectionH('Hakkımızda'),
+        Text(d.description.trim(),
             style: const TextStyle(
                 fontSize: 14, height: 1.65, color: AppColors.muted)),
       ],
-      _divider(),
-      _sectionH('Hakkımızda'),
-      const Text(
-        'Gezgah, şehrin en iyi mekanlarını keşfetmeni sağlayan yerel bir rehberdir. '
-        'Restoranlardan kafelere, plajlardan mesire alanlarına kadar özenle seçilmiş '
-        'mekanları; güncel bilgileri, fotoğrafları ve kullanıcı deneyimleriyle bir '
-        'araya getiriyoruz. Amacımız, gitmek istediğin yeri kolayca bulman ve keyifli '
-        'bir deneyim yaşaman.',
-        style: TextStyle(fontSize: 14, height: 1.65, color: AppColors.muted),
-      ),
       if (_similar.isNotEmpty) ...[
         _divider(),
         _sectionH('Benzer Mekanlar'),
@@ -922,33 +922,25 @@ class _DetailScreenState extends State<DetailScreen> {
         onTap: () => _openHoursSheet(d)
       ));
     }
-    if (d.adres.isNotEmpty) {
+    if (d.adres.trim().isNotEmpty) {
       specs.add((
         icon: Icons.location_on_outlined,
         svg: AppIcons.pin,
         title: 'Adres',
-        value: d.adres,
+        value: d.adres.trim(),
         onTap: () => _openMaps(d)
       ));
     }
-    if (d.telefon.isNotEmpty) {
+    if (d.telefon.trim().isNotEmpty) {
       specs.add((
         icon: Icons.phone_outlined,
         svg: AppIcons.phone,
         title: 'İletişim',
-        value: d.telefon,
+        value: d.telefon.trim(),
         onTap: () => _callPhone(d.telefon)
       ));
     }
-    if (specs.isEmpty) {
-      specs.add((
-        icon: Icons.info_outline,
-        svg: null,
-        title: 'Bilgi',
-        value: 'Bu mekan için ek bilgi girilmemiş.',
-        onTap: null
-      ));
-    }
+    // Hiç bilgi yoksa boş liste döner → "Bilgiler" bölümü hiç gösterilmez.
     // Son satırda alt çizgi olmasın.
     return [
       for (var i = 0; i < specs.length; i++)
