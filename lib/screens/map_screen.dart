@@ -7,6 +7,7 @@ import '../data/home_config.dart';
 import '../data/location_service.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
 import 'detail_screen.dart';
 
@@ -19,9 +20,38 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
+/// Haritada gösterilecek mekan tipi (KATEGORI_TIP_BAZLI.md).
+/// Kategori çipleri ve pinler bu seçime göre değişir.
+enum _MapType { mekan, otopark, mesire, plaj }
+
+extension _MapTypeX on _MapType {
+  /// API'deki post type slug'ı.
+  String get slug => switch (this) {
+        _MapType.mekan => 'restoran',
+        _MapType.otopark => 'otopark',
+        _MapType.mesire => 'mesire',
+        _MapType.plaj => 'plaj',
+      };
+
+  String get label => switch (this) {
+        _MapType.mekan => 'Mekan',
+        _MapType.otopark => 'Otopark',
+        _MapType.mesire => 'Mesire',
+        _MapType.plaj => 'Plaj',
+      };
+
+  IconData get icon => switch (this) {
+        _MapType.mekan => Icons.restaurant_outlined,
+        _MapType.otopark => Icons.local_parking_outlined,
+        _MapType.mesire => Icons.park_outlined,
+        _MapType.plaj => Icons.beach_access_outlined,
+      };
+}
+
 class _MapScreenState extends State<MapScreen> {
   GoogleMapController? _controller;
   int _activeCat = 0; // 0 = Tümü, 1.. = _cats[i-1]
+  _MapType _type = _MapType.mekan; // varsayılan: Mekan
   ApiPlace? _selected;
   Set<Marker> _markers = {};
 
@@ -66,22 +96,7 @@ class _MapScreenState extends State<MapScreen> {
       if (mounted) setState(() => _myLocation = true);
       _goToUser(); // harita hazırsa konuma git
     }
-    // Kategoriler (ana sayfayla aynı kaynak). `mekan_sayisi` alanı yalnız bazı
-    // uçlarda gelir (öne çıkan kategoriler ucu döndürmez). Sayı bilgisi olan
-    // kategori varsa ona göre süz + en çok mekana göre sırala; yoksa (öne çıkan
-    // veri) kategorileri olduğu gibi öne çıkan sırasıyla göster.
-    try {
-      final all = await HomeRepository.instance.kategoriler();
-      final withCount = all.where((c) => c.mekanSayisi > 0).toList();
-      if (withCount.isNotEmpty) {
-        withCount.sort((a, b) => b.mekanSayisi.compareTo(a.mekanSayisi));
-        _cats = withCount;
-      } else {
-        _cats = all;
-      }
-    } catch (_) {
-      _cats = const [];
-    }
+    await _loadCategories();
     // Kategori sayfasından gelindiyse o kategoriyi seçili yap.
     final wantId = widget.initialCategoryId;
     if (wantId != null) {
@@ -104,6 +119,115 @@ class _MapScreenState extends State<MapScreen> {
     _updateLabel();
   }
 
+  /// Seçili tipe ait kategori çiplerini yükler.
+  ///
+  /// Mekan (restoran) tipinde ana sayfayla aynı kaynak kullanılır (öne çıkan
+  /// kategoriler; ikonları HomeConfig'te tanımlı). Diğer tiplerde
+  /// `GET /kategoriler/tip/{type}` kullanılır — plaj/mesire'de boş döner ve
+  /// çip barı hiç gösterilmez (KATEGORI_TIP_BAZLI.md).
+  Future<void> _loadCategories() async {
+    try {
+      if (_type == _MapType.mekan) {
+        final all = await HomeRepository.instance.kategoriler();
+        // `mekan_sayisi` yalnız bazı uçlarda gelir (öne çıkan kategoriler ucu
+        // döndürmez). Sayı bilgisi olan varsa ona göre süz + sırala.
+        final withCount = all.where((c) => c.mekanSayisi > 0).toList();
+        if (withCount.isNotEmpty) {
+          withCount.sort((a, b) => b.mekanSayisi.compareTo(a.mekanSayisi));
+          _cats = withCount;
+        } else {
+          _cats = all;
+        }
+      } else {
+        // Uç zaten `mekan_sayisi` azalan sıralı döner.
+        _cats = await HomeRepository.instance.kategorilerTip(_type.slug);
+      }
+    } catch (_) {
+      _cats = const [];
+    }
+  }
+
+  /// Tip seçimi değişti: kategorileri ve harita pinlerini yenile.
+  Future<void> _changeType(_MapType t) async {
+    if (t == _type) return;
+    setState(() {
+      _type = t;
+      _activeCat = 0;
+      _cats = const [];
+      _selected = null;
+    });
+    await _loadCategories();
+    if (!mounted) return;
+    setState(() {});
+    await _loadPlaces();
+  }
+
+  /// Mekan tipi seçim sheet'i (Mekan / Otopark / Mesire / Plaj).
+  void _openTypeSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: AppColors.line,
+                    borderRadius: BorderRadius.circular(999)),
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 14, 20, 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Göster',
+                      style:
+                          TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                ),
+              ),
+              for (final t in _MapType.values)
+                Column(
+                  children: [
+                    ListTile(
+                      leading: Icon(t.icon,
+                          color: t == _type
+                              ? AppColors.primary
+                              : AppColors.muted),
+                      title: Text(t.label,
+                          style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: t == _type
+                                  ? AppColors.primary
+                                  : AppColors.ink)),
+                      trailing: t == _type
+                          ? const Icon(Icons.check, color: AppColors.primary)
+                          : null,
+                      onTap: () {
+                        Navigator.pop(sheetCtx);
+                        _changeType(t);
+                      },
+                    ),
+                    if (t != _MapType.values.last)
+                      const Divider(
+                          height: 1, thickness: 1, color: AppColors.line),
+                  ],
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   int? get _activeCategoryId =>
       _activeCat == 0 ? null : _cats[_activeCat - 1].id;
 
@@ -119,8 +243,11 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _loadPlaces() async {
-    final places =
-        await HomeRepository.instance.harita(kategori: _activeCategoryId);
+    // Mekan (restoran) tipinde `type` gönderilmez → sunucu varsayılanı korunur.
+    final places = await HomeRepository.instance.harita(
+      kategori: _activeCategoryId,
+      type: _type == _MapType.mekan ? null : _type.slug,
+    );
     if (!mounted) return;
     setState(() {
       _places = places;
@@ -330,6 +457,24 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ),
             ),
+            const SizedBox(width: 12),
+            // Mekan tipi seçimi (Mekan / Otopark / Mesire / Plaj).
+            GestureDetector(
+              onTap: _openTypeSheet,
+              child: Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white,
+                  boxShadow: AppShadows.soft,
+                ),
+                child: const Center(
+                  child: AppSvgIcon(AppIcons.filter,
+                      size: 17, color: AppColors.primary),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -337,6 +482,8 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Widget _categoryPills() {
+    // Bu tipte kategori ataması yoksa (plaj/mesire) çip barını hiç gösterme.
+    if (_cats.isEmpty) return const SizedBox.shrink();
     // 0 = Tümü, sonrakiler _cats.
     final count = _cats.length + 1;
     return Positioned(
@@ -452,6 +599,9 @@ class _MapScreenState extends State<MapScreen> {
                                       place: p.toPlace(
                                           subtitle:
                                               loc.isNotEmpty ? loc : 'Konum'),
+                                      type: _type == _MapType.mekan
+                                          ? null
+                                          : _type.slug,
                                       heroTag:
                                           p.id > 0 ? 'map-${p.id}' : null))),
                           child: Container(

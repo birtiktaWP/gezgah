@@ -133,10 +133,22 @@ class _CategoryScreenState extends State<CategoryScreen> {
     // Type modu: kategori değil post type listesi (GET /yerler?type=).
     if (type != null) {
       try {
-        final r = await HomeRepository.instance.yerler(type, limit: 20);
+        // Tipe ait filtreler paralel çekilir (FILTRELER_TIP_BAZLI.md).
+        // Not: `meta.ozellikler` tipe göre süzülmediği ve restoran odaklı
+        // olduğu için otopark/plaj/mesire'de özellik grubu gösterilmez.
+        final results = await Future.wait([
+          HomeRepository.instance.yerler(type, limit: 20),
+          HomeRepository.instance.filtreler(type: type),
+        ]);
+        final r = results[0]
+            as ({List<Place> items, bool hasMore, int? nextPage, int total});
+        final f =
+            results[1] as ({List<Filter> filtreler, List<Filter> ozellikler});
         if (!mounted) return;
         setState(() {
           _loading = false;
+          _filters = f.filtreler;
+          _ozellikler = const [];
           _places = List<Place>.from(r.items);
           _total = r.total;
           _hasMore = r.hasMore;
@@ -257,6 +269,23 @@ class _CategoryScreenState extends State<CategoryScreen> {
   bool get _hasActiveFilter =>
       _selectedFilters.isNotEmpty || _selectedOzellikler.isNotEmpty;
 
+  /// Süzme istemci tarafında yalnız yüklenmiş kayıtlara uygulandığı için,
+  /// filtreli sonuç ekranı doldurmuyorsa sonraki sayfalar otomatik çekilir.
+  /// Aksi halde liste kaydırılamaz ve `_loadMore` hiç tetiklenmez.
+  Future<void> _fillFilteredResults() async {
+    var guard = 0; // en fazla 5 ek sayfa (100 kayıt) — istek yağmuru olmasın
+    while (mounted &&
+        _hasActiveFilter &&
+        _hasMore &&
+        _visiblePlaces.length < 10 &&
+        guard < 5) {
+      guard++;
+      final before = _places.length;
+      await _loadMore();
+      if (!mounted || _places.length == before) break; // ilerleme yoksa dur
+    }
+  }
+
   bool _matchesFilters(Place p) {
     if (!_hasActiveFilter) return true;
     // AND mantığı: tüm seçili filtre + tüm seçili özellik id'leri mekanda olmalı.
@@ -293,6 +322,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
           ..clear()
           ..addAll(result.ozellikler);
       });
+      _fillFilteredResults();
     }
   }
 
@@ -369,7 +399,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
     Navigator.push(
         context,
         MaterialPageRoute(
-            builder: (_) => DetailScreen(place: p, heroTag: heroTag)));
+            builder: (_) => DetailScreen(
+                place: p, heroTag: heroTag, type: widget.type)));
   }
 
   @override
@@ -595,7 +626,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
               GestureDetector(
                   onTap: _openSortSheet,
                   child: _actBtn(Icons.swap_vert, svg: AppIcons.sort)),
-              // Filtre/özellik yoksa (ör. type modu) filtre butonunu gizle.
+              // Bu liste için hiç filtre/özellik yoksa butonu gizle.
               if (_filters.isNotEmpty || _ozellikler.isNotEmpty) ...[
                 const SizedBox(width: 8),
                 GestureDetector(
@@ -636,13 +667,16 @@ class _CategoryScreenState extends State<CategoryScreen> {
         children: [
           for (final c in chips)
             GestureDetector(
-              onTap: () => setState(() {
-                if (c.ozellik) {
-                  _selectedOzellikler.remove(c.id);
-                } else {
-                  _selectedFilters.remove(c.id);
-                }
-              }),
+              onTap: () {
+                setState(() {
+                  if (c.ozellik) {
+                    _selectedOzellikler.remove(c.id);
+                  } else {
+                    _selectedFilters.remove(c.id);
+                  }
+                });
+                _fillFilteredResults();
+              },
               child: Container(
                 padding: const EdgeInsets.fromLTRB(12, 7, 9, 7),
                 decoration: BoxDecoration(

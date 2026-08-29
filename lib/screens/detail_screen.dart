@@ -33,7 +33,13 @@ class DetailScreen extends StatefulWidget {
   /// gönderilmelidir (aksi halde animasyon oynamaz, hata olmaz).
   final Object? heroTag;
 
-  const DetailScreen({super.key, required this.place, this.heroTag});
+  /// Bilinen post type'ı (`otopark` | `muze` | `mesire` | `plaj`). Liste
+  /// ekranından geçilirse detay yüklenmeden de doğru düzen kurulur; verilmezse
+  /// detay yanıtındaki `type` kullanılır.
+  final String? type;
+
+  const DetailScreen(
+      {super.key, required this.place, this.heroTag, this.type});
 
   @override
   State<DetailScreen> createState() => _DetailScreenState();
@@ -180,6 +186,12 @@ class _DetailScreenState extends State<DetailScreen> {
   /// yoksa liste kartından gelen `verified` (MEKAN_DOGRULAMA.md).
   bool get _verified => _detail?.dogrulanmis ?? widget.place.verified;
 
+  /// Otopark mı? Otoparklarda görsel (hero) alanı hiç gösterilmez.
+  bool get _isOtopark {
+    final t = widget.type ?? _detail?.type ?? '';
+    return t == 'otopark';
+  }
+
   String get _typeLabel {
     final t = _detail?.type ?? '';
     return switch (t) {
@@ -324,16 +336,23 @@ class _DetailScreenState extends State<DetailScreen> {
             controller: _scroll,
             padding: EdgeInsets.zero,
             children: [
-              _hero(),
+              // Otoparkta görsel alanı yok; üst butonlar için güvenli boşluk.
+              if (_isOtopark)
+                SizedBox(height: MediaQuery.of(context).padding.top + 62)
+              else
+                _hero(),
               Transform.translate(
-                offset: const Offset(0, -22),
+                offset: Offset(0, _isOtopark ? 0 : -22),
                 child: Container(
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: AppColors.bg,
-                    borderRadius:
-                        BorderRadius.vertical(top: Radius.circular(24)),
+                    borderRadius: _isOtopark
+                        ? null
+                        : const BorderRadius.vertical(
+                            top: Radius.circular(24)),
                   ),
-                  padding: EdgeInsets.fromLTRB(22, 22, 22, tabbarSpace),
+                  padding: EdgeInsets.fromLTRB(22, _isOtopark ? 0 : 22, 22,
+                      tabbarSpace),
                   child: _body(),
                 ),
               ),
@@ -721,7 +740,7 @@ class _DetailScreenState extends State<DetailScreen> {
           const AppSvgIcon(AppIcons.directions,
               size: 19, color: AppColors.primary),
           'Yol Tarifi',
-          () {}));
+          () => _openDirections(d)));
     }
     final hasActions = actions.isNotEmpty;
     // Özellikler (ozellikler) artık "Olanaklar" bölümünde gösteriliyor.
@@ -994,6 +1013,14 @@ class _DetailScreenState extends State<DetailScreen> {
     );
   }
 
+  /// Kısa bilgi mesajı gösterir.
+  void _snack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+          content: Text(message), duration: const Duration(seconds: 2)),
+    );
+  }
+
   /// Değeri panoya kopyalar ve kısa bir bilgi gösterir.
   void _copy(String value, String label) {
     Clipboard.setData(ClipboardData(text: value));
@@ -1023,6 +1050,24 @@ class _DetailScreenState extends State<DetailScreen> {
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
         mounted) {
       _copy(d.adres, 'Adres');
+    }
+  }
+
+  /// "Yol Tarifi" — mekanın konumuna navigasyon başlatır. Koordinat varsa onu,
+  /// yoksa adres metnini hedef alır. Harita uygulaması açılamazsa uyarı verir.
+  Future<void> _openDirections(PlaceDetail d) async {
+    final dest = d.hasCoord ? '${d.lat},${d.lng}' : d.adres.trim();
+    if (dest.isEmpty) {
+      if (mounted) _snack('Bu mekan için konum bilgisi yok.');
+      return;
+    }
+    final uri = Uri.parse(
+        'https://www.google.com/maps/dir/?api=1&destination=${Uri.encodeComponent(dest)}');
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) _snack('Harita uygulaması açılamadı.');
+    } catch (_) {
+      if (mounted) _snack('Harita uygulaması açılamadı.');
     }
   }
 

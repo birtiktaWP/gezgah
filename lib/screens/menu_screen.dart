@@ -268,21 +268,18 @@ class _MenuScreenState extends State<MenuScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: SizedBox(
-              width: 96,
-              height: 96,
-              child: u.gorsel.isNotEmpty
-                  ? NetImage(u.gorsel)
-                  : Container(
-                      color: AppColors.primarySoft,
-                      child: const Icon(Icons.restaurant_menu,
-                          color: AppColors.primary, size: 28),
-                    ),
+          // Görseli olmayan ürünlerde görsel alanı hiç çizilmez.
+          if (u.gorsel.isNotEmpty) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: SizedBox(
+                width: 96,
+                height: 96,
+                child: NetImage(u.gorsel),
+              ),
             ),
-          ),
-          const SizedBox(width: 14),
+            const SizedBox(width: 14),
+          ],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

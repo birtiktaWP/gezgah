@@ -723,6 +723,11 @@ class ApiPlace {
   final bool verified; // ERP doğrulama (dogrulanmis) — mavi tik
   final List<int> categoryIds;
 
+  /// Mekanda aktif filtre id'leri (`filtre_ids`) ve özellik id'leri
+  /// (`ozellik_ids`) — istemci tarafı süzme için (FILTRELER_TIP_BAZLI.md).
+  final List<int> filterIds;
+  final List<int> ozellikIds;
+
   /// API'den gelen işletmeye özel harita ikonu anahtarı (`custom_ikon`).
   /// Doluysa haritada bu ikon (app içindeki setten) gösterilir; boşsa kategori
   /// ikonuna düşülür.
@@ -744,6 +749,8 @@ class ApiPlace {
     this.ilce = '',
     this.verified = false,
     this.categoryIds = const [],
+    this.filterIds = const [],
+    this.ozellikIds = const [],
     this.customIcon = '',
     this.thumbnail,
     this.thumbSquare,
@@ -785,6 +792,8 @@ class ApiPlace {
         lng: lng ?? 28.9784,
         tags: const ['restoran'],
         verified: verified,
+        filterIds: filterIds,
+        ozellikIds: ozellikIds,
         thumbnail: thumbnail,
         thumbSquare: thumbSquare,
         thumbCard: thumbCard,
@@ -921,6 +930,38 @@ class HomeRepository {
     _categoriesAt = DateTime.now();
     return list;
   }
+
+  /// Mekan tipinde fiilen kullanılan kategoriler (`GET /kategoriler/tip/{type}`,
+  /// KATEGORI_TIP_BAZLI.md). `mekan_sayisi` azalan sıralı gelir; plaj/mesire/muze
+  /// için boş liste döner (o tiplerde ayrım filtrelerle yapılır).
+  Future<List<Category>> kategorilerTip(String type) async {
+    if (type.isEmpty) return const [];
+    final cached = _tipCache[type];
+    final at = _tipAt[type];
+    if (cached != null && at != null && DateTime.now().difference(at) < _ttl) {
+      return cached;
+    }
+    try {
+      final res = await _dio.get('/kategoriler/tip/$type');
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return const [];
+      final data = body['data'];
+      if (data is! List) return const [];
+      final list = data
+          .whereType<Map<String, dynamic>>()
+          .map(Category.fromJson)
+          .where((c) => c.id > 0)
+          .toList();
+      _tipCache[type] = list;
+      _tipAt[type] = DateTime.now();
+      return list;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  final Map<String, List<Category>> _tipCache = {};
+  final Map<String, DateTime> _tipAt = {};
 
   /// Tüm kategoriler + parent ilişkileri (`GET /kategoriler/agac`,
   /// yeni-endpoints.md). Her kayıtta `icon` (SVG) ve `mekan_sayisi` bulunur.
@@ -1406,6 +1447,9 @@ class HomeRepository {
         image: ap.image,
         lat: ap.lat ?? double.nan,
         lng: ap.lng ?? double.nan,
+        verified: ap.verified,
+        filterIds: ap.filterIds,
+        ozellikIds: ap.ozellikIds,
         thumbnail: ap.thumbnail,
         thumbSquare: ap.thumbSquare,
         thumbCard: ap.thumbCard,
@@ -1950,6 +1994,16 @@ class HomeRepository {
       verified: j['dogrulanmis'] == true,
       categoryIds: (j['kategori_ids'] as List<dynamic>?)
               ?.map((e) => (e as num).toInt())
+              .toList() ??
+          const [],
+      filterIds: (j['filtre_ids'] as List<dynamic>?)
+              ?.whereType<num>()
+              .map((e) => e.toInt())
+              .toList() ??
+          const [],
+      ozellikIds: (j['ozellik_ids'] as List<dynamic>?)
+              ?.whereType<num>()
+              .map((e) => e.toInt())
               .toList() ??
           const [],
       customIcon: (j['custom_ikon'] as String?)?.trim() ?? '',
