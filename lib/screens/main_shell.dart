@@ -2,10 +2,12 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import '../data/auth_service.dart';
+import '../data/consent_service.dart';
 import '../data/models.dart';
 import '../navigation/main_nav.dart';
 import '../theme/app_theme.dart';
 import '../widgets/category_sheet.dart';
+import '../widgets/consent_sheet.dart';
 import '../widgets/kedy_chat.dart';
 import '../widgets/notifications_modal.dart';
 import '../widgets/search_modal.dart';
@@ -29,6 +31,7 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _index = 0;
   bool _kedyOpen = false;
+  bool _consentOpen = false; // sözleşme onay paneli açık mı
 
   @override
   void initState() {
@@ -37,6 +40,22 @@ class _MainShellState extends State<MainShell> {
     MainNav.instance.attach(_selectTab);
     // Oturum kapanırsa Hesabım sekmesinde kalınmasın.
     AuthService.instance.user.addListener(_onAuthChanged);
+    // Açılışta oturum geri geldiyse sözleşme onayını kontrol et.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkConsent());
+  }
+
+  /// Üye girişliyse sözleşme onayını kontrol eder; onaylanmamışsa kapatılamayan
+  /// onay panelini açar (onaylanmadan uygulama kullanılamaz).
+  Future<void> _checkConsent() async {
+    final u = AuthService.instance.user.value;
+    await ConsentService.instance.load(u?.id);
+    if (!mounted || _consentOpen) return;
+    if (ConsentService.instance.accepted.value) return;
+    _consentOpen = true;
+    await showConsentSheet(context);
+    _consentOpen = false;
+    // Onaylanmadan kapandıysa (beklenmeyen durum) tekrar sor.
+    if (mounted && !ConsentService.instance.accepted.value) _checkConsent();
   }
 
   @override
@@ -57,6 +76,12 @@ class _MainShellState extends State<MainShell> {
     if (!mounted) return;
     if (!AuthService.instance.isLoggedIn && _index == 4) {
       setState(() => _index = 0);
+    }
+    if (AuthService.instance.isLoggedIn) {
+      // Yeni giriş: sözleşme onayı alınmamışsa panel açılır.
+      _checkConsent();
+    } else {
+      ConsentService.instance.clear();
     }
   }
 

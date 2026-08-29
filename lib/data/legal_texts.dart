@@ -10,6 +10,28 @@ class LegalSection {
   const LegalSection({this.heading, this.paragraphs = const []});
 }
 
+/// Veri sorumlusu / hizmet sağlayıcı künyesi. Tüm metinlerde aynı bilgiler
+/// kullanılır; değişiklik gerektiğinde yalnız burası güncellenir.
+class LegalInfo {
+  LegalInfo._();
+
+  static const String unvan = 'Ömer Çelik';
+  static const String vergiNo = '2390997498';
+  static const String adres = 'Merkez Mah.';
+  static const String destekEposta = 'destek@gezgah.com';
+  static const String kvkkEposta = 'info@gezgah.com';
+}
+
+/// Onay ekranında (ilk giriş) kullanıcıya sunulan sözleşme başlıkları.
+/// Sıra, onay sheet'indeki gösterim sırasıdır.
+const List<String> kOnayGerekenSozlesmeler = [
+  'KVKK Aydınlatma Metni',
+  'Gizlilik Politikası',
+  'Çerez Politikası',
+  'İade ve Cayma Hakkı Sözleşmesi',
+  'Kullanıcı Sözleşmesi',
+];
+
 /// Başlık → bölümler eşlemesi. Anahtar, Sözleşmeler listesindeki başlıkla aynı.
 const Map<String, List<LegalSection>> kLegalTexts = {
   'Açık Rıza Metni': [
@@ -121,6 +143,11 @@ const Map<String, List<LegalSection>> kLegalTexts = {
         'Bu politika, KVKK Aydınlatma Metni\u2019nin yerine geçmez. KVKK '
             'kapsamındaki ayrıntılı veri işleme bilgileri için ayrıca '
             '\u201cGezgah KVKK Aydınlatma Metni\u201d incelenmelidir.',
+        '**Veri sorumlusu:** Ömer Çelik\n'
+            '**Vergi numarası:** 2390997498\n'
+            '**Adres:** Merkez Mah.\n'
+            '**Destek e-postası:** destek@gezgah.com\n'
+            '**KVKK başvuru e-postası:** info@gezgah.com',
       ],
     ),
     LegalSection(
@@ -274,9 +301,9 @@ const Map<String, List<LegalSection>> kLegalTexts = {
     LegalSection(
       heading: '1. Taraflar ve kabul',
       paragraphs: [
-        'İşbu Kullanıcı Sözleşmesi (\u201cSözleşme\u201d), [ŞİRKET/ŞAHIS '
-            'İŞLETMESİ ÜNVANI] (\u201cGezgah\u201d, \u201cŞirket\u201d, '
-            '\u201cbiz\u201d) ile Gezgah mobil uygulamasını, web sitesini ve '
+        'İşbu Kullanıcı Sözleşmesi (\u201cSözleşme\u201d), **Ömer Çelik** '
+            '(\u201cGezgah\u201d, \u201cbiz\u201d) ile '
+            'Gezgah mobil uygulamasını, web sitesini ve '
             'bunlara bağlı hizmetleri kullanan gerçek kişiler '
             '(\u201cKullanıcı\u201d, \u201csiz\u201d) arasında düzenlenmiştir. '
             'Kullanıcı; uygulamaya üye olarak, uygulamayı kullanarak, '
@@ -286,6 +313,10 @@ const Map<String, List<LegalSection>> kLegalTexts = {
             'temsilcisinin gözetimi ve onayıyla kullanmalıdır. Rezervasyon, '
             'depozito, ödeme veya hukuki işlem doğuran işlemler yalnızca fiil '
             'ehliyetine sahip kullanıcılar tarafından yapılmalıdır.',
+        '**Hizmet sağlayıcı:** Ömer Çelik\n'
+            '**Vergi numarası:** 2390997498\n'
+            '**Adres:** Merkez Mah.\n'
+            '**Destek e-postası:** destek@gezgah.com',
       ],
     ),
     LegalSection(
@@ -624,7 +655,12 @@ const Map<String, List<LegalSection>> kLegalTexts = {
       paragraphs: [
         '6698 sayılı Kişisel Verilerin Korunması Kanunu (\u201cKVKK\u201d) '
             'kapsamında kişisel verileriniz veri sorumlusu sıfatıyla '
-            '[ŞİRKET/ŞAHIS İŞLETMESİ ÜNVANI] tarafından işlenmektedir.',
+            '**Ömer Çelik** tarafından işlenmektedir.',
+        '**Veri sorumlusu:** Ömer Çelik\n'
+            '**Vergi numarası:** 2390997498\n'
+            '**Adres:** Merkez Mah.\n'
+            '**KVKK başvuru e-postası:** info@gezgah.com\n'
+            '**Destek e-postası:** destek@gezgah.com',
       ],
     ),
     LegalSection(
@@ -741,8 +777,9 @@ const Map<String, List<LegalSection>> kLegalTexts = {
     LegalSection(
       heading: '9. Başvuru yöntemi',
       paragraphs: [
-        'KVKK kapsamındaki taleplerinizi [hukuk/kvkk e-posta adresi] adresine '
-            'veya [ticari adres] adresine yazılı olarak iletebilirsiniz. '
+        'KVKK kapsamındaki taleplerinizi **info@gezgah.com** adresine '
+            'veya **Merkez Mah.** adresine (Veri sorumlusu: Ömer Çelik, '
+            'vergi numarası: 2390997498) yazılı olarak iletebilirsiniz. '
             'Başvuruda ad, soyad, iletişim bilgisi, talep konusu ve '
             'kimliğinizi doğrulamaya yarayacak bilgiler bulunmalıdır. Gezgah '
             'başvuruları mevzuatta öngörülen sürelerde sonuçlandırır. Talep '
@@ -757,6 +794,185 @@ const Map<String, List<LegalSection>> kLegalTexts = {
             'üçüncü taraf sağlayıcılar, hukuki sebepler veya mevzuat '
             'değişiklikleri nedeniyle güncellenebilir. Önemli değişiklikler '
             'kullanıcıya uygun yöntemlerle duyurulur.',
+      ],
+    ),
+  ],
+  'Çerez Politikası': [
+    LegalSection(
+      heading: '1. Genel açıklama',
+      paragraphs: [
+        'Bu Çerez Politikası, Gezgah mobil uygulaması ve web sitelerinde '
+            'kullanılan çerez ve benzeri teknolojiler (yerel depolama, cihaz '
+            'tanımlayıcıları, yazılım geliştirme kitleri) hakkında bilgi verir.',
+        '**Veri sorumlusu:** Ömer Çelik\n'
+            '**Vergi numarası:** 2390997498\n'
+            '**Adres:** Merkez Mah.\n'
+            '**Destek e-postası:** destek@gezgah.com\n'
+            '**KVKK başvuru e-postası:** info@gezgah.com',
+        'Mobil uygulamada klasik tarayıcı çerezleri yerine ağırlıklı olarak '
+            'cihaz üzerinde yerel depolama (ör. oturum ve cihaz token\u2019ı, '
+            'tercih ve önbellek kayıtları) kullanılır. Bu metinde \u201cçerez\u201d '
+            'ifadesi bu benzer teknolojileri de kapsar.',
+      ],
+    ),
+    LegalSection(
+      heading: '2. Çerez türleri ve kullanım amaçları',
+      paragraphs: [
+        '**Zorunlu (teknik) çerezler:** Oturum açma, cihaz doğrulama, güvenlik, '
+            'hız sınırlama ve temel uygulama işlevlerinin çalışması için '
+            'gereklidir. Bunlar olmadan uygulama çalışmaz; bu nedenle rızaya '
+            'tabi değildir.',
+        '**Tercih çerezleri:** Dil, konum izni durumu, favoriler, arama '
+            'geçmişi, sözleşme onayı gibi tercihlerinizin hatırlanmasını '
+            'sağlar.',
+        '**Performans ve analiz çerezleri:** Hangi ekranların kullanıldığı, '
+            'hata ve çökme kayıtları, uygulama performansı gibi toplu ve '
+            'istatistiki bilgilerin ölçülmesine yardımcı olur.',
+        '**Pazarlama ve kişiselleştirme çerezleri:** Kampanya, sponsorlu mekan '
+            've öneri içeriklerinin ilgi alanlarınıza göre sunulmasında '
+            'kullanılabilir. Bu kategori açık rızanıza tabidir.',
+      ],
+    ),
+    LegalSection(
+      heading: '3. Üçüncü taraf teknolojileri',
+      paragraphs: [
+        'Uygulamada harita ve konum hizmetleri, uygulama mağazası abonelik '
+            'altyapısı, bulut barındırma, bildirim gönderimi ve yapay zeka '
+            'asistanı gibi işlevler için üçüncü taraf hizmet sağlayıcıları '
+            'kullanılabilir. Bu sağlayıcılar kendi çerez ve tanımlayıcı '
+            'politikalarını uygulayabilir.',
+        'Üçüncü taraf sağlayıcıların veri işleme faaliyetleri kendi gizlilik '
+            've çerez politikalarına tabidir. Gezgah, bu sağlayıcılarla '
+            'paylaşımı hizmetin gerektirdiği ölçüde ve mevzuata uygun şekilde '
+            'gerçekleştirir.',
+      ],
+    ),
+    LegalSection(
+      heading: '4. Çerezlerin yönetimi',
+      paragraphs: [
+        'Cihaz ayarlarından konum, bildirim ve reklam tanımlayıcısı izinlerini '
+            'dilediğiniz zaman değiştirebilirsiniz. Uygulama içi ayarlardan '
+            'bildirim ve kişiselleştirme tercihlerinizi güncelleyebilir, açık '
+            'rızalarınızı geri alabilirsiniz.',
+        'Uygulamayı cihazınızdan kaldırdığınızda uygulama tarafından cihazınıza '
+            'yazılmış yerel kayıtlar silinir. Zorunlu teknik kayıtların '
+            'kapatılması uygulamanın çalışmasını engelleyebilir.',
+        'Web sitelerimizde tarayıcı ayarlarından çerezleri silebilir veya '
+            'engelleyebilirsiniz; bu durumda bazı işlevler sınırlı çalışabilir.',
+      ],
+    ),
+    LegalSection(
+      heading: '5. Saklama süresi',
+      paragraphs: [
+        'Çerez ve yerel kayıtlar, kullanım amacının gerektirdiği süre boyunca '
+            've mevzuatta öngörülen saklama süreleri saklı kalmak kaydıyla '
+            'tutulur. Oturum bilgileri oturum süresince, tercih kayıtları siz '
+            'değiştirene veya uygulamayı kaldırana kadar saklanır.',
+      ],
+    ),
+    LegalSection(
+      heading: '6. Haklarınız ve iletişim',
+      paragraphs: [
+        'KVKK kapsamındaki haklarınız ve çerezlere ilişkin sorularınız için '
+            '**info@gezgah.com** adresine başvurabilir, destek talepleriniz '
+            'için **destek@gezgah.com** adresine yazabilirsiniz.',
+        'Bu politika, uygulama özellikleri veya mevzuat değişiklikleri '
+            'nedeniyle güncellenebilir. Güncel metin her zaman uygulama '
+            'içinden erişilebilir.',
+      ],
+    ),
+  ],
+  'İade ve Cayma Hakkı Sözleşmesi': [
+    LegalSection(
+      heading: '1. Hizmet sağlayıcı bilgileri',
+      paragraphs: [
+        'Bu metin, Gezgah uygulaması üzerinden sunulan dijital içerik ve '
+            'abonelik hizmetlerine ilişkin iade ve cayma hakkı koşullarını '
+            'düzenler.',
+        '**Hizmet sağlayıcı:** Ömer Çelik\n'
+            '**Vergi numarası:** 2390997498\n'
+            '**Adres:** Merkez Mah.\n'
+            '**Destek e-postası:** destek@gezgah.com',
+      ],
+    ),
+    LegalSection(
+      heading: '2. Hizmetin niteliği',
+      paragraphs: [
+        'Gezgah Plus, uygulama içinden satın alınan **dijital içerik ve '
+            'abonelik** hizmetidir. Fiziksel ürün satışı, kargo veya teslimat '
+            'söz konusu değildir. Abonelik, satın alma işleminin tamamlanmasıyla '
+            'birlikte anında kullanıma açılır.',
+        'Abonelik süresi ve ücreti satın alma ekranında ve uygulama mağazası '
+            'üzerinden gösterilir. Abonelik, iptal edilmediği sürece dönem '
+            'sonunda otomatik olarak yenilenir.',
+      ],
+    ),
+    LegalSection(
+      heading: '3. Ödemenin tahsili ve satış kanalı',
+      paragraphs: [
+        'iOS cihazlarda abonelik bedeli **Apple App Store**, Android '
+            'cihazlarda **Google Play** üzerinden tahsil edilir. Ödeme, iade ve '
+            'iptal işlemleri ilgili uygulama mağazasının kendi kuralları ve '
+            'kullanıcı sözleşmeleri kapsamında yürütülür.',
+        'Gezgah, mağaza üzerinden yapılan tahsilatlarda ödeme bilgilerinize '
+            '(kart numarası vb.) erişmez.',
+      ],
+    ),
+    LegalSection(
+      heading: '4. Cayma hakkı ve istisnası',
+      paragraphs: [
+        'Mesafeli Sözleşmeler Yönetmeliği uyarınca, elektronik ortamda anında '
+            'ifa edilen hizmetler ile tüketiciye anında teslim edilen gayri '
+            'maddi mallara ilişkin sözleşmelerde **cayma hakkı '
+            'bulunmamaktadır**.',
+        'Gezgah Plus aboneliği satın alma anında anında kullanıma açıldığından, '
+            'kullanıma başlanmış dönem için cayma hakkı kural olarak '
+            'uygulanmaz. Bu durumu satın alma sırasında onaylamış sayılırsınız.',
+        'Buna karşın, aşağıdaki hallerde talebiniz değerlendirilerek iade '
+            'yapılabilir: hizmetin teknik bir arıza nedeniyle hiç '
+            'sunulamaması, mükerrer (çift) tahsilat veya hatalı tahsilat.',
+      ],
+    ),
+    LegalSection(
+      heading: '5. İade talebi ve süreç',
+      paragraphs: [
+        'İade talepleri öncelikle satın almanın yapıldığı uygulama mağazası '
+            'üzerinden iletilmelidir. Apple App Store için "Satın alımları '
+            'bildir" (reportaproblem.apple.com), Google Play için mağaza '
+            'içindeki iade akışı kullanılır. Nihai iade kararı ilgili mağazaya '
+            'aittir.',
+        'Mağaza sürecine ek olarak **destek@gezgah.com** adresine '
+            'yazabilirsiniz. Talebinizde kullanılan hesap bilgisi, satın alma '
+            'tarihi ve mağaza işlem/makbuz numarasını iletmeniz süreci '
+            'hızlandırır.',
+        'Onaylanan iadeler, ödemenin yapıldığı yöntem üzerinden ve ilgili '
+            'mağazanın belirlediği süreler içinde gerçekleştirilir.',
+      ],
+    ),
+    LegalSection(
+      heading: '6. Aboneliğin iptali ve otomatik yenileme',
+      paragraphs: [
+        'Aboneliğinizi dilediğiniz zaman cihazınızın uygulama mağazası hesap '
+            'ayarlarından iptal edebilirsiniz. İptal, mevcut dönemin bitiminde '
+            'geçerli olur; dönem sonuna kadar Plus özelliklerini kullanmaya '
+            'devam edersiniz.',
+        'Otomatik yenilemenin durdurulması için iptalin, dönem bitiminden en az '
+            '**24 saat önce** yapılması gerekir. Dönem başladıktan sonra '
+            'yapılan iptallerde, kullanılmayan süre için kural olarak kısmi '
+            'iade yapılmaz.',
+        'Ücretsiz deneme süresi sunulduysa, deneme bitiminden en az 24 saat '
+            'önce iptal edilmediği takdirde abonelik ücretli olarak devam eder.',
+      ],
+    ),
+    LegalSection(
+      heading: '7. Uyuşmazlıkların çözümü',
+      paragraphs: [
+        'İade ve cayma hakkına ilişkin uyuşmazlıklarda tüketiciler, parasal '
+            'sınırlara göre Tüketici Hakem Heyetlerine veya Tüketici '
+            'Mahkemelerine başvurabilir.',
+        'Bu metin, Kullanıcı Sözleşmesi ve Gizlilik Politikası ile birlikte '
+            'uygulanır. Metin, mevzuat veya hizmet koşullarındaki '
+            'değişikliklere göre güncellenebilir.',
       ],
     ),
   ],

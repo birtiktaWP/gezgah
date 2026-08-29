@@ -37,6 +37,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     'Kullanıcı Sözleşmesi',
     'Gizlilik Politikası',
     'KVKK Aydınlatma Metni',
+    'Çerez Politikası',
+    'İade ve Cayma Hakkı Sözleşmesi',
     'Açık Rıza Metni',
   ];
 
@@ -158,6 +160,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return Icons.shield_outlined;
       case 'KVKK Aydınlatma Metni':
         return Icons.lock_outline;
+      case 'Çerez Politikası':
+        return Icons.cookie_outlined;
+      case 'İade ve Cayma Hakkı Sözleşmesi':
+        return Icons.receipt_long_outlined;
       case 'Açık Rıza Metni':
         return Icons.how_to_reg_outlined;
       default:
@@ -173,6 +179,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return 'Verilerinin korunması';
       case 'KVKK Aydınlatma Metni':
         return 'Kişisel veri politikası';
+      case 'Çerez Politikası':
+        return 'Çerez ve benzeri teknolojiler';
+      case 'İade ve Cayma Hakkı Sözleşmesi':
+        return 'Abonelik iade koşulları';
       case 'Açık Rıza Metni':
         return 'Onay ve izin beyanları';
       default:
