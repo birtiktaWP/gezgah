@@ -57,6 +57,9 @@ class _LoginScreenState extends State<LoginScreen> {
   // Kod gönderildiğinde sunucudan gelen üye adı ("Merhaba X" gösterimi).
   String? _girisAd;
 
+  // Otomatik gönderimde aynı kodun tekrar denenmesini engeller.
+  String? _lastTriedCode;
+
   final _isimC = TextEditingController();
   final _soyisimC = TextEditingController();
   final _emailC = TextEditingController();
@@ -81,6 +84,24 @@ class _LoginScreenState extends State<LoginScreen> {
     super.initState();
     _phoneMaxDigits = _maxDigitsFor(_phoneIso);
     _telefonC.addListener(_enforcePhoneLimit);
+    _kodC.addListener(_autoSubmitCode);
+  }
+
+  /// 6 hane tamamlanınca (elle yazınca ya da SMS otomatik doldurmasıyla)
+  /// doğrulamayı kendiliğinden başlatır — butona basmak gerekmez.
+  void _autoSubmitCode() {
+    final kod = _kodC.text.replaceAll(RegExp(r'\D'), '');
+    // Alan temizlendiğinde/kısaldığında kilidi bırak: kullanıcı aynı kodu
+    // yeniden yazarsa otomatik gönderim tekrar çalışsın.
+    if (kod.length < 6) {
+      _lastTriedCode = null;
+      return;
+    }
+    if (!_codeSent || _busy || _cooldown > 0) return;
+    if (kod == _lastTriedCode) return; // aynı kodu üst üste denemeyelim
+    _lastTriedCode = kod;
+    FocusScope.of(context).unfocus();
+    _submit();
   }
 
   /// Seçili numarayı (ülke kodu, ulusal numara) olarak ayırır.
@@ -235,6 +256,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _resendTimer?.cancel();
     _ttlTimer?.cancel();
     _telefonC.removeListener(_enforcePhoneLimit);
+    _kodC.removeListener(_autoSubmitCode);
     _isimC.dispose();
     _soyisimC.dispose();
     _emailC.dispose();
@@ -855,6 +877,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   controller: _kodC,
                   keyboardType: TextInputType.number,
                   maxLength: 6,
+                  autofocus: true,
+                  // iOS/Android klavyesinde SMS kodunu tek dokunuşla doldurur;
+                  // doldurulduğunda otomatik gönderim devreye girer.
+                  autofillHints: const [AutofillHints.oneTimeCode],
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _submit(),
                   decoration: const InputDecoration(

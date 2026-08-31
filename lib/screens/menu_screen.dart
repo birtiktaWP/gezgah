@@ -139,6 +139,7 @@ class _MenuScreenState extends State<MenuScreen> {
                 children: [
                   for (var i = 0; i < _sections.length; i++)
                     ..._section(i, _sections[i]),
+                  _footerNote(),
                 ],
               ),
             ),
@@ -260,6 +261,33 @@ class _MenuScreenState extends State<MenuScreen> {
           const Divider(height: 1, thickness: 1, color: AppColors.line),
       ],
     ];
+  }
+
+  /// Menü listesinin sonundaki bilgilendirme notu.
+  Widget _footerNote() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 26),
+      child: Column(
+        children: [
+          const Divider(height: 1, thickness: 1, color: AppColors.line),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.info_outline, size: 15, color: AppColors.muted),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Menü fiyat ve bilgiler değişiklik gösterebilir.',
+                  style: TextStyle(
+                      fontSize: 12.5, height: 1.45, color: AppColors.muted),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _item(MenuUrun u) {

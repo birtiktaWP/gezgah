@@ -32,6 +32,7 @@ class _MainShellState extends State<MainShell> {
   int _index = 0;
   bool _kedyOpen = false;
   bool _consentOpen = false; // sözleşme onay paneli açık mı
+  bool _wasLoggedIn = false; // önceki oturum durumu (giriş geçişini yakalamak için)
 
   @override
   void initState() {
@@ -39,6 +40,7 @@ class _MainShellState extends State<MainShell> {
     // Tüm footer yönlendirmesini bu shell üstlenir (bkz. MainNav).
     MainNav.instance.attach(_selectTab);
     // Oturum kapanırsa Hesabım sekmesinde kalınmasın.
+    _wasLoggedIn = AuthService.instance.isLoggedIn;
     AuthService.instance.user.addListener(_onAuthChanged);
     // Açılışta oturum geri geldiyse sözleşme onayını kontrol et.
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkConsent());
@@ -74,10 +76,25 @@ class _MainShellState extends State<MainShell> {
 
   void _onAuthChanged() {
     if (!mounted) return;
-    if (!AuthService.instance.isLoggedIn && _index == 4) {
+    final loggedIn = AuthService.instance.isLoggedIn;
+    // Yalnız "girişsiz → girişli" geçişini yakala; profil güncellemeleri de
+    // user'ı değiştirdiği için bayrak olmadan yanlış tetiklenir.
+    final justLoggedIn = loggedIn && !_wasLoggedIn;
+    _wasLoggedIn = loggedIn;
+
+    if (!loggedIn && _index == 4) {
       setState(() => _index = 0);
     }
-    if (AuthService.instance.isLoggedIn) {
+    if (loggedIn) {
+      // Girişten sonra ana sayfaya dön: üstteki sayfaları (login, profil,
+      // paywall…) kapat ve Keşfet sekmesine geç.
+      if (justLoggedIn) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          Navigator.of(context).popUntil((r) => r.isFirst);
+          if (_index != 0) setState(() => _index = 0);
+        });
+      }
       // Yeni giriş: sözleşme onayı alınmamışsa panel açılır.
       _checkConsent();
     } else {

@@ -1694,6 +1694,9 @@ class HomeRepository {
   /// Arama — "Mekanlar" sekmesi (`GET /arama?tab=mekan`, arama-yeni-3.md).
   /// İşletme adına göre; sayfalama meta'sı (`total`/`pages`) döner. En az 2
   /// karakter. Taze istemci cache'i varsa ağ turu yapmadan döner.
+  ///
+  /// [type] mekan tipi (ARAMA_TIP_BAZLI.md): `mekan` | `plaj` | `mesire` |
+  /// `otopark`. Verilmezse sunucu varsayılanı (`mekan` = restoran) kullanılır.
   Future<({List<SearchResult> items, bool hasMore, int? nextPage, int total})>
   aramaMekan(
     String q, {
@@ -1705,6 +1708,7 @@ class HomeRepository {
     double? lng,
     String? sort,
     List<int>? filtreler,
+    String? type,
   }) async {
     const empty = (
       items: <SearchResult>[],
@@ -1718,7 +1722,8 @@ class HomeRepository {
     final fq = (filtreler == null || filtreler.isEmpty)
         ? ''
         : (filtreler.toList()..sort()).join(',');
-    final key = '$term|$page|$limit|${sort ?? ''}|$fq|${_coordKey(lat, lng)}';
+    final key =
+        '$term|$page|$limit|${sort ?? ''}|$fq|${_coordKey(lat, lng)}|${type ?? ''}';
     final c = _mekanCache[key];
     if (c != null && DateTime.now().difference(c.at) < _searchTtl) {
       return (
@@ -1736,6 +1741,7 @@ class HomeRepository {
         'tab': 'mekan',
         'page': page,
         'limit': limit,
+        if (type != null && type.isNotEmpty) 'type': type,
         if (lat != null && lng != null) 'lat': lat,
         if (lat != null && lng != null) 'lng': lng,
         if (sort != null && sort.isNotEmpty) 'sort': sort,

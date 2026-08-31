@@ -15,6 +15,36 @@ import 'common.dart';
 import 'kedy_chat.dart';
 import 'place_cards.dart';
 
+/// Aramada seçilebilen mekan tipi (ARAMA_TIP_BAZLI.md → `type`).
+enum _SearchType { mekan, plaj, mesire, otopark }
+
+extension _SearchTypeX on _SearchType {
+  /// API'ye gönderilen `type` değeri.
+  String get slug => switch (this) {
+        _SearchType.mekan => 'mekan',
+        _SearchType.plaj => 'plaj',
+        _SearchType.mesire => 'mesire',
+        _SearchType.otopark => 'otopark',
+      };
+
+  String get label => switch (this) {
+        _SearchType.mekan => 'Mekan',
+        _SearchType.plaj => 'Plaj',
+        _SearchType.mesire => 'Mesire',
+        _SearchType.otopark => 'Otopark',
+      };
+
+  IconData get icon => switch (this) {
+        _SearchType.mekan => Icons.restaurant_outlined,
+        _SearchType.plaj => Icons.beach_access_outlined,
+        _SearchType.mesire => Icons.park_outlined,
+        _SearchType.otopark => Icons.local_parking_outlined,
+      };
+
+  /// Yemek (QR menü) araması yalnız `mekan` tipinde geçerlidir.
+  bool get yemekVar => this == _SearchType.mekan;
+}
+
 /// Gelişmiş arama — tam ekran açılan modal.
 void showSearchModal(BuildContext context,
     {void Function(Place place)? onOpenDetail}) {
@@ -79,6 +109,10 @@ class _SearchModalState extends State<_SearchModal>
   final Set<int> _foodFilters = {}; // seçili filtre id'leri (yemek)
   final Set<int> _placeFilters = {}; // seçili filtre id'leri (mekan)
   List<Filter> _allFilters = const []; // /filtreler (filtre sheet için)
+
+  /// Aranan mekan tipi (ARAMA_TIP_BAZLI.md). `mekan` dışındaki tiplerde QR menü
+  /// bulunmadığı için Yemekler sekmesi gösterilmez.
+  _SearchType _type = _SearchType.mekan;
 
   String? _userId; // arama geçmişi kaydı için (varsa gerçek, yoksa anonim)
   List<String> _popular = MockData.popularSearches; // API gelene kadar fallback
@@ -228,6 +262,7 @@ class _SearchModalState extends State<_SearchModal>
         lng: _lng,
         sort: _mekanSort,
         filtreler: _placeFilters.toList(),
+        type: _type.slug,
       );
       if (!mounted || _controller.text.trim() != term) return;
       setState(() {
@@ -253,7 +288,10 @@ class _SearchModalState extends State<_SearchModal>
   }
 
   /// Yemekler sekmesi (tab=yemek). Önceki isteği iptal eder.
+  /// Yemek araması yalnız `type=mekan` ile geçerlidir (diğer tiplerde sunucu
+  /// 422 döner) — bu yüzden tip uygun değilse hiç istek atılmaz.
   Future<void> _runFood(String term) async {
+    if (!_type.yemekVar) return;
     _foodCancel?.cancel('yeni arama');
     final token = CancelToken();
     _foodCancel = token;
@@ -310,6 +348,7 @@ class _SearchModalState extends State<_SearchModal>
         lng: _lng,
         sort: _mekanSort,
         filtreler: _placeFilters.toList(),
+        type: _type.slug,
       );
       if (!mounted) return;
       setState(() {
@@ -324,6 +363,7 @@ class _SearchModalState extends State<_SearchModal>
   }
 
   Future<void> _loadMoreFoods() async {
+    if (!_type.yemekVar) return;
     if (_foodMoreLoading || !_foodHasMore || _foodNextPage == null) return;
     final term = _query.trim();
     if (term.length < 2) return;
@@ -469,10 +509,15 @@ class _SearchModalState extends State<_SearchModal>
   }
 
   /// Yemekler sekmesi filtre seçimi (bottom sheet, /filtreler).
+  /// `/filtreler` için tip: arama `mekan` tipinde restoran filtrelerini kullanır.
+  String get _filterType =>
+      _type == _SearchType.mekan ? 'restoran' : _type.slug;
+
   Future<void> _openFoodFilter() async {
     if (_allFilters.isEmpty) {
       _allFilters =
-          (await HomeRepository.instance.filtreler(type: 'restoran')).filtreler;
+          (await HomeRepository.instance.filtreler(type: _filterType))
+              .filtreler;
     }
     if (!mounted) return;
     if (_allFilters.isEmpty) {
@@ -497,8 +542,10 @@ class _SearchModalState extends State<_SearchModal>
   /// Mekanlar sekmesi filtre seçimi (ortak `showFilterSheet`).
   Future<void> _openPlaceFilter() async {
     if (_allFilters.isEmpty) {
+      // Filtre id'leri tipe özeldir (FILTRELER_TIP_BAZLI.md).
       _allFilters =
-          (await HomeRepository.instance.filtreler(type: 'restoran')).filtreler;
+          (await HomeRepository.instance.filtreler(type: _filterType))
+              .filtreler;
     }
     if (!mounted) return;
     if (_allFilters.isEmpty) {
@@ -590,10 +637,21 @@ class _SearchModalState extends State<_SearchModal>
     );
   }
 
-  /// Arama sonuçları görünümü (q >= 2): iki sekme — Mekanlar / Yemekler.
+  /// Arama sonuçları görünümü (q >= 2). Üstte tip seçici; `mekan` tipinde
+  /// Mekanlar/Yemekler sekmeleri, diğer tiplerde (plaj/mesire/otopark) QR menü
+  /// olmadığı için sekme yok — doğrudan mekan listesi (ARAMA_TIP_BAZLI.md).
   Widget _resultsView() {
+    if (!_type.yemekVar) {
+      return Column(
+        children: [
+          _typeSelector(),
+          Expanded(child: _placesTab()),
+        ],
+      );
+    }
     return Column(
       children: [
+        _typeSelector(),
         _searchTabs(),
         Expanded(
           child: TabBarView(
@@ -603,6 +661,70 @@ class _SearchModalState extends State<_SearchModal>
         ),
       ],
     );
+  }
+
+  /// Mekan tipi seçici — yatay hap listesi (Mekan seçili gelir).
+  Widget _typeSelector() {
+    return SizedBox(
+      height: 38,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+        itemCount: _SearchType.values.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) {
+          final t = _SearchType.values[i];
+          final active = t == _type;
+          return GestureDetector(
+            onTap: () => _changeType(t),
+            child: Container(
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: active ? AppColors.primary : AppColors.primarySoft,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(t.icon,
+                      size: 15,
+                      color: active ? Colors.white : AppColors.primary),
+                  const SizedBox(width: 6),
+                  Text(t.label,
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: active ? Colors.white : AppColors.primary)),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Tip değişti: seçili filtreler tipe özel olduğu için sıfırlanır, filtre
+  /// listesi yeniden çekilir ve arama tekrar çalıştırılır.
+  void _changeType(_SearchType t) {
+    if (t == _type) return;
+    setState(() {
+      _type = t;
+      _placeFilters.clear();
+      _foodFilters.clear();
+      _allFilters = const [];
+      _placeItems = const [];
+      _foodItems = const [];
+      _foodTerm = '';
+      // Yemek sekmesi olmayan tipe geçilirken Mekanlar sekmesine dön.
+      if (!t.yemekVar && _tab.index != 0) _tab.index = 0;
+    });
+    final term = _query.trim();
+    if (term.length >= 2) {
+      _runMekan(term);
+      if (t.yemekVar && _tab.index == 1) _runFood(term);
+    }
   }
 
   /// Segment tarzı sekme çubuğu (kaymalı TabBarView ile senkron).
