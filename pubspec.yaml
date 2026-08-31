@@ -1,7 +1,7 @@
 name: gezgah
 description: "Gezgah - yakınındaki en iyi yerleri keşfet."
 publish_to: 'none'
-version: 1.0.5+39
+version: 1.0.5+40
 
 environment:
   sdk: ^3.11.4

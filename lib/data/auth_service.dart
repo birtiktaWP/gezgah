@@ -41,9 +41,24 @@ class AuthService {
     }
   }
 
-  /// E-posta + parola ile giriş (UYE_LOGIN.md). Başarısızsa [AuthException].
-  Future<AppUser> giris(String ulkeKodu, String telefon, String parola) async {
-    final u = await UyeRepository.instance.giris(ulkeKodu, telefon, parola);
+  /// Parolasız giriş 1. adım: telefona SMS kodu gönderir (UYE_GIRIS_SMS.md).
+  /// Numara kayıtlı değilse [KayitGerekliException] fırlatır.
+  Future<({int gecerlilikSn, String? ad, bool sms})> girisKodGonder({
+    required String ulkeKodu,
+    required String telefon,
+  }) =>
+      UyeRepository.instance
+          .girisKodGonder(ulkeKodu: ulkeKodu, telefon: telefon);
+
+  /// Parolasız giriş 2. adım: telefon + SMS kodu ile oturum açar.
+  /// Kod hatalı/süresi dolmuşsa [KodHataliException] / [KodGerekliException].
+  Future<AppUser> girisKodIle({
+    required String ulkeKodu,
+    required String telefon,
+    required String kod,
+  }) async {
+    final u = await UyeRepository.instance
+        .girisKodIle(ulkeKodu: ulkeKodu, telefon: telefon, kod: kod);
     await _persist(u);
     return u;
   }
@@ -63,8 +78,8 @@ class AuthService {
     required String soyisim,
     required String email,
     required String telefon,
-    required String parola,
     required String kod,
+    String? parola,
     String ulkeKodu = '+90',
     String? cinsiyet,
     String? dogumGunu,

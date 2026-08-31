@@ -56,6 +56,31 @@ class Api {
   Future<void> clearUyeToken() => _storage.delete(key: _uyeTokenKey);
 }
 
+/// Girişte numara kayıtlı değil (`404 kayit_gerekli`) — kayıt akışına yönlendir.
+class KayitGerekliException extends AuthException {
+  KayitGerekliException([super.message = 'Bu numarayla kayıtlı hesap yok.']);
+}
+
+/// Kayıtta numara zaten kayıtlı (`409`) — giriş akışına yönlendir.
+class GirisGerekliException extends AuthException {
+  GirisGerekliException([
+    super.message = 'Bu numara zaten kayıtlı. Giriş yapabilirsin.',
+  ]);
+}
+
+/// Kod gönderilmedi / süresi doldu / 5 hatalı deneme (`need_code`) — yeni kod
+/// istenmeli.
+class KodGerekliException extends AuthException {
+  KodGerekliException([
+    super.message = 'Kodun süresi doldu. Yeni kod isteyebilirsin.',
+  ]);
+}
+
+/// Girilen SMS kodu hatalı (`code_wrong`).
+class KodHataliException extends AuthException {
+  KodHataliException([super.message = 'Kod hatalı. Tekrar dene.']);
+}
+
 /// Kimlik doğrulama (giriş/kayıt) hataları için kullanıcıya gösterilebilir
 /// mesaj taşıyan istisna.
 class AuthException implements Exception {
@@ -121,7 +146,9 @@ class PlusException implements Exception {
 class _SecurityInterceptor extends Interceptor {
   @override
   Future<void> onRequest(
-      RequestOptions options, RequestInterceptorHandler handler) async {
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
     // 1) Uygulama anahtarı (yapılandırıldıysa).
     if (AppSecrets.hasAppKey) {
       options.headers['X-App-Key'] = AppSecrets.appKey;
@@ -164,14 +191,15 @@ class _SecurityInterceptor extends Interceptor {
       final bodyStr = options.data == null
           ? ''
           : (options.data is String
-              ? options.data as String
-              : jsonEncode(options.data));
+                ? options.data as String
+                : jsonEncode(options.data));
       final bodyHash = sha256.convert(utf8.encode(bodyStr)).toString();
       final base =
           '${options.method.toUpperCase()}\n$path\n$ts\n$nonce\n$bodyHash';
-      final sig = Hmac(sha256, utf8.encode(AppSecrets.signingSecret))
-          .convert(utf8.encode(base))
-          .toString();
+      final sig = Hmac(
+        sha256,
+        utf8.encode(AppSecrets.signingSecret),
+      ).convert(utf8.encode(base)).toString();
       options.headers['X-Timestamp'] = ts;
       options.headers['X-Nonce'] = nonce;
       options.headers['X-Signature'] = sig;
@@ -186,7 +214,9 @@ class _SecurityInterceptor extends Interceptor {
   /// kalmak yerine kendi kendini onarır (bkz. GUVENLIK.md §4.2).
   @override
   Future<void> onResponse(
-      Response response, ResponseInterceptorHandler handler) async {
+    Response response,
+    ResponseInterceptorHandler handler,
+  ) async {
     // Hız sınırı (rest-api-v2 §4): 429'u hata olarak yükselt ki çağıranlar
     // (özellikle `_guard`'lı kimlik akışları) kullanıcıya net mesaj + backoff
     // gösterebilsin. `validateStatus < 500` olduğundan buraya normal yanıt
@@ -300,58 +330,169 @@ class UyeRepository {
     required String ulkeKodu,
     required String telefon,
   }) async {
-    final res = await _guard(() => _dio.post('/uye/kayit-kod-gonder', data: {
-          'ulke_kodu': ulkeKodu,
-          'telefon': telefon.trim(),
-        }));
-    final body = res.data;
-    if (body is Map && body['success'] == true) {
-      final meta = (body['meta'] as Map?) ?? const {};
-      return (meta['gecerlilik_sn'] as num?)?.toInt() ?? 300;
+    try {
+      final res = await _dio.post(
+        '/uye/kayit-kod-gonder',
+        data: {'ulke_kodu': ulkeKodu, 'telefon': telefon.trim()},
+      );
+      final body = res.data;
+      if (body is Map && body['success'] == true) {
+        final meta = (body['meta'] as Map?) ?? const {};
+        return (meta['gecerlilik_sn'] as num?)?.toInt() ?? 300;
+      }
+      throw AuthException(
+        _errorMessage(body) ?? 'Doğrulama kodu gönderilemedi.',
+      );
+    } on DioException catch (e) {
+      // 409: numara zaten kayıtlı → giriş akışına yönlendirilmeli.
+      if (e.response?.statusCode == 409) {
+        throw GirisGerekliException(
+          _errorMessage(e.response?.data) ??
+              'Bu numara zaten kayıtlı. Giriş yapabilirsin.',
+        );
+      }
+      throw _girisHatasi(e, fallback: 'Doğrulama kodu gönderilemedi.');
     }
-    throw AuthException(_errorMessage(body) ?? 'Doğrulama kodu gönderilemedi.');
   }
 
   /// `POST /uye/kayit` — SMS OTP'li yeni hesap. Zorunlu: isim, soyisim, email,
-  /// telefon, parola (≥6), **kod** (SMS). E-posta/telefon kayıtlıysa 409.
+  /// telefon, **kod** (SMS). Parola opsiyoneldir; gönderilmezse hesap yalnız
+  /// SMS ile çalışır (UYE_GIRIS_SMS.md). E-posta/telefon kayıtlıysa 409.
   Future<AppUser> kayit({
     required String isim,
     required String soyisim,
     required String email,
     required String telefon,
-    required String parola,
     required String kod,
+    String? parola,
     String ulkeKodu = '+90',
     String? cinsiyet,
     String? dogumGunu,
     int? ilceId,
   }) async {
     final device = await Api.instance.deviceToken;
-    final res = await _guard(() => _dio.post('/uye/kayit', data: {
+    final res = await _guard(
+      () => _dio.post(
+        '/uye/kayit',
+        data: {
           'isim': isim.trim(),
           'soyisim': soyisim.trim(),
           'email': email.trim(),
           'telefon': telefon.trim(),
-          'parola': parola,
+          if (parola != null && parola.isNotEmpty) 'parola': parola,
           'kod': kod.trim(),
           'ulke_kodu': ulkeKodu,
           if (cinsiyet != null && cinsiyet.isNotEmpty) 'cinsiyet': cinsiyet,
-          if (dogumGunu != null && dogumGunu.isNotEmpty) 'dogum_gunu': dogumGunu,
+          if (dogumGunu != null && dogumGunu.isNotEmpty)
+            'dogum_gunu': dogumGunu,
           'ilce_id': ?ilceId,
           if (device != null && device.isNotEmpty) 'device_token': device,
-        }));
+        },
+      ),
+    );
     return _handleUye(res, fallback: 'Kayıt yapılamadı. Bilgileri kontrol et.');
   }
 
-  /// `POST /uye/giris` — e-posta + parola ile giriş. Hatalıysa [AuthException]
-  /// ("E-posta veya parola hatalı."). Cihaz token'ı Bearer interceptor'dan gelir.
-  Future<AppUser> giris(String ulkeKodu, String telefon, String parola) async {
-    final res = await _guard(() => _dio.post('/uye/giris', data: {
+  /// `POST /uye/giris-kod-gonder` — parolasız giriş 1. adım (UYE_GIRIS_SMS.md).
+  /// Telefona 6 haneli SMS kodu gönderir. Dönen `gecerlilikSn` (varsayılan 300)
+  /// geri sayım için, `ad` "Merhaba X" gösterimi için kullanılır.
+  ///
+  /// Numara kayıtlı değilse [KayitGerekliException] (404 `kayit_gerekli`),
+  /// 60 sn/saatlik sınırda [RateLimitException], diğer hatalarda
+  /// [AuthException] fırlatır.
+  Future<({int gecerlilikSn, String? ad, bool sms})> girisKodGonder({
+    required String ulkeKodu,
+    required String telefon,
+  }) async {
+    try {
+      final res = await _dio.post(
+        '/uye/giris-kod-gonder',
+        data: {'ulke_kodu': ulkeKodu, 'telefon': telefon.trim()},
+      );
+      final body = res.data;
+      if (body is Map && body['success'] == true) {
+        final data = (body['data'] as Map?) ?? const {};
+        final meta = (body['meta'] as Map?) ?? const {};
+        final ad = meta['ad'];
+        return (
+          gecerlilikSn: (meta['gecerlilik_sn'] as num?)?.toInt() ?? 300,
+          ad: (ad is String && ad.trim().isNotEmpty) ? ad.trim() : null,
+          sms: data['sms'] == true,
+        );
+      }
+      throw AuthException(
+        _errorMessage(body) ?? 'Doğrulama kodu gönderilemedi.',
+      );
+    } on DioException catch (e) {
+      throw _girisHatasi(e, fallback: 'Doğrulama kodu gönderilemedi.');
+    }
+  }
+
+  /// `POST /uye/giris` — parolasız giriş 2. adım: telefon + SMS kodu.
+  /// Kod hatalıysa [KodHataliException], süresi dolduysa/hak bittiyse
+  /// [KodGerekliException] fırlatır (UYE_GIRIS_SMS.md).
+  Future<AppUser> girisKodIle({
+    required String ulkeKodu,
+    required String telefon,
+    required String kod,
+  }) async {
+    final device = await Api.instance.deviceToken;
+    try {
+      final res = await _dio.post(
+        '/uye/giris',
+        data: {
           'ulke_kodu': ulkeKodu,
-          'telefon': telefon,
-          'parola': parola,
-        }));
-    return _handleUye(res, fallback: 'Giriş yapılamadı. Bilgileri kontrol et.');
+          'telefon': telefon.trim(),
+          'kod': kod.trim(),
+          if (device != null && device.isNotEmpty) 'device_token': device,
+        },
+      );
+      return _handleUye(
+        res,
+        fallback: 'Giriş yapılamadı. Bilgileri kontrol et.',
+      );
+    } on DioException catch (e) {
+      throw _girisHatasi(e, fallback: 'Giriş yapılamadı.');
+    }
+  }
+
+  /// Giriş uçlarındaki hata gövdesini (`kayit_gerekli`, `need_code`,
+  /// `code_wrong`) uygun istisnaya çevirir.
+  Exception _girisHatasi(DioException e, {required String fallback}) {
+    final err = e.error;
+    if (err is RateLimitException) return err;
+    final body = e.response?.data;
+    final status = e.response?.statusCode;
+    final msg = _errorMessage(body);
+
+    // İşaretler gövdenin kökünde, `error` ya da `error.details` içinde olabilir.
+    bool flag(String key) {
+      if (body is! Map) return false;
+      if (body[key] == true) return true;
+      final er = body['error'];
+      if (er is Map) {
+        if (er[key] == true) return true;
+        final d = er['details'];
+        if (d is Map && d[key] == true) return true;
+      }
+      final d = body['details'];
+      if (d is Map && d[key] == true) return true;
+      return false;
+    }
+
+    if (flag('kayit_gerekli') || status == 404) {
+      return KayitGerekliException(
+        msg ?? 'Bu numarayla kayıtlı hesap yok. Hemen kayıt olabilirsin.',
+      );
+    }
+    if (flag('code_wrong')) return KodHataliException(msg ?? 'Kod hatalı.');
+    if (flag('need_code')) {
+      return KodGerekliException(
+        msg ?? 'Kodun süresi doldu. Yeni kod isteyebilirsin.',
+      );
+    }
+    if (status == 429) return RateLimitException(msg ?? _dioMessage(e));
+    return AuthException(msg ?? _dioMessage(e));
   }
 
   /// `GET /ilceler` — üye formundaki ilçe seçimi (hepsi İstanbul). Hata/boşsa
@@ -427,23 +568,25 @@ class UyeRepository {
     int? ilceId,
   }) async {
     final token = await Api.instance.uyeToken;
-    final res = await _guard(() => _dio.post(
-          '/uye/guncelle',
-          data: {
-            'isim': isim.trim(),
-            'soyisim': soyisim.trim(),
-            'email': email.trim(),
-            'telefon': telefon.trim(),
-            if (ulkeKodu != null && ulkeKodu.isNotEmpty) 'ulke_kodu': ulkeKodu,
-            // Boş gönderim → sunucu ilgili alanı temizler (null yapar).
-            'cinsiyet': cinsiyet ?? '',
-            'dogum_gunu': dogumGunu ?? '',
-            'ilce_id': ilceId,
-          },
-          options: (token != null && token.isNotEmpty)
-              ? Options(headers: {'Authorization': 'Bearer $token'})
-              : null,
-        ));
+    final res = await _guard(
+      () => _dio.post(
+        '/uye/guncelle',
+        data: {
+          'isim': isim.trim(),
+          'soyisim': soyisim.trim(),
+          'email': email.trim(),
+          'telefon': telefon.trim(),
+          if (ulkeKodu != null && ulkeKodu.isNotEmpty) 'ulke_kodu': ulkeKodu,
+          // Boş gönderim → sunucu ilgili alanı temizler (null yapar).
+          'cinsiyet': cinsiyet ?? '',
+          'dogum_gunu': dogumGunu ?? '',
+          'ilce_id': ilceId,
+        },
+        options: (token != null && token.isNotEmpty)
+            ? Options(headers: {'Authorization': 'Bearer $token'})
+            : null,
+      ),
+    );
     final body = res.data;
     if (body is! Map || body['success'] != true) {
       throw AuthException(_errorMessage(body) ?? 'Profil güncellenemedi.');
@@ -461,13 +604,15 @@ class UyeRepository {
   /// token'ı yeniler → yeni token saklanır. Hatalıysa [AuthException].
   Future<void> sifreDegistir(String eskiParola, String yeniParola) async {
     final token = await Api.instance.uyeToken;
-    final res = await _guard(() => _dio.post(
-          '/uye/sifre-degistir',
-          data: {'eski_parola': eskiParola, 'yeni_parola': yeniParola},
-          options: (token != null && token.isNotEmpty)
-              ? Options(headers: {'Authorization': 'Bearer $token'})
-              : null,
-        ));
+    final res = await _guard(
+      () => _dio.post(
+        '/uye/sifre-degistir',
+        data: {'eski_parola': eskiParola, 'yeni_parola': yeniParola},
+        options: (token != null && token.isNotEmpty)
+            ? Options(headers: {'Authorization': 'Bearer $token'})
+            : null,
+      ),
+    );
     final body = res.data;
     if (body is! Map || body['success'] != true) {
       throw AuthException(_errorMessage(body) ?? 'Parola değiştirilemedi.');
@@ -486,8 +631,10 @@ class UyeRepository {
   Future<String> avatarYukle(String base64) async {
     final token = await Api.instance.uyeToken;
     if (token == null || token.isEmpty) {
-      throw PlusRequiredException('Bu özellik için giriş yapmalısın.',
-          girisGerekli: true);
+      throw PlusRequiredException(
+        'Bu özellik için giriş yapmalısın.',
+        girisGerekli: true,
+      );
     }
     try {
       final res = await _dio.post(
@@ -498,7 +645,8 @@ class UyeRepository {
       final body = res.data;
       if (res.statusCode == 403 || _detail(body) == 'plus_gerekli') {
         throw PlusRequiredException(
-            _errorMessage(body) ?? 'Bu özellik Gezgah Plus üyeliği gerektirir.');
+          _errorMessage(body) ?? 'Bu özellik Gezgah Plus üyeliği gerektirir.',
+        );
       }
       if (body is! Map || body['success'] != true) {
         throw AuthException(_errorMessage(body) ?? 'Avatar yüklenemedi.');
@@ -513,8 +661,9 @@ class UyeRepository {
     } on DioException catch (e) {
       if (e.response?.statusCode == 403) {
         throw PlusRequiredException(
-            _errorMessage(e.response?.data) ??
-                'Bu özellik Gezgah Plus üyeliği gerektirir.');
+          _errorMessage(e.response?.data) ??
+              'Bu özellik Gezgah Plus üyeliği gerektirir.',
+        );
       }
       throw AuthException(_dioMessage(e));
     }
@@ -525,10 +674,12 @@ class UyeRepository {
   Future<void> avatarSil() async {
     final token = await Api.instance.uyeToken;
     if (token == null || token.isEmpty) return;
-    final res = await _guard(() => _dio.delete(
-          '/uye/avatar',
-          options: Options(headers: {'Authorization': 'Bearer $token'}),
-        ));
+    final res = await _guard(
+      () => _dio.delete(
+        '/uye/avatar',
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      ),
+    );
     final body = res.data;
     if (body is! Map || body['success'] != true) {
       throw AuthException(_errorMessage(body) ?? 'Avatar kaldırılamadı.');
@@ -632,25 +783,20 @@ class PlacesRepository {
     int limit = 20,
     bool forceRefresh = false,
   }) async {
-    final fresh = _featuredAt != null &&
-        DateTime.now().difference(_featuredAt!) < _ttl;
+    final fresh =
+        _featuredAt != null && DateTime.now().difference(_featuredAt!) < _ttl;
     if (!forceRefresh && _featuredCache != null && fresh) {
       return _featuredCache!;
     }
 
     final res = await Api.instance.dio.get(
       '/one-cikan-firmalar',
-      queryParameters: {
-        'type': ?type,
-        'page': page,
-        'limit': limit,
-      },
+      queryParameters: {'type': ?type, 'page': page, 'limit': limit},
     );
 
     final body = res.data as Map<String, dynamic>;
     if (body['success'] != true) {
-      throw Exception(
-          body['error']?['message'] ?? 'Öne çıkanlar alınamadı');
+      throw Exception(body['error']?['message'] ?? 'Öne çıkanlar alınamadı');
     }
 
     final list = (body['data'] as List<dynamic>)
@@ -780,55 +926,54 @@ class ApiPlace {
 
   /// Uygulamadaki [Place] kartına dönüştürür.
   Place toPlace({String subtitle = '', String distance = ''}) => Place(
-        id: id,
-        name: name,
-        category: 'Restoran',
-        subtitle: subtitle,
-        rating: 0,
-        distance: distance,
-        price: '',
-        image: image,
-        lat: lat ?? 41.0082,
-        lng: lng ?? 28.9784,
-        tags: const ['restoran'],
-        verified: verified,
-        filterIds: filterIds,
-        ozellikIds: ozellikIds,
-        thumbnail: thumbnail,
-        thumbSquare: thumbSquare,
-        thumbCard: thumbCard,
-        thumbWide: thumbWide,
-      );
+    id: id,
+    name: name,
+    category: 'Restoran',
+    subtitle: subtitle,
+    rating: 0,
+    distance: distance,
+    price: '',
+    image: image,
+    lat: lat ?? 41.0082,
+    lng: lng ?? 28.9784,
+    tags: const ['restoran'],
+    verified: verified,
+    filterIds: filterIds,
+    ozellikIds: ozellikIds,
+    thumbnail: thumbnail,
+    thumbSquare: thumbSquare,
+    thumbCard: thumbCard,
+    thumbWide: thumbWide,
+  );
 
   /// Yerel önbellek (disk) için serileştirme.
   Map<String, dynamic> toCacheJson() => {
-        'id': id,
-        'name': name,
-        'image': image,
-        'lat': lat,
-        'lng': lng,
-        'sehir': sehir,
-        'ilce': ilce,
-        'dogrulanmis': verified,
-        'category_ids': categoryIds,
-        'custom_ikon': customIcon,
-      };
+    'id': id,
+    'name': name,
+    'image': image,
+    'lat': lat,
+    'lng': lng,
+    'sehir': sehir,
+    'ilce': ilce,
+    'dogrulanmis': verified,
+    'category_ids': categoryIds,
+    'custom_ikon': customIcon,
+  };
 
   factory ApiPlace.fromCache(Map<String, dynamic> j) => ApiPlace(
-        id: (j['id'] as num?)?.toInt() ?? 0,
-        name: (j['name'] as String?) ?? '',
-        image: (j['image'] as String?) ?? '',
-        lat: (j['lat'] as num?)?.toDouble(),
-        lng: (j['lng'] as num?)?.toDouble(),
-        sehir: (j['sehir'] as String?) ?? '',
-        ilce: (j['ilce'] as String?) ?? '',
-        verified: j['dogrulanmis'] == true,
-        categoryIds: (j['category_ids'] as List?)
-                ?.map((e) => (e as num).toInt())
-                .toList() ??
-            const [],
-        customIcon: (j['custom_ikon'] as String?) ?? '',
-      );
+    id: (j['id'] as num?)?.toInt() ?? 0,
+    name: (j['name'] as String?) ?? '',
+    image: (j['image'] as String?) ?? '',
+    lat: (j['lat'] as num?)?.toDouble(),
+    lng: (j['lng'] as num?)?.toDouble(),
+    sehir: (j['sehir'] as String?) ?? '',
+    ilce: (j['ilce'] as String?) ?? '',
+    verified: j['dogrulanmis'] == true,
+    categoryIds:
+        (j['category_ids'] as List?)?.map((e) => (e as num).toInt()).toList() ??
+        const [],
+    customIcon: (j['custom_ikon'] as String?) ?? '',
+  );
 }
 
 /// Arama sonucu: mekan bilgisi + eşleşme ayrıntıları (ARAMA.md).
@@ -892,23 +1037,27 @@ class HomeRepository {
   // Arama yanıtı kısa süreli bellek cache'i (tab + sorgu + sayfa bazlı). Aynı/
   // önek sorgular ağ turu olmadan anında döner (sunucu Redis'ine ek).
   final Map<
-      String,
-      ({
-        DateTime at,
-        List<SearchResult> items,
-        bool hasMore,
-        int? nextPage,
-        int total
-      })> _mekanCache = {};
+    String,
+    ({
+      DateTime at,
+      List<SearchResult> items,
+      bool hasMore,
+      int? nextPage,
+      int total,
+    })
+  >
+  _mekanCache = {};
   final Map<
-      String,
-      ({
-        DateTime at,
-        List<FoodResult> items,
-        bool hasMore,
-        int? nextPage,
-        int total
-      })> _yemekCache = {};
+    String,
+    ({
+      DateTime at,
+      List<FoodResult> items,
+      bool hasMore,
+      int? nextPage,
+      int total,
+    })
+  >
+  _yemekCache = {};
   static const Duration _searchTtl = Duration(seconds: 90);
   static const int _searchCacheMax = 40;
 
@@ -919,7 +1068,8 @@ class HomeRepository {
   /// `icon` SVG'siyle birlikte, seçili sırada gelir); yayında değilse
   /// `GET /kategoriler`'e düşer.
   Future<List<Category>> kategoriler({bool forceRefresh = false}) async {
-    final fresh = _categoriesAt != null &&
+    final fresh =
+        _categoriesAt != null &&
         DateTime.now().difference(_categoriesAt!) < _ttl;
     if (!forceRefresh && _categoriesCache != null && fresh) {
       return _categoriesCache!;
@@ -967,8 +1117,7 @@ class HomeRepository {
   /// yeni-endpoints.md). Her kayıtta `icon` (SVG) ve `mekan_sayisi` bulunur.
   /// Kısa süreli cache'lidir (sunucuda ayrıca Redis).
   Future<List<Category>> kategorilerAgac({bool forceRefresh = false}) async {
-    final fresh =
-        _agacAt != null && DateTime.now().difference(_agacAt!) < _ttl;
+    final fresh = _agacAt != null && DateTime.now().difference(_agacAt!) < _ttl;
     if (!forceRefresh && _agacCache != null && fresh) return _agacCache!;
     try {
       final res = await _dio.get('/kategoriler/agac');
@@ -1065,8 +1214,11 @@ class HomeRepository {
   /// Kategori detayı: kategori + alt kategoriler + sabit restoran + mekanlar.
   /// Önce tam detay `GET /kategoriler/{id}` denenir; yayında değilse
   /// `GET /kategoriler/{id}/mekanlar` (yalnızca mekan listesi) kullanılır.
-  Future<CategoryDetail> kategoriDetay(int id,
-      {int page = 1, int limit = 20}) async {
+  Future<CategoryDetail> kategoriDetay(
+    int id, {
+    int page = 1,
+    int limit = 20,
+  }) async {
     // 1) Tam detay endpoint'i (alt kategoriler + sabit restoran dahil).
     try {
       final res = await _dio.get(
@@ -1091,7 +1243,8 @@ class HomeRepository {
         ? Category.fromJson(data['kategori'] as Map<String, dynamic>)
         : const Category(id: 0, name: 'Kategori');
 
-    final subs = (data['alt_kategoriler'] as List<dynamic>?)
+    final subs =
+        (data['alt_kategoriler'] as List<dynamic>?)
             ?.whereType<Map<String, dynamic>>()
             .map(Category.fromJson)
             .toList() ??
@@ -1102,7 +1255,8 @@ class HomeRepository {
         ? _restToPlace(pinnedJson, sponsored: true)
         : null;
 
-    final places = (data['mekanlar'] as List<dynamic>?)
+    final places =
+        (data['mekanlar'] as List<dynamic>?)
             ?.whereType<Map<String, dynamic>>()
             .map((e) => _restToPlace(e))
             .toList() ??
@@ -1121,15 +1275,19 @@ class HomeRepository {
       pages: pages,
       total: (meta['total'] as num?)?.toInt() ?? places.length,
       hasMore: hasMore,
-      nextPage: (meta['next_page'] as num?)?.toInt() ??
+      nextPage:
+          (meta['next_page'] as num?)?.toInt() ??
           (hasMore ? curPage + 1 : null),
     );
   }
 
   /// `GET /kategoriler/{id}/mekanlar` — kategori mekanlarının düz sayfalı
   /// listesi (kategori adı `meta.kategori`'den gelir).
-  Future<CategoryDetail> _kategoriMekanlar(int id,
-      {int page = 1, int limit = 20}) async {
+  Future<CategoryDetail> _kategoriMekanlar(
+    int id, {
+    int page = 1,
+    int limit = 20,
+  }) async {
     final res = await _dio.get(
       '/kategoriler/$id/mekanlar',
       queryParameters: {'page': page, 'limit': limit},
@@ -1138,7 +1296,8 @@ class HomeRepository {
     if (body['success'] != true) {
       throw Exception(body['error']?['message'] ?? 'Kategori bulunamadı');
     }
-    final places = (body['data'] as List<dynamic>?)
+    final places =
+        (body['data'] as List<dynamic>?)
             ?.whereType<Map<String, dynamic>>()
             .map((e) => _restToPlace(e))
             .toList() ??
@@ -1155,7 +1314,8 @@ class HomeRepository {
       pages: pages,
       total: (meta['total'] as num?)?.toInt() ?? places.length,
       hasMore: hasMore,
-      nextPage: (meta['next_page'] as num?)?.toInt() ??
+      nextPage:
+          (meta['next_page'] as num?)?.toInt() ??
           (hasMore ? curPage + 1 : null),
     );
   }
@@ -1180,12 +1340,14 @@ class HomeRepository {
       verified: j['dogrulanmis'] == true,
       sponsored: sponsored,
       date: (j['date'] as String?) ?? '',
-      filterIds: (j['filtre_ids'] as List<dynamic>?)
+      filterIds:
+          (j['filtre_ids'] as List<dynamic>?)
               ?.whereType<num>()
               .map((e) => e.toInt())
               .toList() ??
           const [],
-      ozellikIds: (j['ozellik_ids'] as List<dynamic>?)
+      ozellikIds:
+          (j['ozellik_ids'] as List<dynamic>?)
               ?.whereType<num>()
               .map((e) => e.toInt())
               .toList() ??
@@ -1221,8 +1383,9 @@ class HomeRepository {
 
   /// Filtre + özellik listesi (KATEGORI_OZELLIK_FILTRE.md). `GET /filtreler?type=`.
   /// `data` = filtreler (type'a göre), `meta.ozellikler` = özellikler (tipsiz).
-  Future<({List<Filter> filtreler, List<Filter> ozellikler})> filtreler(
-      {String? type}) async {
+  Future<({List<Filter> filtreler, List<Filter> ozellikler})> filtreler({
+    String? type,
+  }) async {
     try {
       final res = await _dio.get(
         '/filtreler',
@@ -1234,18 +1397,15 @@ class HomeRepository {
       }
       final data = body['data'];
       final filtreler = data is List
-          ? data
-              .whereType<Map<String, dynamic>>()
-              .map(Filter.fromJson)
-              .toList()
+          ? data.whereType<Map<String, dynamic>>().map(Filter.fromJson).toList()
           : <Filter>[];
       final meta = body['meta'];
       final ozData = meta is Map<String, dynamic> ? meta['ozellikler'] : null;
       final ozellikler = ozData is List
           ? ozData
-              .whereType<Map<String, dynamic>>()
-              .map(Filter.fromJson)
-              .toList()
+                .whereType<Map<String, dynamic>>()
+                .map(Filter.fromJson)
+                .toList()
           : <Filter>[];
       return (filtreler: filtreler, ozellikler: ozellikler);
     } catch (_) {
@@ -1259,7 +1419,10 @@ class HomeRepository {
   Future<Set<int>> ustDuzeyKategoriIdleri() async {
     try {
       final all = await kategoriler();
-      return {for (final c in all) if (c.isTopLevel) c.id};
+      return {
+        for (final c in all)
+          if (c.isTopLevel) c.id,
+      };
     } catch (_) {
       return const {};
     }
@@ -1269,7 +1432,10 @@ class HomeRepository {
   Future<List<Category>> kategorilerByIds(List<int> ids) async {
     final all = await kategoriler();
     final byId = {for (final c in all) c.id: c};
-    return [for (final id in ids) if (byId[id] != null) byId[id]!];
+    return [
+      for (final id in ids)
+        if (byId[id] != null) byId[id]!,
+    ];
   }
 
   /// `GET /mekanlar/{id}` — tek mekan detayı → [ApiPlace] (özet alanlar).
@@ -1336,7 +1502,8 @@ class HomeRepository {
       final data = body['data'];
       final ozet = data is Map ? data['ozet'] : null;
       return (
-        ortalama: (ozet is Map ? (ozet['ortalama'] as num?)?.toDouble() : null) ?? 0,
+        ortalama:
+            (ozet is Map ? (ozet['ortalama'] as num?)?.toDouble() : null) ?? 0,
         sayi: (ozet is Map ? (ozet['sayi'] as num?)?.toInt() : null) ?? 0,
       );
     } on AuthException {
@@ -1358,8 +1525,11 @@ class HomeRepository {
   /// Yeni bir endpoint gerekmez: mekanın kategorisi mevcut
   /// `/kategoriler/{id}/mekanlar` (veya tam detay) ucuyla listelenir. Sabit
   /// (pinned) restoran varsa öne alınır; id'ler tekilleştirilir.
-  Future<List<Place>> benzerMekanlar(int categoryId,
-      {int excludeId = 0, int limit = 10}) async {
+  Future<List<Place>> benzerMekanlar(
+    int categoryId, {
+    int excludeId = 0,
+    int limit = 10,
+  }) async {
     if (categoryId <= 0) return const [];
     try {
       final detail = await kategoriDetay(categoryId, page: 1, limit: limit + 6);
@@ -1403,7 +1573,8 @@ class HomeRepository {
   /// ardından `/mekanlar/{id}` ile görsel + şehir/ilçe çözülür.
   Future<List<ApiPlace>> aramaSponsorluRestoranlar() async {
     final ids = await _sectionRestaurantIds(
-        '/search-page-settings/sponsorlu_restoranlar');
+      '/search-page-settings/sponsorlu_restoranlar',
+    );
     if (ids.isEmpty) return const [];
     return sponsorluRestoranlar(ids);
   }
@@ -1417,27 +1588,26 @@ class HomeRepository {
     int limit = 20,
   }) async {
     try {
-      final res = await _dio.get('/yerler', queryParameters: {
-        'type': type,
-        'page': page,
-        'limit': limit,
-      });
+      final res = await _dio.get(
+        '/yerler',
+        queryParameters: {'type': type, 'page': page, 'limit': limit},
+      );
       final body = res.data;
       if (body is! Map || body['success'] != true) {
         return (
           items: const <Place>[],
           hasMore: false,
           nextPage: null,
-          total: 0
+          total: 0,
         );
       }
       final data = body['data'];
       final items = (data is List)
           ? data
-              .whereType<Map<String, dynamic>>()
-              .map(_parsePlace)
-              .map(_apiToPlace)
-              .toList()
+                .whereType<Map<String, dynamic>>()
+                .map(_parsePlace)
+                .map(_apiToPlace)
+                .toList()
           : <Place>[];
       final meta = (body['meta'] as Map?) ?? const {};
       final curPage = (meta['page'] as num?)?.toInt() ?? page;
@@ -1451,36 +1621,31 @@ class HomeRepository {
         total: total,
       );
     } catch (_) {
-      return (
-        items: const <Place>[],
-        hasMore: false,
-        nextPage: null,
-        total: 0
-      );
+      return (items: const <Place>[], hasMore: false, nextPage: null, total: 0);
     }
   }
 
   /// [ApiPlace]'i liste kartı için [Place]'e çevirir. Koordinat yoksa mesafe
   /// hesaplanmasın diye lat/lng NaN bırakılır (alt yazıya İl·İlçe yazılır).
   Place _apiToPlace(ApiPlace ap) => Place(
-        id: ap.id,
-        name: ap.name,
-        category: 'Mekan',
-        subtitle: ap.cityDistrict,
-        rating: 0,
-        distance: ap.cityDistrict,
-        price: '',
-        image: ap.image,
-        lat: ap.lat ?? double.nan,
-        lng: ap.lng ?? double.nan,
-        verified: ap.verified,
-        filterIds: ap.filterIds,
-        ozellikIds: ap.ozellikIds,
-        thumbnail: ap.thumbnail,
-        thumbSquare: ap.thumbSquare,
-        thumbCard: ap.thumbCard,
-        thumbWide: ap.thumbWide,
-      );
+    id: ap.id,
+    name: ap.name,
+    category: 'Mekan',
+    subtitle: ap.cityDistrict,
+    rating: 0,
+    distance: ap.cityDistrict,
+    price: '',
+    image: ap.image,
+    lat: ap.lat ?? double.nan,
+    lng: ap.lng ?? double.nan,
+    verified: ap.verified,
+    filterIds: ap.filterIds,
+    ozellikIds: ap.ozellikIds,
+    thumbnail: ap.thumbnail,
+    thumbSquare: ap.thumbSquare,
+    thumbCard: ap.thumbCard,
+    thumbWide: ap.thumbWide,
+  );
 
   /// `GET /mekanlar` — restoran listesi (yeni → eski sıralı gelir).
   Future<List<ApiPlace>> mekanlar({
@@ -1511,8 +1676,9 @@ class HomeRepository {
   /// Yeni eklenenler. Özel endpoint yayınlıysa onu, değilse `/mekanlar`
   /// listesini (zaten `date DESC` sıralı) kullanır.
   Future<List<ApiPlace>> yeniEklenenler({int limit = 10}) async {
-    final special =
-        await _tryList('/mekanlar/yeni-eklenenler', {'limit': limit});
+    final special = await _tryList('/mekanlar/yeni-eklenenler', {
+      'limit': limit,
+    });
     if (special != null) return special;
     return mekanlar(limit: limit);
   }
@@ -1520,8 +1686,7 @@ class HomeRepository {
   /// Yakındakiler havuzu. Özel endpoint yayınlıysa onu, değilse `/mekanlar`
   /// listesini kullanır. Mesafe sıralaması app tarafında yapılır.
   Future<List<ApiPlace>> yakindakiler({int limit = 100}) async {
-    final special =
-        await _tryList('/mekanlar/yakindakiler', {'limit': limit});
+    final special = await _tryList('/mekanlar/yakindakiler', {'limit': limit});
     if (special != null) return special;
     return mekanlar(limit: limit);
   }
@@ -1529,13 +1694,8 @@ class HomeRepository {
   /// Arama — "Mekanlar" sekmesi (`GET /arama?tab=mekan`, arama-yeni-3.md).
   /// İşletme adına göre; sayfalama meta'sı (`total`/`pages`) döner. En az 2
   /// karakter. Taze istemci cache'i varsa ağ turu yapmadan döner.
-  Future<
-      ({
-        List<SearchResult> items,
-        bool hasMore,
-        int? nextPage,
-        int total
-      })> aramaMekan(
+  Future<({List<SearchResult> items, bool hasMore, int? nextPage, int total})>
+  aramaMekan(
     String q, {
     int page = 1,
     int limit = 20,
@@ -1550,7 +1710,7 @@ class HomeRepository {
       items: <SearchResult>[],
       hasMore: false,
       nextPage: null,
-      total: 0
+      total: 0,
     );
     final term = q.trim();
     if (term.length < 2) return empty;
@@ -1558,15 +1718,14 @@ class HomeRepository {
     final fq = (filtreler == null || filtreler.isEmpty)
         ? ''
         : (filtreler.toList()..sort()).join(',');
-    final key =
-        '$term|$page|$limit|${sort ?? ''}|$fq|${_coordKey(lat, lng)}';
+    final key = '$term|$page|$limit|${sort ?? ''}|$fq|${_coordKey(lat, lng)}';
     final c = _mekanCache[key];
     if (c != null && DateTime.now().difference(c.at) < _searchTtl) {
       return (
         items: c.items,
         hasMore: c.hasMore,
         nextPage: c.nextPage,
-        total: c.total
+        total: c.total,
       );
     }
 
@@ -1592,11 +1751,13 @@ class HomeRepository {
         ? data.whereType<Map<String, dynamic>>().map((j) {
             return SearchResult(
               place: _parsePlace(j),
-              matchedProducts: (j['eslesen_urunler'] as List<dynamic>?)
+              matchedProducts:
+                  (j['eslesen_urunler'] as List<dynamic>?)
                       ?.whereType<String>()
                       .toList() ??
                   const [],
-              matchTypes: (j['eslesme'] as List<dynamic>?)
+              matchTypes:
+                  (j['eslesme'] as List<dynamic>?)
                       ?.whereType<String>()
                       .toList() ??
                   const [],
@@ -1616,7 +1777,7 @@ class HomeRepository {
       items: items,
       hasMore: hasMore,
       nextPage: nextPage,
-      total: total
+      total: total,
     );
     if (_mekanCache.length > _searchCacheMax) {
       _mekanCache.remove(_mekanCache.keys.first);
@@ -1627,13 +1788,8 @@ class HomeRepository {
   /// Arama — "Yemekler" sekmesi (`GET /arama?tab=yemek`, arama-yeni-3.md).
   /// Menü/ürün adına göre; eşleşen ürünler + ait olduğu mekanla döner
   /// (beğeni azalan). Kullanıcı Yemekler sekmesine geçince çağrılır.
-  Future<
-      ({
-        List<FoodResult> items,
-        bool hasMore,
-        int? nextPage,
-        int total
-      })> aramaYemek(
+  Future<({List<FoodResult> items, bool hasMore, int? nextPage, int total})>
+  aramaYemek(
     String q, {
     int page = 1,
     int limit = 20,
@@ -1648,7 +1804,7 @@ class HomeRepository {
       items: <FoodResult>[],
       hasMore: false,
       nextPage: null,
-      total: 0
+      total: 0,
     );
     final term = q.trim();
     if (term.length < 2) return empty;
@@ -1656,15 +1812,14 @@ class HomeRepository {
     final fq = (filtreler == null || filtreler.isEmpty)
         ? ''
         : (filtreler.toList()..sort()).join(',');
-    final key =
-        '$term|$page|$limit|${sort ?? ''}|$fq|${_coordKey(lat, lng)}';
+    final key = '$term|$page|$limit|${sort ?? ''}|$fq|${_coordKey(lat, lng)}';
     final c = _yemekCache[key];
     if (c != null && DateTime.now().difference(c.at) < _searchTtl) {
       return (
         items: c.items,
         hasMore: c.hasMore,
         nextPage: c.nextPage,
-        total: c.total
+        total: c.total,
       );
     }
 
@@ -1701,7 +1856,7 @@ class HomeRepository {
       items: items,
       hasMore: hasMore,
       nextPage: nextPage,
-      total: total
+      total: total,
     );
     if (_yemekCache.length > _searchCacheMax) {
       _yemekCache.remove(_yemekCache.keys.first);
@@ -1796,25 +1951,22 @@ class HomeRepository {
       if (settings is! Map<String, dynamic>) return const [];
       final events = settings['events'];
       if (events is! List) return const [];
-      return events
-          .whereType<Map<String, dynamic>>()
-          .map((e) {
-            String image = '';
-            final img = e['image'];
-            if (img is String && img.isNotEmpty) {
-              image = img.startsWith('http') ? img : '$kApiHost$img';
-            }
-            return FeaturedEvent(
-              id: (e['id'] as num?)?.toInt() ?? 0,
-              name: (e['name'] as String?)?.trim().isNotEmpty == true
-                  ? e['name'] as String
-                  : 'Etkinlik',
-              date: e['date'] as String? ?? '',
-              time: e['time'] as String? ?? '',
-              image: image,
-            );
-          })
-          .toList();
+      return events.whereType<Map<String, dynamic>>().map((e) {
+        String image = '';
+        final img = e['image'];
+        if (img is String && img.isNotEmpty) {
+          image = img.startsWith('http') ? img : '$kApiHost$img';
+        }
+        return FeaturedEvent(
+          id: (e['id'] as num?)?.toInt() ?? 0,
+          name: (e['name'] as String?)?.trim().isNotEmpty == true
+              ? e['name'] as String
+              : 'Etkinlik',
+          date: e['date'] as String? ?? '',
+          time: e['time'] as String? ?? '',
+          image: image,
+        );
+      }).toList();
     } catch (_) {
       return const [];
     }
@@ -1823,13 +1975,16 @@ class HomeRepository {
   /// Etkinlikler (`GET /etkinlikler`). Sayfalı; `upcoming=true` yalnızca
   /// bugünden sonrasını getirir. Sonuç + sayfalama meta'sı döner.
   Future<({List<Event> items, bool hasMore, int? nextPage, int total})>
-      etkinlikler({bool upcoming = true, int page = 1, int limit = 20}) async {
-    final res = await _dio.get('/etkinlikler', queryParameters: {
-      'status': 1,
-      if (upcoming) 'upcoming': 1,
-      'page': page,
-      'limit': limit,
-    });
+  etkinlikler({bool upcoming = true, int page = 1, int limit = 20}) async {
+    final res = await _dio.get(
+      '/etkinlikler',
+      queryParameters: {
+        'status': 1,
+        if (upcoming) 'upcoming': 1,
+        'page': page,
+        'limit': limit,
+      },
+    );
     final body = res.data as Map<String, dynamic>;
     if (body['success'] != true) {
       throw Exception(body['error']?['message'] ?? 'Etkinlikler alınamadı');
@@ -1846,7 +2001,8 @@ class HomeRepository {
     return (
       items: list,
       hasMore: hasMore,
-      nextPage: (meta['next_page'] as num?)?.toInt() ??
+      nextPage:
+          (meta['next_page'] as num?)?.toInt() ??
           (hasMore ? curPage + 1 : null),
       total: (meta['total'] as num?)?.toInt() ?? list.length,
     );
@@ -1854,7 +2010,10 @@ class HomeRepository {
 
   /// Bildirimler (`GET /bildirimler`). Metin HTML'den arındırılır ve aynı
   /// metin birden çok kez gelirse (log + post kayıtları) tek gösterilir.
-  Future<List<AppNotification>> bildirimler({int page = 1, int limit = 30}) async {
+  Future<List<AppNotification>> bildirimler({
+    int page = 1,
+    int limit = 30,
+  }) async {
     final res = await _dio.get(
       '/bildirimler',
       queryParameters: {'page': page, 'limit': limit},
@@ -1875,12 +2034,14 @@ class HomeRepository {
       if (!seen.add(text)) continue; // aynı metni tekrar gösterme
       // Cihaz token'ı varsa sunucu `okundu` döner; yoksa (null) yeni sayılır.
       final okundu = e['okundu'];
-      out.add(AppNotification(
-        id: (e['id'] as num?)?.toInt() ?? 0,
-        text: text,
-        date: DateTime.tryParse((e['tarih'] as String?)?.trim() ?? ''),
-        unread: okundu is bool ? !okundu : true,
-      ));
+      out.add(
+        AppNotification(
+          id: (e['id'] as num?)?.toInt() ?? 0,
+          text: text,
+          date: DateTime.tryParse((e['tarih'] as String?)?.trim() ?? ''),
+          unread: okundu is bool ? !okundu : true,
+        ),
+      );
     }
     return out;
   }
@@ -1939,8 +2100,16 @@ class HomeRepository {
     final (day, month) = _eventDayMonth(dateStr);
 
     final time = pick(['time', 'saat']) ?? '';
-    final loc = pick(
-            ['location', 'konum', 'yer', 'mekan', 'venue', 'adres', 'bolge']) ??
+    final loc =
+        pick([
+          'location',
+          'konum',
+          'yer',
+          'mekan',
+          'venue',
+          'adres',
+          'bolge',
+        ]) ??
         '';
     final place = [loc, time].where((s) => s.isNotEmpty).join(' · ');
 
@@ -1959,17 +2128,16 @@ class HomeRepository {
 
   /// Bir listeleme endpoint'ini dener; 404 / success:false / hata olursa null.
   Future<List<ApiPlace>?> _tryList(
-      String path, Map<String, dynamic> query) async {
+    String path,
+    Map<String, dynamic> query,
+  ) async {
     try {
       final res = await _dio.get(path, queryParameters: query);
       final body = res.data as Map<String, dynamic>;
       if (body['success'] != true) return null;
       final data = body['data'];
       if (data is! List) return null;
-      return data
-          .whereType<Map<String, dynamic>>()
-          .map(_parsePlace)
-          .toList();
+      return data.whereType<Map<String, dynamic>>().map(_parsePlace).toList();
     } catch (_) {
       return null;
     }
@@ -2018,16 +2186,19 @@ class HomeRepository {
       sehir: (j['sehir'] as String?)?.trim() ?? '',
       ilce: (j['ilce'] as String?)?.trim() ?? '',
       verified: j['dogrulanmis'] == true,
-      categoryIds: (j['kategori_ids'] as List<dynamic>?)
+      categoryIds:
+          (j['kategori_ids'] as List<dynamic>?)
               ?.map((e) => (e as num).toInt())
               .toList() ??
           const [],
-      filterIds: (j['filtre_ids'] as List<dynamic>?)
+      filterIds:
+          (j['filtre_ids'] as List<dynamic>?)
               ?.whereType<num>()
               .map((e) => e.toInt())
               .toList() ??
           const [],
-      ozellikIds: (j['ozellik_ids'] as List<dynamic>?)
+      ozellikIds:
+          (j['ozellik_ids'] as List<dynamic>?)
               ?.whereType<num>()
               .map((e) => e.toInt())
               .toList() ??
@@ -2043,7 +2214,7 @@ class HomeRepository {
   /// `thumbnail` + `thumbnails{square,card,wide}` alanlarını (varsa tam URL'e
   /// çevirerek) ayrıştırır (thumbnail-update.md).
   ({String? thumbnail, String? square, String? card, String? wide})
-      _parseThumbs(Map<String, dynamic> j) {
+  _parseThumbs(Map<String, dynamic> j) {
     String? abs(dynamic v) {
       if (v is String && v.isNotEmpty) {
         return v.startsWith('http') ? v : '$kApiHost$v';
@@ -2102,7 +2273,8 @@ class FavRepository {
       if (err is RateLimitException) throw err;
       if (e.response?.statusCode == 429) {
         throw RateLimitException(
-            'Çok fazla istek gönderildi. Lütfen biraz sonra tekrar dene.');
+          'Çok fazla istek gönderildi. Lütfen biraz sonra tekrar dene.',
+        );
       }
       rethrow;
     }
@@ -2110,19 +2282,25 @@ class FavRepository {
 
   /// `POST /uye/favoriler` — favoriye ekler (idempotent). Başarılıysa true.
   Future<bool> ekle(int postId) => _mapRate(() async {
-        final res = await _dio.post('/uye/favoriler',
-            data: {'post_id': postId}, options: await _auth());
-        final body = res.data;
-        return body is Map && body['success'] == true;
-      });
+    final res = await _dio.post(
+      '/uye/favoriler',
+      data: {'post_id': postId},
+      options: await _auth(),
+    );
+    final body = res.data;
+    return body is Map && body['success'] == true;
+  });
 
   /// `DELETE /uye/favoriler` — favoriden çıkarır (idempotent). Başarılıysa true.
   Future<bool> cikar(int postId) => _mapRate(() async {
-        final res = await _dio.delete('/uye/favoriler',
-            data: {'post_id': postId}, options: await _auth());
-        final body = res.data;
-        return body is Map && body['success'] == true;
-      });
+    final res = await _dio.delete(
+      '/uye/favoriler',
+      data: {'post_id': postId},
+      options: await _auth(),
+    );
+    final body = res.data;
+    return body is Map && body['success'] == true;
+  });
 
   /// `GET /uye/favoriler?page=&limit=` — favori mekanları (en yeni önce).
   /// Sayfalama meta'sıyla birlikte döner.
@@ -2130,8 +2308,11 @@ class FavRepository {
     int page = 1,
     int limit = 20,
   }) async {
-    final res = await _dio.get('/uye/favoriler',
-        queryParameters: {'page': page, 'limit': limit}, options: await _auth());
+    final res = await _dio.get(
+      '/uye/favoriler',
+      queryParameters: {'page': page, 'limit': limit},
+      options: await _auth(),
+    );
     final body = res.data;
     if (body is! Map || body['success'] != true) {
       return (items: const <Place>[], hasMore: false, nextPage: null);
@@ -2207,12 +2388,14 @@ class FavRepository {
       tags: const ['restoran'],
       verified: j['dogrulanmis'] == true,
       favorite: true,
-      filterIds: (j['filtre_ids'] as List<dynamic>?)
+      filterIds:
+          (j['filtre_ids'] as List<dynamic>?)
               ?.whereType<num>()
               .map((e) => e.toInt())
               .toList() ??
           const [],
-      ozellikIds: (j['ozellik_ids'] as List<dynamic>?)
+      ozellikIds:
+          (j['ozellik_ids'] as List<dynamic>?)
               ?.whereType<num>()
               .map((e) => e.toInt())
               .toList() ??
@@ -2261,18 +2444,19 @@ class RezervasyonRepository {
   /// diğer hatalarda [ReservationException] fırlatır.
   Future<int> kodGonder({required int mekanId, required String telefon}) async {
     try {
-      final res = await _dio.post('/rezervasyon/kod-gonder', data: {
-        'mekan_id': mekanId,
-        'telefon': telefon,
-      });
+      final res = await _dio.post(
+        '/rezervasyon/kod-gonder',
+        data: {'mekan_id': mekanId, 'telefon': telefon},
+      );
       final body = res.data;
       if (body is Map && body['success'] == true) {
         final meta = (body['meta'] as Map?) ?? const {};
         return (meta['gecerlilik_sn'] as num?)?.toInt() ?? 300;
       }
       throw ReservationException(
-          _rezMessage(body) ?? 'Doğrulama kodu gönderilemedi.',
-          detail: _rezDetail(body));
+        _rezMessage(body) ?? 'Doğrulama kodu gönderilemedi.',
+        detail: _rezDetail(body),
+      );
     } on ReservationException {
       rethrow;
     } on DioException catch (e) {
@@ -2296,18 +2480,21 @@ class RezervasyonRepository {
     String? not,
   }) async {
     try {
-      final res = await _dio.post('/rezervasyon', data: {
-        'mekan_id': mekanId,
-        'ad_soyad': adSoyad,
-        'telefon': telefon,
-        'kisi': kisi,
-        'tarih': tarih,
-        'kod': kod,
-        'kvkk': kvkk,
-        if (bolgeId != null && bolgeId > 0) 'bolge_id': bolgeId,
-        if (masa != null && masa.isNotEmpty) 'masa': masa,
-        if (not != null && not.trim().isNotEmpty) 'not': not.trim(),
-      });
+      final res = await _dio.post(
+        '/rezervasyon',
+        data: {
+          'mekan_id': mekanId,
+          'ad_soyad': adSoyad,
+          'telefon': telefon,
+          'kisi': kisi,
+          'tarih': tarih,
+          'kod': kod,
+          'kvkk': kvkk,
+          if (bolgeId != null && bolgeId > 0) 'bolge_id': bolgeId,
+          if (masa != null && masa.isNotEmpty) 'masa': masa,
+          if (not != null && not.trim().isNotEmpty) 'not': not.trim(),
+        },
+      );
       final body = res.data;
       if (body is Map && body['success'] == true) {
         final data = body['data'];
@@ -2315,8 +2502,9 @@ class RezervasyonRepository {
         return hash ?? '';
       }
       throw ReservationException(
-          _rezMessage(body) ?? 'Rezervasyon oluşturulamadı.',
-          detail: _rezDetail(body));
+        _rezMessage(body) ?? 'Rezervasyon oluşturulamadı.',
+        detail: _rezDetail(body),
+      );
     } on ReservationException {
       rethrow;
     } on DioException catch (e) {
@@ -2329,12 +2517,15 @@ class RezervasyonRepository {
     if (err is RateLimitException) return err;
     if (e.response?.statusCode == 429) {
       return RateLimitException(
-          _rezMessage(e.response?.data) ??
-              'Çok fazla deneme. Lütfen biraz sonra tekrar dene.',
-          retryAfter: null);
+        _rezMessage(e.response?.data) ??
+            'Çok fazla deneme. Lütfen biraz sonra tekrar dene.',
+        retryAfter: null,
+      );
     }
-    return ReservationException(_rezMessage(e.response?.data) ?? fallback,
-        detail: _rezDetail(e.response?.data));
+    return ReservationException(
+      _rezMessage(e.response?.data) ?? fallback,
+      detail: _rezDetail(e.response?.data),
+    );
   }
 
   String? _rezMessage(dynamic body) {
@@ -2400,9 +2591,11 @@ class KedyRepository {
       // Plus gerektiren erişim (UYELIK_PLUS.md §7): 403 → paywall'a yönlendir.
       if (res.statusCode == 403 || _kedyDetail(body) == 'plus_gerekli') {
         throw PlusRequiredException(
-            _kedyMessage(body) ?? 'Kedy, Gezgah Plus üyeliği gerektirir.',
-            girisGerekli: _kedyDetail(body) == 'giris_gerekli' ||
-                (await Api.instance.uyeToken)?.isEmpty != false);
+          _kedyMessage(body) ?? 'Kedy, Gezgah Plus üyeliği gerektirir.',
+          girisGerekli:
+              _kedyDetail(body) == 'giris_gerekli' ||
+              (await Api.instance.uyeToken)?.isEmpty != false,
+        );
       }
       throw KedyException(_kedyMessage(body) ?? 'Kedy yanıt veremedi.');
     } on PlusRequiredException {
@@ -2414,15 +2607,19 @@ class KedyRepository {
       if (err is RateLimitException) throw err;
       if (e.response?.statusCode == 429) {
         throw RateLimitException(
-            _kedyMessage(e.response?.data) ??
-                'Kedy şu an çok yoğun. Biraz sonra tekrar dene.');
+          _kedyMessage(e.response?.data) ??
+              'Kedy şu an çok yoğun. Biraz sonra tekrar dene.',
+        );
       }
       if (e.response?.statusCode == 403) {
         throw PlusRequiredException(
-            _kedyMessage(e.response?.data) ??
-                'Kedy, Gezgah Plus üyeliği gerektirir.');
+          _kedyMessage(e.response?.data) ??
+              'Kedy, Gezgah Plus üyeliği gerektirir.',
+        );
       }
-      throw KedyException('Kedy\'ye ulaşılamadı. İnternet bağlantını kontrol et.');
+      throw KedyException(
+        'Kedy\'ye ulaşılamadı. İnternet bağlantını kontrol et.',
+      );
     }
   }
 
@@ -2496,10 +2693,7 @@ class PlusRepository {
   /// Hata/oturumsuz durumda varsayılan (pasif) [PlusDurum] döner.
   Future<PlusDurum> durum() async {
     try {
-      final res = await _dio.get(
-        '/uye/plus/durum',
-        options: await _uyeAuth(),
-      );
+      final res = await _dio.get('/uye/plus/durum', options: await _uyeAuth());
       final body = res.data;
       if (body is! Map || body['success'] != true) return const PlusDurum();
       final data = body['data'];
@@ -2533,15 +2727,17 @@ class PlusRepository {
           if (receipt != null && receipt.isNotEmpty) 'receipt': receipt,
           if (purchaseToken != null && purchaseToken.isNotEmpty)
             'purchase_token': purchaseToken,
-          if (productId != null && productId.isNotEmpty) 'product_id': productId,
+          if (productId != null && productId.isNotEmpty)
+            'product_id': productId,
         },
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
       final body = res.data;
       if (body is! Map || body['success'] != true) {
         throw PlusException(
-            _plusMessage(body) ?? 'Satın alma doğrulanamadı.',
-            detail: _plusDetail(body));
+          _plusMessage(body) ?? 'Satın alma doğrulanamadı.',
+          detail: _plusDetail(body),
+        );
       }
       final data = body['data'];
       final uye = data is Map ? data['uye'] : null;
@@ -2552,12 +2748,15 @@ class PlusRepository {
     } on DioException catch (e) {
       final code = e.response?.statusCode;
       if (code == 401) {
-        throw PlusException('Satın alma için giriş yapmalısın.',
-            detail: 'giris');
+        throw PlusException(
+          'Satın alma için giriş yapmalısın.',
+          detail: 'giris',
+        );
       }
       throw PlusException(
-          _plusMessage(e.response?.data) ?? 'Satın alma doğrulanamadı.',
-          detail: _plusDetail(e.response?.data));
+        _plusMessage(e.response?.data) ?? 'Satın alma doğrulanamadı.',
+        detail: _plusDetail(e.response?.data),
+      );
     }
   }
 
@@ -2608,8 +2807,7 @@ class RotaRepository {
   /// `GET /uye/rotalar` — üyenin rotaları (durak sayısıyla). Hatada boş liste.
   Future<List<GeziRota>> rotalar() async {
     try {
-      final res =
-          await _dio.get('/uye/rotalar', options: await _uyeAuth());
+      final res = await _dio.get('/uye/rotalar', options: await _uyeAuth());
       final body = res.data;
       if (body is! Map || body['success'] != true) return const [];
       final data = body['data'];
@@ -2629,7 +2827,7 @@ class RotaRepository {
   /// en yeni üstte. Üye olmak şart değil (cihaz token'ı yeterli). [uyeId]
   /// verilirse yalnız o üyenin herkese açık rotaları (UYELIK_PLUS.md §6.1).
   Future<({List<GeziRota> items, bool hasMore, int? nextPage, int total})>
-      kesfet({
+  kesfet({
     int? uyeId,
     int page = 1,
     int limit = 20,
@@ -2640,29 +2838,36 @@ class RotaRepository {
     double? lng,
     int? mesafeM,
   }) async {
-    const empty =
-        (items: <GeziRota>[], hasMore: false, nextPage: null, total: 0);
+    const empty = (
+      items: <GeziRota>[],
+      hasMore: false,
+      nextPage: null,
+      total: 0,
+    );
     try {
-      final res = await _dio.get('/rotalar', queryParameters: {
-        if (uyeId != null && uyeId > 0) 'uye_id': uyeId,
-        'page': page,
-        'limit': limit,
-        if (sort != null && sort.isNotEmpty && sort != 'yeni') 'sort': sort,
-        if (tip != null && tip.isNotEmpty) 'tip': tip,
-        if (ilce != null && ilce > 0) 'ilce': ilce,
-        if (lat != null && lng != null) 'lat': lat,
-        if (lat != null && lng != null) 'lng': lng,
-        if (mesafeM != null && mesafeM > 0) 'mesafe_m': mesafeM,
-      });
+      final res = await _dio.get(
+        '/rotalar',
+        queryParameters: {
+          if (uyeId != null && uyeId > 0) 'uye_id': uyeId,
+          'page': page,
+          'limit': limit,
+          if (sort != null && sort.isNotEmpty && sort != 'yeni') 'sort': sort,
+          if (tip != null && tip.isNotEmpty) 'tip': tip,
+          if (ilce != null && ilce > 0) 'ilce': ilce,
+          if (lat != null && lng != null) 'lat': lat,
+          if (lat != null && lng != null) 'lng': lng,
+          if (mesafeM != null && mesafeM > 0) 'mesafe_m': mesafeM,
+        },
+      );
       final body = res.data;
       if (body is! Map || body['success'] != true) return empty;
       final data = body['data'];
       final list = (data is List)
           ? data
-              .whereType<Map<String, dynamic>>()
-              .map((j) => GeziRota.fromJson(j, host: kApiHost))
-              .where((r) => r.id > 0)
-              .toList()
+                .whereType<Map<String, dynamic>>()
+                .map((j) => GeziRota.fromJson(j, host: kApiHost))
+                .where((r) => r.id > 0)
+                .toList()
           : <GeziRota>[];
       final meta = (body['meta'] as Map?) ?? const {};
       return (
@@ -2680,8 +2885,10 @@ class RotaRepository {
   /// açık rotalar (ROTA_POPULER.md). Cihaz/üye token'ı yeterli; hatada boş liste.
   Future<List<GeziRota>> populer({int limit = 10}) async {
     try {
-      final res = await _dio.get('/rotalar/populer',
-          queryParameters: {'limit': limit});
+      final res = await _dio.get(
+        '/rotalar/populer',
+        queryParameters: {'limit': limit},
+      );
       final body = res.data;
       if (body is! Map || body['success'] != true) return const [];
       final data = body['data'];
@@ -2698,13 +2905,23 @@ class RotaRepository {
 
   /// `GET /uye/profil/{id}` — üyenin herkese açık profili + rotaları (sayfalı,
   /// PROFIL_VE_ROTA_URUN.md §2). Cihaz/üye token'ı yeterli; hata/boşta null.
-  Future<({UyeProfil profil, List<GeziRota> rotalar, bool hasMore, int? nextPage, int total})?>
-      profil(int uyeId, {int page = 1, int limit = 20}) async {
+  Future<
+    ({
+      UyeProfil profil,
+      List<GeziRota> rotalar,
+      bool hasMore,
+      int? nextPage,
+      int total,
+    })?
+  >
+  profil(int uyeId, {int page = 1, int limit = 20}) async {
     if (uyeId <= 0) return null;
     try {
-      final res = await _dio.get('/uye/profil/$uyeId',
-          queryParameters: {'page': page, 'limit': limit},
-          options: await _uyeAuth());
+      final res = await _dio.get(
+        '/uye/profil/$uyeId',
+        queryParameters: {'page': page, 'limit': limit},
+        options: await _uyeAuth(),
+      );
       final body = res.data;
       if (body is! Map || body['success'] != true) return null;
       final data = body['data'];
@@ -2713,10 +2930,10 @@ class RotaRepository {
       if (p is! Map<String, dynamic>) return null;
       final list = (data['rotalar'] is List)
           ? (data['rotalar'] as List)
-              .whereType<Map<String, dynamic>>()
-              .map((j) => GeziRota.fromJson(j, host: kApiHost))
-              .where((r) => r.id > 0)
-              .toList()
+                .whereType<Map<String, dynamic>>()
+                .map((j) => GeziRota.fromJson(j, host: kApiHost))
+                .where((r) => r.id > 0)
+                .toList()
           : <GeziRota>[];
       final meta = (body['meta'] as Map?) ?? const {};
       return (
@@ -2735,8 +2952,7 @@ class RotaRepository {
   Future<GeziRota?> detay(int id) async {
     if (id <= 0) return null;
     try {
-      final res =
-          await _dio.get('/uye/rotalar/$id', options: await _uyeAuth());
+      final res = await _dio.get('/uye/rotalar/$id', options: await _uyeAuth());
       final body = res.data;
       if (body is! Map || body['success'] != true) return null;
       final data = body['data'];
@@ -2789,25 +3005,47 @@ class RotaRepository {
   /// `GET /uye/rotalar/{id}/yorumlar` — rota yorumları (sayfalı, en yeni üstte,
   /// rota-yorumlar.md §4). Cihaz/üye token'ı yeterli. Gizli başkasının rotası
   /// için boş döner. Meta'daki `yorumlar_acik` de gelir.
-  Future<({List<RotaYorum> items, bool hasMore, int? nextPage, int total, bool yorumlarAcik})>
-      yorumlar(int id, {int page = 1, int limit = 20}) async {
+  Future<
+    ({
+      List<RotaYorum> items,
+      bool hasMore,
+      int? nextPage,
+      int total,
+      bool yorumlarAcik,
+    })
+  >
+  yorumlar(int id, {int page = 1, int limit = 20}) async {
     if (id <= 0) {
-      return (items: <RotaYorum>[], hasMore: false, nextPage: null, total: 0, yorumlarAcik: true);
+      return (
+        items: <RotaYorum>[],
+        hasMore: false,
+        nextPage: null,
+        total: 0,
+        yorumlarAcik: true,
+      );
     }
     try {
-      final res = await _dio.get('/uye/rotalar/$id/yorumlar',
-          queryParameters: {'page': page, 'limit': limit},
-          options: await _uyeAuth());
+      final res = await _dio.get(
+        '/uye/rotalar/$id/yorumlar',
+        queryParameters: {'page': page, 'limit': limit},
+        options: await _uyeAuth(),
+      );
       final body = res.data;
       if (body is! Map || body['success'] != true) {
-        return (items: <RotaYorum>[], hasMore: false, nextPage: null, total: 0, yorumlarAcik: true);
+        return (
+          items: <RotaYorum>[],
+          hasMore: false,
+          nextPage: null,
+          total: 0,
+          yorumlarAcik: true,
+        );
       }
       final data = body['data'];
       final list = (data is List)
           ? data
-              .whereType<Map<String, dynamic>>()
-              .map((j) => RotaYorum.fromJson(j, host: kApiHost))
-              .toList()
+                .whereType<Map<String, dynamic>>()
+                .map((j) => RotaYorum.fromJson(j, host: kApiHost))
+                .toList()
           : <RotaYorum>[];
       final meta = (body['meta'] as Map?) ?? const {};
       return (
@@ -2820,7 +3058,13 @@ class RotaRepository {
             : (meta['yorumlar_acik'] == true || meta['yorumlar_acik'] == 1),
       );
     } catch (_) {
-      return (items: <RotaYorum>[], hasMore: false, nextPage: null, total: 0, yorumlarAcik: true);
+      return (
+        items: <RotaYorum>[],
+        hasMore: false,
+        nextPage: null,
+        total: 0,
+        yorumlarAcik: true,
+      );
     }
   }
 
@@ -2828,7 +3072,9 @@ class RotaRepository {
   /// rota-yorumlar.md §3). Eklenen yorumu ve güncel toplam sayıyı döner.
   /// Yorumlar kapalıysa/gizli rota erişimi yoksa 403 → [RotaException].
   Future<({RotaYorum yorum, int yorumSayisi})> yorumEkle(
-      int id, String yorum) async {
+    int id,
+    String yorum,
+  ) async {
     final res = await _post('/uye/rotalar/$id/yorum', {'yorum': yorum.trim()});
     final d = res is Map ? res : const {};
     final y = d['yorum'];
@@ -2844,52 +3090,70 @@ class RotaRepository {
   /// `DELETE /uye/rotalar/{id}/yorum` — yorum sil (yazan üye veya rota sahibi,
   /// rota-yorumlar.md §5). Güncel toplam yorum sayısını döner.
   Future<int> yorumSil(int id, int yorumId) async {
-    final data = await _sendData(() async => _dio.delete(
+    final data = await _sendData(
+      () async => _dio.delete(
         '/uye/rotalar/$id/yorum',
         data: {'yorum_id': yorumId},
-        options: await _uyeAuth()));
+        options: await _uyeAuth(),
+      ),
+    );
     return (data is Map ? (data['yorum_sayisi'] as num?)?.toInt() : null) ?? 0;
   }
 
   /// `POST /uye/rotalar/{id}/yorum/begen` — yorumu beğen (👍, rota-yorum-begeni.md).
   Future<YorumTepki> yorumBegen(int id, int yorumId) async {
-    final res = await _post('/uye/rotalar/$id/yorum/begen', {'yorum_id': yorumId});
+    final res = await _post('/uye/rotalar/$id/yorum/begen', {
+      'yorum_id': yorumId,
+    });
     return YorumTepki.fromData(res);
   }
 
   /// `DELETE /uye/rotalar/{id}/yorum/begen` — beğeniyi kaldır.
   Future<YorumTepki> yorumBegenKaldir(int id, int yorumId) async {
-    final data = await _sendData(() async => _dio.delete(
+    final data = await _sendData(
+      () async => _dio.delete(
         '/uye/rotalar/$id/yorum/begen',
         data: {'yorum_id': yorumId},
-        options: await _uyeAuth()));
+        options: await _uyeAuth(),
+      ),
+    );
     return YorumTepki.fromData(data);
   }
 
   /// `POST /uye/rotalar/{id}/yorum/begenme` — yorumu beğenme (👎).
   Future<YorumTepki> yorumBegenme(int id, int yorumId) async {
-    final res =
-        await _post('/uye/rotalar/$id/yorum/begenme', {'yorum_id': yorumId});
+    final res = await _post('/uye/rotalar/$id/yorum/begenme', {
+      'yorum_id': yorumId,
+    });
     return YorumTepki.fromData(res);
   }
 
   /// `DELETE /uye/rotalar/{id}/yorum/begenme` — beğenmemeyi kaldır.
   Future<YorumTepki> yorumBegenmeKaldir(int id, int yorumId) async {
-    final data = await _sendData(() async => _dio.delete(
+    final data = await _sendData(
+      () async => _dio.delete(
         '/uye/rotalar/$id/yorum/begenme',
         data: {'yorum_id': yorumId},
-        options: await _uyeAuth()));
+        options: await _uyeAuth(),
+      ),
+    );
     return YorumTepki.fromData(data);
   }
 
   /// `GET /uye/rotalar/{id}/paylasim` — Instagram paylaşım görsel(ler)i üretir
   /// (rota-paylasim-gorseli.md). [format]: `story` (1080×1920) | `post`
   /// (1080×1350). Sıralı görsel URL listesini döner (hata/boşta boş liste).
-  Future<List<String>> paylasimGorseli(int id, {String format = 'story'}) async {
+  Future<List<String>> paylasimGorseli(
+    int id, {
+    String format = 'story',
+  }) async {
     if (id <= 0) return const [];
     try {
-      final res = await _dio.get('/uye/rotalar/$id/paylasim',
-          queryParameters: {'format': format}, options: await _uyeAuth());
+      final res = await _dio.get(
+        '/uye/rotalar/$id/paylasim',
+        queryParameters: {'format': format},
+        options: await _uyeAuth(),
+      );
       final body = res.data;
       if (body is! Map || body['success'] != true) return const [];
       final data = body['data'];
@@ -2906,8 +3170,9 @@ class RotaRepository {
 
   /// `DELETE /uye/rotalar/{id}` — rota sil (Plus şartı yok).
   Future<void> sil(int id) async {
-    await _send(() async =>
-        _dio.delete('/uye/rotalar/$id', options: await _uyeAuth()));
+    await _send(
+      () async => _dio.delete('/uye/rotalar/$id', options: await _uyeAuth()),
+    );
   }
 
   /// `GET /uye/rotalar/mekan-menu?post_id=` — mekanın QR menüsü (durağa ürün
@@ -2916,8 +3181,11 @@ class RotaRepository {
   Future<List<MekanMenuKategori>> mekanMenu(int postId) async {
     if (postId <= 0) return const [];
     try {
-      final res = await _dio.get('/uye/rotalar/mekan-menu',
-          queryParameters: {'post_id': postId}, options: await _uyeAuth());
+      final res = await _dio.get(
+        '/uye/rotalar/mekan-menu',
+        queryParameters: {'post_id': postId},
+        options: await _uyeAuth(),
+      );
       final body = res.data;
       if (body is! Map || body['success'] != true) return const [];
       final data = body['data'];
@@ -2935,8 +3203,12 @@ class RotaRepository {
 
   /// `POST /uye/rotalar/{id}/mekan` — sona mekan ekle (Plus gerekli). [qrId]
   /// verilirse durağa QR menü ürünü bağlanır. Yeni durak id'sini döner.
-  Future<int> mekanEkle(int id,
-      {required int postId, String? yorum, int? qrId}) async {
+  Future<int> mekanEkle(
+    int id, {
+    required int postId,
+    String? yorum,
+    int? qrId,
+  }) async {
     final res = await _post('/uye/rotalar/$id/mekan', {
       'post_id': postId,
       if (yorum != null && yorum.trim().isNotEmpty) 'yorum': yorum.trim(),
@@ -2983,14 +3255,16 @@ class RotaRepository {
   }) async {
     if (q.trim().length < 2) return const [];
     try {
-      final res = await _dio.get('/uye/rotalar/place/autocomplete',
-          queryParameters: {
-            'q': q.trim(),
-            if (lat != null && lng != null) 'lat': lat,
-            if (lat != null && lng != null) 'lng': lng,
-            if (session != null && session.isNotEmpty) 'session': session,
-          },
-          options: await _uyeAuth());
+      final res = await _dio.get(
+        '/uye/rotalar/place/autocomplete',
+        queryParameters: {
+          'q': q.trim(),
+          if (lat != null && lng != null) 'lat': lat,
+          if (lat != null && lng != null) 'lng': lng,
+          if (session != null && session.isNotEmpty) 'session': session,
+        },
+        options: await _uyeAuth(),
+      );
       final body = res.data;
       if (body is! Map || body['success'] != true) return const [];
       final data = body['data'];
@@ -3011,12 +3285,14 @@ class RotaRepository {
   Future<PlaceDetay?> placeDetay(String placeId, {String? session}) async {
     if (placeId.isEmpty) return null;
     try {
-      final res = await _dio.get('/uye/rotalar/place/detay',
-          queryParameters: {
-            'place_id': placeId,
-            if (session != null && session.isNotEmpty) 'session': session,
-          },
-          options: await _uyeAuth());
+      final res = await _dio.get(
+        '/uye/rotalar/place/detay',
+        queryParameters: {
+          'place_id': placeId,
+          if (session != null && session.isNotEmpty) 'session': session,
+        },
+        options: await _uyeAuth(),
+      );
       final body = res.data;
       if (body is! Map || body['success'] != true) return null;
       final data = body['data'];
@@ -3043,14 +3319,12 @@ class RotaRepository {
             if (d.qrIds.isNotEmpty) 'qr_ids': d.qrIds,
             if (d.yorum != null && d.yorum!.trim().isNotEmpty)
               'yorum': d.yorum!.trim(),
-          }
+          },
       ],
     });
     final data = res is Map ? res : const {};
     final atlanan = (data['atlanan'] is List)
-        ? (data['atlanan'] as List)
-            .whereType<Map<String, dynamic>>()
-            .toList()
+        ? (data['atlanan'] as List).whereType<Map<String, dynamic>>().toList()
         : <Map<String, dynamic>>[];
     return (
       eklenen: (data['eklenen_sayisi'] as num?)?.toInt() ?? 0,
@@ -3062,8 +3336,12 @@ class RotaRepository {
   /// kümesini** güncelle (Plus, rota-coklu-yemek.md §5). [qrIds] verilirse
   /// durağın tüm ürün listesi bununla değiştirilir (boş liste = temizle);
   /// null → ürünlere dokunma.
-  Future<void> durakGuncelle(int id,
-      {required int durakId, String? yorum, List<int>? qrIds}) async {
+  Future<void> durakGuncelle(
+    int id, {
+    required int durakId,
+    String? yorum,
+    List<int>? qrIds,
+  }) async {
     await _post('/uye/rotalar/$id/mekan/guncelle', {
       'durak_id': durakId,
       if (yorum != null) 'yorum': yorum.trim(),
@@ -3072,25 +3350,40 @@ class RotaRepository {
   }
 
   /// `POST /uye/rotalar/{id}/mekan/urun-ekle` — durağa tek ürün ekle (idempotent).
-  Future<void> durakUrunEkle(int id,
-      {required int durakId, required int qrId}) async {
-    await _post('/uye/rotalar/$id/mekan/urun-ekle',
-        {'durak_id': durakId, 'qr_id': qrId});
+  Future<void> durakUrunEkle(
+    int id, {
+    required int durakId,
+    required int qrId,
+  }) async {
+    await _post('/uye/rotalar/$id/mekan/urun-ekle', {
+      'durak_id': durakId,
+      'qr_id': qrId,
+    });
   }
 
   /// `DELETE /uye/rotalar/{id}/mekan/urun` — durağın bir ürününü kaldır.
-  Future<void> durakUrunSil(int id,
-      {required int durakId, required int qrId}) async {
-    await _send(() async => _dio.delete('/uye/rotalar/$id/mekan/urun',
+  Future<void> durakUrunSil(
+    int id, {
+    required int durakId,
+    required int qrId,
+  }) async {
+    await _send(
+      () async => _dio.delete(
+        '/uye/rotalar/$id/mekan/urun',
         data: {'durak_id': durakId, 'qr_id': qrId},
-        options: await _uyeAuth()));
+        options: await _uyeAuth(),
+      ),
+    );
   }
 
   /// `POST /uye/rotalar/{id}/mekan/gorsel` — durağa fotoğraf yükle (Plus,
   /// rota-durak-gorsel.md). [base64] data URI/çıplak base64. Yeni görseli döner
   /// (id + url); durak başına en çok 10 (aşılırsa [RotaException]).
-  Future<DurakGorsel> durakGorselYukle(int id,
-      {required int durakId, required String base64}) async {
+  Future<DurakGorsel> durakGorselYukle(
+    int id, {
+    required int durakId,
+    required String base64,
+  }) async {
     final res = await _post('/uye/rotalar/$id/mekan/gorsel', {
       'durak_id': durakId,
       'gorsel': base64,
@@ -3103,19 +3396,30 @@ class RotaRepository {
   }
 
   /// `DELETE /uye/rotalar/{id}/mekan/gorsel` — durak fotoğrafını sil.
-  Future<void> durakGorselSil(int id,
-      {required int durakId, required int gorselId}) async {
-    await _send(() async => _dio.delete('/uye/rotalar/$id/mekan/gorsel',
+  Future<void> durakGorselSil(
+    int id, {
+    required int durakId,
+    required int gorselId,
+  }) async {
+    await _send(
+      () async => _dio.delete(
+        '/uye/rotalar/$id/mekan/gorsel',
         data: {'durak_id': durakId, 'gorsel_id': gorselId},
-        options: await _uyeAuth()));
+        options: await _uyeAuth(),
+      ),
+    );
   }
 
   /// `POST /uye/rotalar/{id}/mekan/urun-gorsel` — durakta seçili bir yemeğe
   /// (ürüne) fotoğraf yükle (Plus, rota-yemek-gorsel.md). Ürün başına tek foto;
   /// yeni yükleme öncekini değiştirir. [base64] data URI/çıplak base64. Yeni
   /// fotoğrafın tam URL'ini döner.
-  Future<String> urunGorselYukle(int id,
-      {required int durakId, required int qrId, required String base64}) async {
+  Future<String> urunGorselYukle(
+    int id, {
+    required int durakId,
+    required int qrId,
+    required String base64,
+  }) async {
     final res = await _post('/uye/rotalar/$id/mekan/urun-gorsel', {
       'durak_id': durakId,
       'qr_id': qrId,
@@ -3126,17 +3430,29 @@ class RotaRepository {
   }
 
   /// `DELETE /uye/rotalar/{id}/mekan/urun-gorsel` — yemek fotoğrafını sil.
-  Future<void> urunGorselSil(int id,
-      {required int durakId, required int qrId}) async {
-    await _send(() async => _dio.delete('/uye/rotalar/$id/mekan/urun-gorsel',
+  Future<void> urunGorselSil(
+    int id, {
+    required int durakId,
+    required int qrId,
+  }) async {
+    await _send(
+      () async => _dio.delete(
+        '/uye/rotalar/$id/mekan/urun-gorsel',
         data: {'durak_id': durakId, 'qr_id': qrId},
-        options: await _uyeAuth()));
+        options: await _uyeAuth(),
+      ),
+    );
   }
 
   /// `DELETE /uye/rotalar/{id}/mekan` — durak sil (Plus şartı yok).
   Future<void> durakSil(int id, {required int durakId}) async {
-    await _send(() async => _dio.delete('/uye/rotalar/$id/mekan',
-        data: {'durak_id': durakId}, options: await _uyeAuth()));
+    await _send(
+      () async => _dio.delete(
+        '/uye/rotalar/$id/mekan',
+        data: {'durak_id': durakId},
+        options: await _uyeAuth(),
+      ),
+    );
   }
 
   /// `POST /uye/rotalar/{id}/sirala` — durakları sırala (Plus gerekli).
@@ -3155,8 +3471,10 @@ class RotaRepository {
 
   /// `DELETE /uye/rotalar/{id}/kapak` — kapak görselini kaldır (Plus şartı yok).
   Future<void> kapakSil(int id) async {
-    await _send(() async => _dio.delete('/uye/rotalar/$id/kapak',
-        options: await _uyeAuth()));
+    await _send(
+      () async =>
+          _dio.delete('/uye/rotalar/$id/kapak', options: await _uyeAuth()),
+    );
   }
 
   // ---- Beğeni (SOSYAL_BEGENI_TAKIP.md §1) — giriş gerekir, Plus GEREKMEZ ----
@@ -3166,40 +3484,50 @@ class RotaRepository {
   /// gizli/başkası rotasında 403 → [RotaException].
   Future<({bool begendim, int begeniSayisi})> begen(int id) async {
     final token = await _requireUyeToken();
-    final res = await _dio.post('/uye/rotalar/$id/begen',
-        options: Options(headers: {'Authorization': 'Bearer $token'}));
+    final res = await _dio.post(
+      '/uye/rotalar/$id/begen',
+      options: Options(headers: {'Authorization': 'Bearer $token'}),
+    );
     return _parseBegeni(res);
   }
 
   /// `DELETE /uye/rotalar/{id}/begen` — beğeniyi kaldır.
   Future<({bool begendim, int begeniSayisi})> begeniKaldir(int id) async {
     final token = await _requireUyeToken();
-    final res = await _dio.delete('/uye/rotalar/$id/begen',
-        options: Options(headers: {'Authorization': 'Bearer $token'}));
+    final res = await _dio.delete(
+      '/uye/rotalar/$id/begen',
+      options: Options(headers: {'Authorization': 'Bearer $token'}),
+    );
     return _parseBegeni(res);
   }
 
   /// `GET /uye/rotalar/takip-akisi` — takip edilenlerin herkese açık rotaları,
   /// en yeni üstte. Giriş yoksa boş döner (UI giriş kapısı gösterir).
   Future<({List<GeziRota> items, bool hasMore, int? nextPage, int total})>
-      takipAkisi({int page = 1, int limit = 20}) async {
-    const empty =
-        (items: <GeziRota>[], hasMore: false, nextPage: null, total: 0);
+  takipAkisi({int page = 1, int limit = 20}) async {
+    const empty = (
+      items: <GeziRota>[],
+      hasMore: false,
+      nextPage: null,
+      total: 0,
+    );
     final token = await Api.instance.uyeToken;
     if (token == null || token.isEmpty) return empty;
     try {
-      final res = await _dio.get('/uye/rotalar/takip-akisi',
-          queryParameters: {'page': page, 'limit': limit},
-          options: Options(headers: {'Authorization': 'Bearer $token'}));
+      final res = await _dio.get(
+        '/uye/rotalar/takip-akisi',
+        queryParameters: {'page': page, 'limit': limit},
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
       final body = res.data;
       if (body is! Map || body['success'] != true) return empty;
       final data = body['data'];
       final list = (data is List)
           ? data
-              .whereType<Map<String, dynamic>>()
-              .map((j) => GeziRota.fromJson(j, host: kApiHost))
-              .where((r) => r.id > 0)
-              .toList()
+                .whereType<Map<String, dynamic>>()
+                .map((j) => GeziRota.fromJson(j, host: kApiHost))
+                .where((r) => r.id > 0)
+                .toList()
           : <GeziRota>[];
       final meta = (body['meta'] as Map?) ?? const {};
       return (
@@ -3242,8 +3570,10 @@ class RotaRepository {
   Future<dynamic> _post(String path, Map<String, dynamic> data) async {
     final token = await Api.instance.uyeToken;
     if (token == null || token.isEmpty) {
-      throw PlusRequiredException('Bu işlem için giriş yapmalısın.',
-          girisGerekli: true);
+      throw PlusRequiredException(
+        'Bu işlem için giriş yapmalısın.',
+        girisGerekli: true,
+      );
     }
     try {
       final res = await _dio.post(
@@ -3254,7 +3584,8 @@ class RotaRepository {
       final body = res.data;
       if (res.statusCode == 403 || _rotaDetail(body) == 'plus_gerekli') {
         throw PlusRequiredException(
-            _rotaMessage(body) ?? 'Bu işlem Gezgah Plus üyeliği gerektirir.');
+          _rotaMessage(body) ?? 'Bu işlem Gezgah Plus üyeliği gerektirir.',
+        );
       }
       if (body is! Map || body['success'] != true) {
         throw RotaException(_rotaMessage(body) ?? 'İşlem tamamlanamadı.');
@@ -3267,11 +3598,14 @@ class RotaRepository {
     } on DioException catch (e) {
       if (e.response?.statusCode == 403) {
         throw PlusRequiredException(
-            _rotaMessage(e.response?.data) ??
-                'Bu işlem Gezgah Plus üyeliği gerektirir.');
+          _rotaMessage(e.response?.data) ??
+              'Bu işlem Gezgah Plus üyeliği gerektirir.',
+        );
       }
-      throw RotaException(_rotaMessage(e.response?.data) ??
-          'Sunucuya ulaşılamadı. Lütfen tekrar dene.');
+      throw RotaException(
+        _rotaMessage(e.response?.data) ??
+            'Sunucuya ulaşılamadı. Lütfen tekrar dene.',
+      );
     }
   }
 
@@ -3279,15 +3613,18 @@ class RotaRepository {
   Future<void> _send(Future<Response> Function() run) async {
     final token = await Api.instance.uyeToken;
     if (token == null || token.isEmpty) {
-      throw PlusRequiredException('Bu işlem için giriş yapmalısın.',
-          girisGerekli: true);
+      throw PlusRequiredException(
+        'Bu işlem için giriş yapmalısın.',
+        girisGerekli: true,
+      );
     }
     try {
       final res = await run();
       final body = res.data;
       if (res.statusCode == 403 || _rotaDetail(body) == 'plus_gerekli') {
         throw PlusRequiredException(
-            _rotaMessage(body) ?? 'Bu işlem Gezgah Plus üyeliği gerektirir.');
+          _rotaMessage(body) ?? 'Bu işlem Gezgah Plus üyeliği gerektirir.',
+        );
       }
       if (body is! Map || body['success'] != true) {
         throw RotaException(_rotaMessage(body) ?? 'İşlem tamamlanamadı.');
@@ -3299,11 +3636,14 @@ class RotaRepository {
     } on DioException catch (e) {
       if (e.response?.statusCode == 403) {
         throw PlusRequiredException(
-            _rotaMessage(e.response?.data) ??
-                'Bu işlem Gezgah Plus üyeliği gerektirir.');
+          _rotaMessage(e.response?.data) ??
+              'Bu işlem Gezgah Plus üyeliği gerektirir.',
+        );
       }
-      throw RotaException(_rotaMessage(e.response?.data) ??
-          'Sunucuya ulaşılamadı. Lütfen tekrar dene.');
+      throw RotaException(
+        _rotaMessage(e.response?.data) ??
+            'Sunucuya ulaşılamadı. Lütfen tekrar dene.',
+      );
     }
   }
 
@@ -3312,15 +3652,18 @@ class RotaRepository {
   Future<dynamic> _sendData(Future<Response> Function() run) async {
     final token = await Api.instance.uyeToken;
     if (token == null || token.isEmpty) {
-      throw PlusRequiredException('Bu işlem için giriş yapmalısın.',
-          girisGerekli: true);
+      throw PlusRequiredException(
+        'Bu işlem için giriş yapmalısın.',
+        girisGerekli: true,
+      );
     }
     try {
       final res = await run();
       final body = res.data;
       if (res.statusCode == 403 || _rotaDetail(body) == 'plus_gerekli') {
         throw PlusRequiredException(
-            _rotaMessage(body) ?? 'Bu işlem Gezgah Plus üyeliği gerektirir.');
+          _rotaMessage(body) ?? 'Bu işlem Gezgah Plus üyeliği gerektirir.',
+        );
       }
       if (body is! Map || body['success'] != true) {
         throw RotaException(_rotaMessage(body) ?? 'İşlem tamamlanamadı.');
@@ -3333,11 +3676,14 @@ class RotaRepository {
     } on DioException catch (e) {
       if (e.response?.statusCode == 403) {
         throw PlusRequiredException(
-            _rotaMessage(e.response?.data) ??
-                'Bu işlem Gezgah Plus üyeliği gerektirir.');
+          _rotaMessage(e.response?.data) ??
+              'Bu işlem Gezgah Plus üyeliği gerektirir.',
+        );
       }
-      throw RotaException(_rotaMessage(e.response?.data) ??
-          'Sunucuya ulaşılamadı. Lütfen tekrar dene.');
+      throw RotaException(
+        _rotaMessage(e.response?.data) ??
+            'Sunucuya ulaşılamadı. Lütfen tekrar dene.',
+      );
     }
   }
 
@@ -3380,58 +3726,69 @@ class TakipRepository {
   /// / bulunamadı (404) → [AuthException] (sunucu mesajıyla).
   Future<({bool takipEdiyorum, int takipciSayisi})> takipEt(int uyeId) async {
     final token = await _requireToken();
-    final res = await _dio.post('/uye/takip',
-        data: {'uye_id': uyeId},
-        options: Options(headers: {'Authorization': 'Bearer $token'}));
+    final res = await _dio.post(
+      '/uye/takip',
+      data: {'uye_id': uyeId},
+      options: Options(headers: {'Authorization': 'Bearer $token'}),
+    );
     return _parseTakip(res);
   }
 
   /// `DELETE /uye/takip` `{uye_id}` — takibi bırak.
-  Future<({bool takipEdiyorum, int takipciSayisi})> takipBirak(int uyeId) async {
+  Future<({bool takipEdiyorum, int takipciSayisi})> takipBirak(
+    int uyeId,
+  ) async {
     final token = await _requireToken();
-    final res = await _dio.delete('/uye/takip',
-        data: {'uye_id': uyeId},
-        options: Options(headers: {'Authorization': 'Bearer $token'}));
+    final res = await _dio.delete(
+      '/uye/takip',
+      data: {'uye_id': uyeId},
+      options: Options(headers: {'Authorization': 'Bearer $token'}),
+    );
     return _parseTakip(res);
   }
 
   /// `GET /uye/takip/edilenler` — [uyeId]'nin (yoksa giriş yapan üyenin) takip
   /// ETTİĞİ kişiler.
   Future<({List<TakipUye> items, bool hasMore, int? nextPage, int total})>
-      edilenler({int? uyeId, int page = 1, int limit = 20}) =>
-          _liste('/uye/takip/edilenler', uyeId: uyeId, page: page, limit: limit);
+  edilenler({int? uyeId, int page = 1, int limit = 20}) =>
+      _liste('/uye/takip/edilenler', uyeId: uyeId, page: page, limit: limit);
 
   /// `GET /uye/takip/edenler` — [uyeId]'nin (yoksa giriş yapan üyenin)
   /// takipçileri.
   Future<({List<TakipUye> items, bool hasMore, int? nextPage, int total})>
-      edenler({int? uyeId, int page = 1, int limit = 20}) =>
-          _liste('/uye/takip/edenler', uyeId: uyeId, page: page, limit: limit);
+  edenler({int? uyeId, int page = 1, int limit = 20}) =>
+      _liste('/uye/takip/edenler', uyeId: uyeId, page: page, limit: limit);
 
   Future<({List<TakipUye> items, bool hasMore, int? nextPage, int total})>
-      _liste(String path,
-          {int? uyeId, int page = 1, int limit = 20}) async {
-    const empty =
-        (items: <TakipUye>[], hasMore: false, nextPage: null, total: 0);
+  _liste(String path, {int? uyeId, int page = 1, int limit = 20}) async {
+    const empty = (
+      items: <TakipUye>[],
+      hasMore: false,
+      nextPage: null,
+      total: 0,
+    );
     final token = await Api.instance.uyeToken;
     try {
-      final res = await _dio.get(path,
-          queryParameters: {
-            if (uyeId != null && uyeId > 0) 'uye_id': uyeId,
-            'page': page,
-            'limit': limit,
-          },
-          options: (token != null && token.isNotEmpty)
-              ? Options(headers: {'Authorization': 'Bearer $token'})
-              : null);
+      final res = await _dio.get(
+        path,
+        queryParameters: {
+          if (uyeId != null && uyeId > 0) 'uye_id': uyeId,
+          'page': page,
+          'limit': limit,
+        },
+        options: (token != null && token.isNotEmpty)
+            ? Options(headers: {'Authorization': 'Bearer $token'})
+            : null,
+      );
       final body = res.data;
       if (body is! Map || body['success'] != true) return empty;
       final data = body['data'];
       final list = (data is List)
           ? data
-              .whereType<Map<String, dynamic>>()
-              .map((j) => TakipUye.fromJson(j, host: kApiHost))
-              .where((u) => u.uyeId > 0)
-              .toList()
+                .whereType<Map<String, dynamic>>()
+                .map((j) => TakipUye.fromJson(j, host: kApiHost))
+                .where((u) => u.uyeId > 0)
+                .toList()
           : <TakipUye>[];
       final meta = (body['meta'] as Map?) ?? const {};
       return (
@@ -3468,6 +3825,7 @@ class TakipRepository {
     final err = (body is Map ? body['error'] : null);
     final msg = (err is Map ? err['message'] : null);
     throw AuthException(
-        (msg is String && msg.trim().isNotEmpty) ? msg : 'Takip güncellenemedi.');
+      (msg is String && msg.trim().isNotEmpty) ? msg : 'Takip güncellenemedi.',
+    );
   }
 }
