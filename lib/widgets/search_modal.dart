@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../data/api.dart';
 import '../data/location_service.dart';
 import '../data/mock_data.dart';
@@ -113,6 +114,8 @@ class _SearchModalState extends State<_SearchModal>
   /// Aranan mekan tipi (ARAMA_TIP_BAZLI.md). `mekan` dışındaki tiplerde QR menü
   /// bulunmadığı için Yemekler sekmesi gösterilmez.
   _SearchType _type = _SearchType.mekan;
+  final ScrollController _typeScroll = ScrollController();
+  bool _typeAtEnd = false; // tip listesi sonuna kaydırıldı mı (fade'i kaldır)
 
   String? _userId; // arama geçmişi kaydı için (varsa gerçek, yoksa anonim)
   List<String> _popular = MockData.popularSearches; // API gelene kadar fallback
@@ -212,6 +215,7 @@ class _SearchModalState extends State<_SearchModal>
     _foodCancel?.cancel('modal kapandı');
     _tab.removeListener(_onTabChanged);
     _tab.dispose();
+    _typeScroll.dispose();
     _placeScroll.dispose();
     _foodScroll.dispose();
     _controller.dispose();
@@ -641,17 +645,10 @@ class _SearchModalState extends State<_SearchModal>
   /// Mekanlar/Yemekler sekmeleri, diğer tiplerde (plaj/mesire/otopark) QR menü
   /// olmadığı için sekme yok — doğrudan mekan listesi (ARAMA_TIP_BAZLI.md).
   Widget _resultsView() {
-    if (!_type.yemekVar) {
-      return Column(
-        children: [
-          _typeSelector(),
-          Expanded(child: _placesTab()),
-        ],
-      );
-    }
+    // Yemek sekmesi olmayan tiplerde (plaj/mesire/otopark) doğrudan liste.
+    if (!_type.yemekVar) return _placesTab();
     return Column(
       children: [
-        _typeSelector(),
         _searchTabs(),
         Expanded(
           child: TabBarView(
@@ -663,44 +660,80 @@ class _SearchModalState extends State<_SearchModal>
     );
   }
 
-  /// Mekan tipi seçici — yatay hap listesi (Mekan seçili gelir).
+  /// Mekan tipi seçici — yatay hap listesi (Mekan seçili gelir). Sağ kenar
+  /// yumuşatılır (kaydırılabilir olduğu belli olsun); kaydırmaya başlayınca
+  /// hafif titreşim verilir.
   Widget _typeSelector() {
     return SizedBox(
-      height: 38,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-        itemCount: _SearchType.values.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (_, i) {
-          final t = _SearchType.values[i];
-          final active = t == _type;
-          return GestureDetector(
-            onTap: () => _changeType(t),
-            child: Container(
-              alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              decoration: BoxDecoration(
-                color: active ? AppColors.primary : AppColors.primarySoft,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(t.icon,
-                      size: 15,
-                      color: active ? Colors.white : AppColors.primary),
-                  const SizedBox(width: 6),
-                  Text(t.label,
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: active ? Colors.white : AppColors.primary)),
-                ],
-              ),
-            ),
-          );
+      height: 36,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (n) {
+          // Kaydırma başladığında bir kez hafif titreşim.
+          if (n is ScrollStartNotification) HapticFeedback.lightImpact();
+          if (n is ScrollMetricsNotification || n is ScrollUpdateNotification) {
+            final m = n.metrics;
+            final atEnd = m.pixels >= m.maxScrollExtent - 2;
+            if (atEnd != _typeAtEnd) {
+              // Sona gelindiyse fade'i kaldır (build sırasında setState olmasın).
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) setState(() => _typeAtEnd = atEnd);
+              });
+            }
+          }
+          return false;
         },
+        child: ShaderMask(
+          // Son öğe silik görünsün → daha fazla seçenek olduğunu ima eder.
+          // Sona kaydırılınca silikleştirme kalkar.
+          shaderCallback: (rect) => LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [
+              Colors.white,
+              Colors.white,
+              _typeAtEnd ? Colors.white : Colors.transparent,
+            ],
+            stops: const [0.0, 0.82, 1.0],
+          ).createShader(rect),
+          blendMode: BlendMode.dstIn,
+          child: ListView.separated(
+            controller: _typeScroll,
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.zero,
+            itemCount: _SearchType.values.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (_, i) {
+              final t = _SearchType.values[i];
+              final active = t == _type;
+              return GestureDetector(
+                onTap: () => _changeType(t),
+                child: Container(
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(horizontal: 13),
+                  decoration: BoxDecoration(
+                    color: active ? AppColors.primary : AppColors.primarySoft,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(t.icon,
+                          size: 14,
+                          color: active ? Colors.white : AppColors.primary),
+                      const SizedBox(width: 5),
+                      Text(t.label,
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color:
+                                  active ? Colors.white : AppColors.primary)),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -709,6 +742,7 @@ class _SearchModalState extends State<_SearchModal>
   /// listesi yeniden çekilir ve arama tekrar çalıştırılır.
   void _changeType(_SearchType t) {
     if (t == _type) return;
+    HapticFeedback.selectionClick();
     setState(() {
       _type = t;
       _placeFilters.clear();
@@ -1175,7 +1209,10 @@ class _SearchModalState extends State<_SearchModal>
               const Text('Ara',
                   style:
                       TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
-              const Spacer(),
+              const SizedBox(width: 12),
+              // Mekan tipi seçici — başlık ile kapat butonu arasında.
+              Expanded(child: _typeSelector()),
+              const SizedBox(width: 8),
               GestureDetector(
                 onTap: () => Navigator.pop(context),
                 child: Container(
