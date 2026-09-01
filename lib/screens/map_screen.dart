@@ -14,7 +14,13 @@ import 'detail_screen.dart';
 class MapScreen extends StatefulWidget {
   /// Harita açıldığında önceden seçili olacak kategori id'si (opsiyonel).
   final int? initialCategoryId;
-  const MapScreen({super.key, this.initialCategoryId});
+
+  /// Harita açıldığında seçili olacak post type (`otopark` | `mesire` | `plaj`).
+  /// Verilmezse "Mekan" (restoran) seçili gelir. Tip listesinden açılan liste
+  /// ekranından haritaya geçildiğinde aynı tip korunur.
+  final String? initialType;
+
+  const MapScreen({super.key, this.initialCategoryId, this.initialType});
 
   @override
   State<MapScreen> createState() => _MapScreenState();
@@ -88,7 +94,19 @@ class _MapScreenState extends State<MapScreen> {
     _init();
   }
 
+  /// Verilen post type slug'ını tip seçeneğine çevirir (bilinmeyen → Mekan).
+  static _MapType _typeFromSlug(String? slug) {
+    return switch (slug) {
+      'otopark' => _MapType.otopark,
+      'mesire' => _MapType.mesire,
+      'plaj' => _MapType.plaj,
+      _ => _MapType.mekan,
+    };
+  }
+
   Future<void> _init() async {
+    // Liste ekranından gelen tip (otopark/mesire/plaj) haritada da seçili olsun.
+    _type = _typeFromSlug(widget.initialType);
     final loc = await LocationService.resolve();
     _loc = loc;
     if (loc.real) {

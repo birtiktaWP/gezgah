@@ -561,6 +561,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
                 MaterialPageRoute(
                   builder: (_) => MapScreen(
                     initialCategoryId: _category?.id ?? widget.categoryId,
+                    // Otopark/mesire/plaj listesinden geçilirse haritada da
+                    // aynı tip seçili gelsin.
+                    initialType: widget.type,
                   ),
                 ),
               ),

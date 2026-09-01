@@ -17,7 +17,8 @@ import 'kedy_chat.dart';
 import 'place_cards.dart';
 
 /// Aramada seçilebilen mekan tipi (ARAMA_TIP_BAZLI.md → `type`).
-enum _SearchType { mekan, plaj, mesire, otopark }
+/// Sıra, tip seçicideki gösterim sırasıdır.
+enum _SearchType { mekan, mesire, otopark, plaj }
 
 extension _SearchTypeX on _SearchType {
   /// API'ye gönderilen `type` değeri.
@@ -29,10 +30,10 @@ extension _SearchTypeX on _SearchType {
       };
 
   String get label => switch (this) {
-        _SearchType.mekan => 'Mekan',
-        _SearchType.plaj => 'Plaj',
+        _SearchType.mekan => 'Mekanlar',
         _SearchType.mesire => 'Mesire',
         _SearchType.otopark => 'Otopark',
+        _SearchType.plaj => 'Plaj',
       };
 
   IconData get icon => switch (this) {
@@ -1347,24 +1348,45 @@ class _SearchModalState extends State<_SearchModal>
         const SizedBox(width: 10),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
-            Text('Kedy Tavsiyeleri',
+          children: [
+            const Text('Kedy Tavsiyeleri',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-            Text('Sana özel akıllı öneriler',
-                style: TextStyle(fontSize: 12, color: AppColors.muted)),
+            Text('${_type.label} için akıllı öneriler',
+                style: const TextStyle(fontSize: 12, color: AppColors.muted)),
           ],
         ),
       ],
     );
   }
 
-  /// Kedy tavsiyeleri — 2 sütunlu kart ızgarası, her öneride kendi ikonu.
-  static const List<(IconData, String)> _kedyTips = [
-    (Icons.work_outline, 'Sessiz çalışma kafeleri'),
-    (Icons.umbrella, 'Yağmurlu güne uygun'),
-    (Icons.favorite_border, 'İlk buluşma için'),
-    (Icons.attach_money, 'Bütçe dostu lezzetler'),
-  ];
+  /// Kedy tavsiyeleri — seçili mekan tipine göre değişir. Karta dokununca
+  /// metin Kedy'ye mesaj olarak gönderilir.
+  List<(IconData, String)> get _kedyTips => switch (_type) {
+        _SearchType.mekan => const [
+            (Icons.work_outline, 'Sessiz çalışma kafeleri'),
+            (Icons.umbrella, 'Yağmurlu güne uygun'),
+            (Icons.favorite_border, 'İlk buluşma için'),
+            (Icons.attach_money, 'Bütçe dostu lezzetler'),
+          ],
+        _SearchType.mesire => const [
+            (Icons.outdoor_grill_outlined, 'Mangal yapılabilen alanlar'),
+            (Icons.family_restroom, 'Çocuklu aileler için mesire'),
+            (Icons.directions_walk, 'Yürüyüş parkuru olan yerler'),
+            (Icons.landscape_outlined, 'Manzarası güzel piknik alanı'),
+          ],
+        _SearchType.otopark => const [
+            (Icons.garage_outlined, 'Yakınımdaki kapalı otopark'),
+            (Icons.access_time, '7/24 açık otopark'),
+            (Icons.attach_money, 'Ucuz otopark seçenekleri'),
+            (Icons.layers_outlined, 'Katlı otopark nerede'),
+          ],
+        _SearchType.plaj => const [
+            (Icons.waves, 'Sakin koylar'),
+            (Icons.money_off, 'Ücretsiz halk plajları'),
+            (Icons.beach_access_outlined, 'Şezlong olan plajlar'),
+            (Icons.family_restroom, 'Çocuklu aileler için plaj'),
+          ],
+      };
 
   Widget _kedyGrid() {
     return GridView.builder(
