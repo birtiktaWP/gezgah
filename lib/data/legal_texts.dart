@@ -10,6 +10,46 @@ class LegalSection {
   const LegalSection({this.heading, this.paragraphs = const []});
 }
 
+/// Sunucudan gelen sözleşme gövdesini ([Sozlesme.icerik], `format: markdown`)
+/// ekranda gösterilecek bölümlere ayırır (SOZLESMELER.md → "Gövde biçimi").
+///
+/// Kural: paragraflar boş satırla ayrılır; `1. Başlık` gibi numaralı ve tek
+/// satırlık bloklar bölüm başlığı sayılır, sonrasındaki paragraflar o bölüme
+/// bağlanır. `**...**` işaretleri korunur (görünümde kalın gösterilir).
+List<LegalSection> parseLegalBody(String body) {
+  final blocks = body
+      .replaceAll('\r\n', '\n')
+      .split(RegExp(r'\n{2,}'))
+      .map((b) => b.trim())
+      .where((b) => b.isNotEmpty)
+      .toList();
+
+  final headingRe = RegExp(r'^\d+(\.\d+)*[\.\)]\s+\S');
+  final sections = <LegalSection>[];
+  String? heading;
+  var paragraphs = <String>[];
+
+  void flush() {
+    if (heading != null || paragraphs.isNotEmpty) {
+      sections.add(LegalSection(heading: heading, paragraphs: paragraphs));
+    }
+    heading = null;
+    paragraphs = <String>[];
+  }
+
+  for (final b in blocks) {
+    final tekSatir = !b.contains('\n');
+    if (tekSatir && headingRe.hasMatch(b) && b.length <= 120) {
+      flush();
+      heading = b;
+    } else {
+      paragraphs.add(b);
+    }
+  }
+  flush();
+  return sections;
+}
+
 /// Veri sorumlusu / hizmet sağlayıcı künyesi. Tüm metinlerde aynı bilgiler
 /// kullanılır; değişiklik gerektiğinde yalnız burası güncellenir.
 class LegalInfo {
@@ -17,7 +57,7 @@ class LegalInfo {
 
   static const String unvan = 'Ömer Çelik';
   static const String vergiNo = '2390997498';
-  static const String adres = 'Merkez Mah.';
+  static const String adres = 'Vi\u015fnezade Mah. S\u00fcleyman Seba Cad. No: 79 \u0130\u00e7 Kap\u0131 No: 1 Akaretler, Be\u015fikta\u015f - \u0130stanbul';
   static const String destekEposta = 'destek@gezgah.com';
   static const String kvkkEposta = 'info@gezgah.com';
 }
@@ -145,7 +185,7 @@ const Map<String, List<LegalSection>> kLegalTexts = {
             '\u201cGezgah KVKK Aydınlatma Metni\u201d incelenmelidir.',
         '**Veri sorumlusu:** Ömer Çelik\n'
             '**Vergi numarası:** 2390997498\n'
-            '**Adres:** Merkez Mah.\n'
+            '**Adres:** Vi\u015fnezade Mah. S\u00fcleyman Seba Cad. No: 79 \u0130\u00e7 Kap\u0131 No: 1 Akaretler, Be\u015fikta\u015f - \u0130stanbul\n'
             '**Destek e-postası:** destek@gezgah.com\n'
             '**KVKK başvuru e-postası:** info@gezgah.com',
       ],
@@ -315,7 +355,7 @@ const Map<String, List<LegalSection>> kLegalTexts = {
             'ehliyetine sahip kullanıcılar tarafından yapılmalıdır.',
         '**Hizmet sağlayıcı:** Ömer Çelik\n'
             '**Vergi numarası:** 2390997498\n'
-            '**Adres:** Merkez Mah.\n'
+            '**Adres:** Vi\u015fnezade Mah. S\u00fcleyman Seba Cad. No: 79 \u0130\u00e7 Kap\u0131 No: 1 Akaretler, Be\u015fikta\u015f - \u0130stanbul\n'
             '**Destek e-postası:** destek@gezgah.com',
       ],
     ),
@@ -658,7 +698,7 @@ const Map<String, List<LegalSection>> kLegalTexts = {
             '**Ömer Çelik** tarafından işlenmektedir.',
         '**Veri sorumlusu:** Ömer Çelik\n'
             '**Vergi numarası:** 2390997498\n'
-            '**Adres:** Merkez Mah.\n'
+            '**Adres:** Vi\u015fnezade Mah. S\u00fcleyman Seba Cad. No: 79 \u0130\u00e7 Kap\u0131 No: 1 Akaretler, Be\u015fikta\u015f - \u0130stanbul\n'
             '**KVKK başvuru e-postası:** info@gezgah.com\n'
             '**Destek e-postası:** destek@gezgah.com',
       ],
@@ -778,7 +818,7 @@ const Map<String, List<LegalSection>> kLegalTexts = {
       heading: '9. Başvuru yöntemi',
       paragraphs: [
         'KVKK kapsamındaki taleplerinizi **info@gezgah.com** adresine '
-            'veya **Merkez Mah.** adresine (Veri sorumlusu: Ömer Çelik, '
+            'veya **Vi\u015fnezade Mah. S\u00fcleyman Seba Cad. No: 79 \u0130\u00e7 Kap\u0131 No: 1 Akaretler, Be\u015fikta\u015f - \u0130stanbul** adresine (Veri sorumlusu: Ömer Çelik, '
             'vergi numarası: 2390997498) yazılı olarak iletebilirsiniz. '
             'Başvuruda ad, soyad, iletişim bilgisi, talep konusu ve '
             'kimliğinizi doğrulamaya yarayacak bilgiler bulunmalıdır. Gezgah '
@@ -806,7 +846,7 @@ const Map<String, List<LegalSection>> kLegalTexts = {
             'tanımlayıcıları, yazılım geliştirme kitleri) hakkında bilgi verir.',
         '**Veri sorumlusu:** Ömer Çelik\n'
             '**Vergi numarası:** 2390997498\n'
-            '**Adres:** Merkez Mah.\n'
+            '**Adres:** Vi\u015fnezade Mah. S\u00fcleyman Seba Cad. No: 79 \u0130\u00e7 Kap\u0131 No: 1 Akaretler, Be\u015fikta\u015f - \u0130stanbul\n'
             '**Destek e-postası:** destek@gezgah.com\n'
             '**KVKK başvuru e-postası:** info@gezgah.com',
         'Mobil uygulamada klasik tarayıcı çerezleri yerine ağırlıklı olarak '
@@ -891,7 +931,7 @@ const Map<String, List<LegalSection>> kLegalTexts = {
             'düzenler.',
         '**Hizmet sağlayıcı:** Ömer Çelik\n'
             '**Vergi numarası:** 2390997498\n'
-            '**Adres:** Merkez Mah.\n'
+            '**Adres:** Vi\u015fnezade Mah. S\u00fcleyman Seba Cad. No: 79 \u0130\u00e7 Kap\u0131 No: 1 Akaretler, Be\u015fikta\u015f - \u0130stanbul\n'
             '**Destek e-postası:** destek@gezgah.com',
       ],
     ),

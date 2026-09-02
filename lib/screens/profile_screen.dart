@@ -31,8 +31,8 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  // Sözleşme başlıkları — içerik uygulama içinde metin olarak gösterilir
-  // (bkz. data/legal_texts.dart).
+  // Sözleşme başlıkları — sunucudan (`/sozlesmeler`) liste gelmezse kullanılan
+  // yedek; içerik uygulamaya gömülüdür (bkz. data/legal_texts.dart).
   static const List<String> _legalDocs = [
     'Kullanıcı Sözleşmesi',
     'Gizlilik Politikası',
@@ -41,6 +41,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     'İade ve Cayma Hakkı Sözleşmesi',
     'Açık Rıza Metni',
   ];
+
+  /// Sunucudan gelen sözleşme listesi (SOZLESMELER.md); boşsa yedek kullanılır.
+  List<Sozlesme> _sozlesmeler = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSozlesmeler();
+  }
+
+  Future<void> _loadSozlesmeler() async {
+    final list = await SozlesmeRepository.instance.liste();
+    if (!mounted || list.isEmpty) return;
+    setState(() => _sozlesmeler = list);
+  }
 
   AppUser? get _user => AuthService.instance.user.value;
 
@@ -105,9 +120,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onTap: () => _openFollows(1)),
             ]),
             _group('Sözleşmeler', [
-              for (final title in _legalDocs)
-                _row(_docIcon(title), title, _docSub(title),
-                    onTap: () => _openDoc(title)),
+              if (_sozlesmeler.isNotEmpty)
+                for (final s in _sozlesmeler)
+                  _row(_docIcon(s.baslik), s.baslik,
+                      s.ozet.isNotEmpty ? s.ozet : _docSub(s.baslik),
+                      onTap: () => _openDoc(s.baslik, slug: s.slug))
+              else
+                for (final title in _legalDocs)
+                  _row(_docIcon(title), title, _docSub(title),
+                      onTap: () => _openDoc(title)),
             ]),
             _group(null, [
               _row(Icons.logout, 'Çıkış Yap', null,
@@ -463,12 +484,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _openDoc(String title) {
+  void _openDoc(String title, {String? slug}) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _LegalSheet(title: title),
+      builder: (_) => _LegalSheet(title: title, slug: slug),
     );
   }
 
@@ -990,19 +1011,59 @@ class _SettingsSheetState extends State<_SettingsSheet> {
       );
 }
 
-/// Sözleşme metnini modal içinde metin olarak gösterir (bkz. legal_texts.dart).
-class _LegalSheet extends StatelessWidget {
+/// Sözleşme metnini modal içinde gösterir. [slug] verilirse gövde
+/// `GET /sozlesmeler/{slug}` ile çekilir (SOZLESMELER.md); ağ hatası/404'te
+/// uygulamaya gömülü metne düşülür (bkz. legal_texts.dart).
+class _LegalSheet extends StatefulWidget {
   final String title;
-  const _LegalSheet({required this.title});
+  final String? slug;
+  const _LegalSheet({required this.title, this.slug});
+
+  @override
+  State<_LegalSheet> createState() => _LegalSheetState();
+}
+
+class _LegalSheetState extends State<_LegalSheet> {
+  Sozlesme? _remote;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final slug = widget.slug;
+    if (slug != null && slug.isNotEmpty && !slug.startsWith('local:')) {
+      _load(slug);
+    }
+  }
+
+  Future<void> _load(String slug) async {
+    setState(() => _loading = true);
+    final s = await SozlesmeRepository.instance.metin(slug);
+    if (!mounted) return;
+    setState(() {
+      _remote = s;
+      _loading = false;
+    });
+  }
+
+  List<LegalSection> get _sections {
+    final r = _remote;
+    if (r != null && r.icerik.trim().isNotEmpty) {
+      return parseLegalBody(r.icerik);
+    }
+    return kLegalTexts[widget.title] ?? const [];
+  }
 
   @override
   Widget build(BuildContext context) {
-    final sections = kLegalTexts[title];
+    final sections = _sections;
     return _SheetScaffold(
-      title: title,
+      title: (_remote?.baslik.isNotEmpty ?? false)
+          ? _remote!.baslik
+          : widget.title,
       backArrow: true,
-      child: sections == null
-          ? _placeholder()
+      child: sections.isEmpty
+          ? (_loading ? _spinner() : _placeholder())
           : ListView.separated(
               padding: EdgeInsets.fromLTRB(
                   22, 20, 22, 28 + MediaQuery.of(context).viewInsets.bottom),
@@ -1013,6 +1074,15 @@ class _LegalSheet extends StatelessWidget {
     );
   }
 
+  Widget _spinner() => const Center(
+        child: SizedBox(
+          width: 26,
+          height: 26,
+          child: CircularProgressIndicator(
+              strokeWidth: 2.5, color: AppColors.primary),
+        ),
+      );
+
   Widget _placeholder() {
     return const Center(
       child: Padding(
@@ -1022,7 +1092,7 @@ class _LegalSheet extends StatelessWidget {
           children: [
             Icon(Icons.description_outlined, size: 40, color: AppColors.muted),
             SizedBox(height: 12),
-            Text('Bu metin yakında eklenecek.',
+            Text('Bu metin şu an görüntülenemiyor.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 14, color: AppColors.muted)),
           ],

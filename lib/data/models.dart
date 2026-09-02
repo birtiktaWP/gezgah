@@ -172,6 +172,50 @@ class Event {
       );
 }
 
+/// Yasal metin / sözleşme (`GET /sozlesmeler`, SOZLESMELER.md).
+/// Liste ucunda [icerik] boş gelir; tam gövde `/sozlesmeler/{slug}` ile alınır.
+class Sozlesme {
+  final String slug;
+  final String baslik;
+  final String surum; // v1, v2… — onay takibinde saklanır
+  final String tip; // zorunlu | opsiyonel
+  final String ozet;
+  final String format; // markdown
+  final String icerik; // tam metin (yalnız tek metin ucunda)
+  final String yururlukTarihi;
+  final String guncelleme;
+
+  const Sozlesme({
+    required this.slug,
+    this.baslik = '',
+    this.surum = '',
+    this.tip = 'zorunlu',
+    this.ozet = '',
+    this.format = 'markdown',
+    this.icerik = '',
+    this.yururlukTarihi = '',
+    this.guncelleme = '',
+  });
+
+  bool get zorunlu => tip == 'zorunlu';
+
+  factory Sozlesme.fromJson(Map<String, dynamic> j) => Sozlesme(
+        slug: (j['slug'] as String?)?.trim() ?? '',
+        baslik: (j['baslik'] as String?)?.trim() ?? '',
+        surum: (j['surum'] as String?)?.trim() ?? '',
+        tip: (j['tip'] as String?)?.trim().isNotEmpty == true
+            ? (j['tip'] as String).trim()
+            : 'zorunlu',
+        ozet: (j['ozet'] as String?)?.trim() ?? '',
+        format: (j['format'] as String?)?.trim().isNotEmpty == true
+            ? (j['format'] as String).trim()
+            : 'markdown',
+        icerik: (j['icerik'] as String?) ?? '',
+        yururlukTarihi: (j['yururluk_tarihi'] as String?)?.trim() ?? '',
+        guncelleme: (j['guncelleme'] as String?)?.trim() ?? '',
+      );
+}
+
 /// Filtre tanımı (`GET /filtreler`, FILTRELER.md).
 class Filter {
   final int id;

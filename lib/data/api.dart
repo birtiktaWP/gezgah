@@ -765,6 +765,71 @@ class UyeRepository {
   }
 }
 
+/// Yasal metinler / sözleşmeler — `/sozlesmeler` (SOZLESMELER.md).
+/// Üye girişi gerekmez, cihaz token'ı yeterlidir. Liste ve gövde kısa süreli
+/// bellekte tutulur (sunucuda ayrıca 15 dk Redis önbelleği vardır).
+class SozlesmeRepository {
+  SozlesmeRepository._();
+  static final SozlesmeRepository instance = SozlesmeRepository._();
+
+  Dio get _dio => Api.instance.dio;
+
+  static const _ttl = Duration(minutes: 15);
+  List<Sozlesme>? _listCache;
+  DateTime? _listAt;
+  final Map<String, Sozlesme> _bodyCache = {};
+
+  /// `GET /sozlesmeler` — hafif liste (gövde dönmez), `sira`'ya göre sıralı.
+  /// [tip] `zorunlu` | `opsiyonel` (verilmezse hepsi). Hata/boşta boş liste.
+  Future<List<Sozlesme>> liste({String? tip}) async {
+    final fresh =
+        _listAt != null && DateTime.now().difference(_listAt!) < _ttl;
+    if (tip == null && _listCache != null && fresh) return _listCache!;
+    try {
+      final res = await _dio.get(
+        '/sozlesmeler',
+        queryParameters: {'tip': ?tip},
+      );
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return const [];
+      final data = body['data'];
+      if (data is! List) return const [];
+      final list = data
+          .whereType<Map<String, dynamic>>()
+          .map(Sozlesme.fromJson)
+          .where((s) => s.slug.isNotEmpty)
+          .toList();
+      if (tip == null) {
+        _listCache = list;
+        _listAt = DateTime.now();
+      }
+      return list;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// `GET /sozlesmeler/{slug}` — tam gövde. Bulunamazsa/hata olursa `null`.
+  Future<Sozlesme?> metin(String slug) async {
+    if (slug.isEmpty) return null;
+    final cached = _bodyCache[slug];
+    if (cached != null) return cached;
+    try {
+      final res = await _dio.get('/sozlesmeler/$slug');
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return null;
+      final data = body['data'];
+      if (data is! Map<String, dynamic>) return null;
+      final s = Sozlesme.fromJson(data);
+      if (s.slug.isEmpty) return null;
+      _bodyCache[slug] = s;
+      return s;
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
 /// Mekan (öne çıkan firma) verisi için repository.
 class PlacesRepository {
   PlacesRepository._();

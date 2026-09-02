@@ -1,26 +1,73 @@
 import 'package:flutter/material.dart';
 
+import '../data/api.dart';
 import '../data/legal_texts.dart';
+import '../data/models.dart';
 import '../theme/app_theme.dart';
 
-/// Yasal metni (Kullanıcı Sözleşmesi / Gizlilik Politikası vb.) alttan açılan
-/// bağımsız bir sheet'te gösterir. Paywall ve diğer ekranlarda kullanılır.
-void showLegalSheet(BuildContext context, String title) {
+/// Yasal metni alttan açılan bağımsız bir sheet'te gösterir.
+///
+/// [slug] verilirse metin `GET /sozlesmeler/{slug}` ile sunucudan çekilir
+/// (SOZLESMELER.md). Ağ hatası/404 durumunda uygulamaya gömülü metne
+/// ([kLegalTexts]) düşülür — sözleşme onay kapısı bu metinlere bağlı olduğu
+/// için ekran hiçbir koşulda boş kalmamalı.
+void showLegalSheet(BuildContext context, String title, {String? slug}) {
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => _LegalSheet(title: title),
+    builder: (_) => _LegalSheet(title: title, slug: slug),
   );
 }
 
-class _LegalSheet extends StatelessWidget {
+class _LegalSheet extends StatefulWidget {
   final String title;
-  const _LegalSheet({required this.title});
+  final String? slug;
+  const _LegalSheet({required this.title, this.slug});
+
+  @override
+  State<_LegalSheet> createState() => _LegalSheetState();
+}
+
+class _LegalSheetState extends State<_LegalSheet> {
+  /// Sunucudan gelen metin (yoksa gömülü metne düşülür).
+  Sozlesme? _remote;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final slug = widget.slug;
+    if (slug != null && slug.isNotEmpty) _load(slug);
+  }
+
+  Future<void> _load(String slug) async {
+    setState(() => _loading = true);
+    final s = await SozlesmeRepository.instance.metin(slug);
+    if (!mounted) return;
+    setState(() {
+      _remote = s;
+      _loading = false;
+    });
+  }
+
+  /// Gösterilecek bölümler: önce sunucu gövdesi, yoksa gömülü metin.
+  List<LegalSection> get _sections {
+    final r = _remote;
+    if (r != null && r.icerik.trim().isNotEmpty) {
+      return parseLegalBody(r.icerik);
+    }
+    return kLegalTexts[widget.title] ?? const [];
+  }
+
+  String get _title {
+    final r = _remote;
+    return (r != null && r.baslik.isNotEmpty) ? r.baslik : widget.title;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final sections = kLegalTexts[title];
+    final sections = _sections;
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
       decoration: const BoxDecoration(
@@ -44,7 +91,7 @@ class _LegalSheet extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: Text(title,
+                  child: Text(_title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -61,23 +108,32 @@ class _LegalSheet extends StatelessWidget {
           ),
           const Divider(height: 1, color: AppColors.line),
           Expanded(
-            child: (sections == null || sections.isEmpty)
+            child: _loading && sections.isEmpty
                 ? const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Text('Bu metin yakında eklenecek.',
-                          textAlign: TextAlign.center,
-                          style:
-                              TextStyle(fontSize: 14, color: AppColors.muted)),
+                    child: SizedBox(
+                      width: 26,
+                      height: 26,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.5, color: AppColors.primary),
                     ),
                   )
-                : ListView.separated(
-                    padding: EdgeInsets.fromLTRB(
-                        22, 18, 22, 28 + MediaQuery.of(context).padding.bottom),
-                    itemCount: sections.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 20),
-                    itemBuilder: (_, i) => _section(sections[i]),
-                  ),
+                : sections.isEmpty
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(32),
+                          child: Text('Bu metin şu an görüntülenemiyor.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  fontSize: 14, color: AppColors.muted)),
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: EdgeInsets.fromLTRB(22, 18, 22,
+                            28 + MediaQuery.of(context).padding.bottom),
+                        itemCount: sections.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 20),
+                        itemBuilder: (_, i) => _section(sections[i]),
+                      ),
           ),
         ],
       ),

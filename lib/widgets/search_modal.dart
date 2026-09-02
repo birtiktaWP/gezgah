@@ -1011,12 +1011,14 @@ class _SearchModalState extends State<_SearchModal>
   Widget _foodTile(FoodResult f) {
     final p = f.mekan;
     final loc = p.subtitle;
-    // Ürünün kendi görseli varsa onu, yoksa mekanın kare thumbnail'ını kullan.
-    final foodImg = f.gorsel.isNotEmpty ? f.gorsel : p.thumb(ThumbSize.square);
+    // Yalnız ürünün kendi görseli gösterilir; yoksa mekan fotosu yerine nötr
+    // yer tutucu çizilir (yanlış görsel izlenimi vermesin).
+    final foodImg = f.gorsel;
     return GestureDetector(
       onTap: () {
+        // Arama modalı kapatılmaz: detay üstüne açılır, geri dönünce kullanıcı
+        // sonuç listesine (ve terimine) geri döner.
         _commitHistory(_query);
-        Navigator.pop(context);
         widget.onOpenDetail?.call(p);
       },
       child: Container(
@@ -1114,8 +1116,8 @@ class _SearchModalState extends State<_SearchModal>
         [_km(r.mesafeM), loc].where((s) => s.isNotEmpty).join(' · ');
     return GestureDetector(
       onTap: () {
+        // Modal açık kalır (bkz. yemek sonucu) → geri dönünce sonuçlar durur.
         _commitHistory(_query);
-        Navigator.pop(context);
         widget.onOpenDetail
             ?.call(p.toPlace(subtitle: loc.isNotEmpty ? loc : 'Restoran'));
       },

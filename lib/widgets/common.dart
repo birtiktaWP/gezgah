@@ -646,17 +646,36 @@ class CategoryIcon extends StatelessWidget {
     this.color = AppColors.primary,
   });
 
+  /// API'den gelen SVG'yi çizilebilir hale getirir.
+  ///
+  /// Bazı kayıtlarda (ör. Meyhane) `</svg>` kapanışından **sonra** başka bir
+  /// ikonun parçası yapıştırılmış geliyor. Bu, XML'i geçersiz kıldığı için
+  /// flutter_svg hiç çizemiyor ve ikon kayboluyor. Burada kök `<svg>` bloğu
+  /// dışındaki artıklar atılır; kaynak veri düzeltilene kadar ikon görünür.
+  static String? sanitizeSvg(String raw) {
+    final start = raw.indexOf('<svg');
+    if (start < 0) return null;
+    final end = raw.indexOf('</svg>', start);
+    if (end < 0) return null;
+    return raw.substring(start, end + '</svg>'.length);
+  }
+
   @override
   Widget build(BuildContext context) {
     final ic = icon;
     if (ic != null && ic.isNotEmpty) {
       if (ic.contains('<svg')) {
-        return SvgPicture.string(
-          ic,
-          width: size,
-          height: size,
-          colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
-        );
+        final svg = sanitizeSvg(ic);
+        if (svg != null) {
+          return SvgPicture.string(
+            svg,
+            width: size,
+            height: size,
+            colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+          );
+        }
+        // Bozuk/eksik SVG → yedek ikona düş.
+        return Icon(HomeConfig.iconFor(id), size: size, color: color);
       }
       // Emoji / metin ikon
       return Text(ic, style: TextStyle(fontSize: size * 0.9));

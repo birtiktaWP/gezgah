@@ -772,13 +772,15 @@ class _PlusScreenState extends State<PlusScreen> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         GestureDetector(
-          onTap: () => showLegalSheet(context, 'Kullanıcı Sözleşmesi'),
+          onTap: () => showLegalSheet(context, 'Kullanıcı Sözleşmesi',
+              slug: 'kullanici-sozlesmesi'),
           child: const Text('Kullanım Koşulları', style: linkStyle),
         ),
         const Text('  ·  ',
             style: TextStyle(fontSize: 11, color: AppColors.muted)),
         GestureDetector(
-          onTap: () => showLegalSheet(context, 'Gizlilik Politikası'),
+          onTap: () => showLegalSheet(context, 'Gizlilik Politikası',
+              slug: 'gizlilik-politikasi'),
           child: const Text('Gizlilik Politikası', style: linkStyle),
         ),
       ],
