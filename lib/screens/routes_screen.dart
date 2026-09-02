@@ -1622,75 +1622,75 @@ Future<XFile?> _pickImage(ImageSource source) {
   );
 }
 
-/// Galeri/kamera'dan görsel seçip **16:10** kırpar (kapak için); JPEG bytes
-/// döner. İptalde null. Alttaki taşan kontroller gizlenir.
-Future<Uint8List?> _cropCover(ImageSource source) async {
+/// Görsel seçip verilen orana göre kırpar; JPEG bytes döner.
+///
+/// - Kullanıcı görsel seçmezse ya da kırpmayı iptal ederse `null`.
+/// - Kırpıcı bir hata verirse (ör. kameradan gelen dosyayı işleyemezse) görsel
+///   **kırpılmadan** kullanılır; akış sessizce durup önizleme boş kalmaz.
+Future<Uint8List?> _pickAndCrop(
+  ImageSource source, {
+  required double ratioX,
+  required double ratioY,
+  required String title,
+  required int maxWidth,
+  required int maxHeight,
+}) async {
   final file = await _pickImage(source);
-  if (file == null) return null;
-  final cropped = await ImageCropper().cropImage(
-    sourcePath: file.path,
-    aspectRatio: const CropAspectRatio(ratioX: 16, ratioY: 10),
-    compressFormat: ImageCompressFormat.jpg,
-    compressQuality: 88,
-    maxWidth: 1200,
-    maxHeight: 750,
-    uiSettings: [
-      AndroidUiSettings(
-        toolbarTitle: 'Kapağı Kırp',
-        toolbarColor: AppColors.primary,
-        toolbarWidgetColor: Colors.white,
-        backgroundColor: Colors.black,
-        activeControlsWidgetColor: AppColors.primary,
-        lockAspectRatio: true,
-        hideBottomControls: true, // alttaki taşan kontrol çubuğunu gizle
-      ),
-      IOSUiSettings(
-        title: 'Kapağı Kırp',
-        aspectRatioLockEnabled: true,
-        resetAspectRatioEnabled: false,
-        aspectRatioPickerButtonHidden: true,
-        rotateButtonsHidden: true,
-      ),
-    ],
-  );
-  if (cropped == null) return null;
-  return cropped.readAsBytes();
+  if (file == null) return null; // seçim yapılmadı
+  try {
+    final cropped = await ImageCropper().cropImage(
+      sourcePath: file.path,
+      aspectRatio: CropAspectRatio(ratioX: ratioX, ratioY: ratioY),
+      compressFormat: ImageCompressFormat.jpg,
+      compressQuality: 88,
+      maxWidth: maxWidth,
+      maxHeight: maxHeight,
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: title,
+          toolbarColor: AppColors.primary,
+          toolbarWidgetColor: Colors.white,
+          backgroundColor: Colors.black,
+          activeControlsWidgetColor: AppColors.primary,
+          lockAspectRatio: true,
+          hideBottomControls: true, // alttaki taşan kontrol çubuğunu gizle
+        ),
+        IOSUiSettings(
+          title: title,
+          aspectRatioLockEnabled: true,
+          resetAspectRatioEnabled: false,
+          aspectRatioPickerButtonHidden: true,
+          rotateButtonsHidden: false, // gerekirse elle döndürme
+        ),
+      ],
+    );
+    if (cropped == null) return null; // kullanıcı kırpmayı iptal etti
+    return cropped.readAsBytes();
+  } catch (_) {
+    // Kırpıcı çalışmadı → ham (küçültülmüş) görselle devam et.
+    return file.readAsBytes();
+  }
 }
 
-/// Galeri/kamera'dan görsel seçip **1:1 kare** kırpar (yemek fotoğrafı için,
-/// rota-yemek-gorsel.md); JPEG bytes döner. İptalde null.
-Future<Uint8List?> _cropSquare(ImageSource source) async {
-  final file = await _pickImage(source);
-  if (file == null) return null;
-  final cropped = await ImageCropper().cropImage(
-    sourcePath: file.path,
-    aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
-    compressFormat: ImageCompressFormat.jpg,
-    compressQuality: 88,
-    maxWidth: 1080,
-    maxHeight: 1080,
-    uiSettings: [
-      AndroidUiSettings(
-        toolbarTitle: 'Fotoğrafı Kırp',
-        toolbarColor: AppColors.primary,
-        toolbarWidgetColor: Colors.white,
-        backgroundColor: Colors.black,
-        activeControlsWidgetColor: AppColors.primary,
-        lockAspectRatio: true,
-        hideBottomControls: true,
-      ),
-      IOSUiSettings(
-        title: 'Fotoğrafı Kırp',
-        aspectRatioLockEnabled: true,
-        resetAspectRatioEnabled: false,
-        aspectRatioPickerButtonHidden: true,
-        rotateButtonsHidden: true,
-      ),
-    ],
-  );
-  if (cropped == null) return null;
-  return cropped.readAsBytes();
-}
+/// Kapak görseli: **16:10** kırpma.
+Future<Uint8List?> _cropCover(ImageSource source) => _pickAndCrop(
+      source,
+      ratioX: 16,
+      ratioY: 10,
+      title: 'Kapağı Kırp',
+      maxWidth: 1200,
+      maxHeight: 750,
+    );
+
+/// Durak/ürün fotoğrafı: **1:1 kare** kırpma (rota-yemek-gorsel.md).
+Future<Uint8List?> _cropSquare(ImageSource source) => _pickAndCrop(
+      source,
+      ratioX: 1,
+      ratioY: 1,
+      title: 'Fotoğrafı Kırp',
+      maxWidth: 1080,
+      maxHeight: 1080,
+    );
 
 /// Görsel kaynağı seçici (galeri/kamera[/kaldır]) — `'gallery'|'camera'|'remove'`.
 Future<String?> _pickImageSource(BuildContext context,

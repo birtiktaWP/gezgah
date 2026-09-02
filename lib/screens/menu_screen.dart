@@ -29,14 +29,19 @@ class _MenuScreenState extends State<MenuScreen> {
       .where((c) => c.urunler.isNotEmpty)
       .toList(growable: false);
 
-  late final List<GlobalKey> _sectionKeys =
-      List.generate(_sections.length, (_) => GlobalKey());
-  late final List<GlobalKey> _pillKeys =
-      List.generate(_sections.length, (_) => GlobalKey());
+  late final List<GlobalKey> _sectionKeys = List.generate(
+    _sections.length,
+    (_) => GlobalKey(),
+  );
+  late final List<GlobalKey> _pillKeys = List.generate(
+    _sections.length,
+    (_) => GlobalKey(),
+  );
   final GlobalKey _listKey = GlobalKey();
 
   int _active = 0;
-  bool _tapScrolling = false; // pill dokunuşuyla scroll sürerken oto-seçim kapalı
+  bool _tapScrolling =
+      false; // pill dokunuşuyla scroll sürerken oto-seçim kapalı
 
   @override
   void initState() {
@@ -122,9 +127,11 @@ class _MenuScreenState extends State<MenuScreen> {
               child: Center(
                 child: Padding(
                   padding: EdgeInsets.all(32),
-                  child: Text('Bu mekan için menü bulunmuyor.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 14, color: AppColors.muted)),
+                  child: Text(
+                    'Bu mekan için menü bulunmuyor.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, color: AppColors.muted),
+                  ),
                 ),
               ),
             )
@@ -166,24 +173,32 @@ class _MenuScreenState extends State<MenuScreen> {
         child: Row(
           children: [
             GlassButton(
-                icon: Icons.chevron_left, onTap: () => Navigator.pop(context)),
+              icon: Icons.chevron_left,
+              onTap: () => Navigator.pop(context),
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Menü',
-                      style: TextStyle(
-                          fontSize: 19,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white)),
+                  const Text(
+                    'Menü',
+                    style: TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
                   if (widget.title.isNotEmpty)
-                    Text(widget.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.white.withValues(alpha: 0.8))),
+                    Text(
+                      widget.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.white.withValues(alpha: 0.8),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -245,11 +260,14 @@ class _MenuScreenState extends State<MenuScreen> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text(cat.kategori.isEmpty ? 'Menü' : cat.kategori,
-                style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.primary)),
+            Text(
+              cat.kategori.isEmpty ? 'Menü' : cat.kategori,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w500,
+                color: AppColors.primary,
+              ),
+            ),
             const SizedBox(width: 12),
             const Expanded(child: Divider(color: AppColors.line, thickness: 1)),
           ],
@@ -280,7 +298,10 @@ class _MenuScreenState extends State<MenuScreen> {
                 child: Text(
                   'Menü fiyat ve bilgiler değişiklik gösterebilir.',
                   style: TextStyle(
-                      fontSize: 12.5, height: 1.45, color: AppColors.muted),
+                    fontSize: 12.5,
+                    height: 1.45,
+                    color: AppColors.muted,
+                  ),
                 ),
               ),
             ],
@@ -290,76 +311,244 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  Widget _item(MenuUrun u) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Görseli olmayan ürünlerde görsel alanı hiç çizilmez.
-          if (u.gorsel.isNotEmpty) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: SizedBox(
-                width: 96,
-                height: 96,
-                child: NetImage(u.gorsel),
+  /// Ürün detayı — alttan açılan panel: görsel, ad, fiyat, açıklama,
+  /// içindekiler ve kalori (dolu olanlar gösterilir).
+  void _openItem(MenuUrun u) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final bottom = MediaQuery.of(ctx).padding.bottom;
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * 0.85,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 10, bottom: 8),
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.line,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(width: 14),
-          ],
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              Flexible(
+                child: ListView(
+                  padding: EdgeInsets.fromLTRB(20, 4, 20, 20 + bottom),
                   children: [
-                    Expanded(
-                      child: Text(u.ad,
-                          style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.ink)),
-                    ),
-                    if (u.fiyat.isNotEmpty) ...[
-                      const SizedBox(width: 12),
-                      Text('${u.fiyat} ₺',
-                          softWrap: false,
-                          style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.primary)),
+                    if (u.gorsel.isNotEmpty) ...[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: AspectRatio(
+                          aspectRatio: 16 / 10,
+                          child: NetImage(u.gorsel),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
                     ],
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            u.ad,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                        ),
+                        if (u.fiyat.isNotEmpty) ...[
+                          const SizedBox(width: 12),
+                          Text(
+                            '${u.fiyat} ₺',
+                            softWrap: false,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    if (u.aciklama.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        u.aciklama,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          height: 1.5,
+                          color: _descColor,
+                        ),
+                      ),
+                    ],
+                    if (u.icindekiler.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      const Text(
+                        'İçindekiler',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        u.icindekiler,
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          height: 1.5,
+                          color: _descColor,
+                        ),
+                      ),
+                    ],
+                    if (u.kalori != null) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.local_fire_department_outlined,
+                            size: 16,
+                            color: AppColors.primary,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${u.kalori} kcal',
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 18),
+                    const Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: AppColors.line,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Menü fiyat ve bilgiler değişiklik gösterebilir.',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        height: 1.45,
+                        color: AppColors.muted,
+                      ),
+                    ),
                   ],
                 ),
-                if (u.aciklama.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(u.aciklama,
-                      style: const TextStyle(
-                          fontSize: 13.5,
-                          height: 1.4,
-                          fontWeight: FontWeight.w400,
-                          color: _descColor)),
-                ],
-                if (u.icindekiler.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text('İçindekiler: ${u.icindekiler}',
-                      style: const TextStyle(
-                          fontSize: 12, color: AppColors.muted)),
-                ],
-                if (u.kalori != null) ...[
-                  const SizedBox(height: 4),
-                  Text('${u.kalori} kcal',
-                      style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.muted)),
-                ],
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        );
+      },
+    );
+  }
+
+  Widget _item(MenuUrun u) {
+    return InkWell(
+      onTap: () => _openItem(u),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Görseli olmayan ürünlerde görsel alanı hiç çizilmez.
+            if (u.gorsel.isNotEmpty) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: SizedBox(
+                  width: 96,
+                  height: 96,
+                  child: NetImage(u.gorsel),
+                ),
+              ),
+              const SizedBox(width: 14),
+            ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          u.ad,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.ink,
+                          ),
+                        ),
+                      ),
+                      if (u.fiyat.isNotEmpty) ...[
+                        const SizedBox(width: 12),
+                        Text(
+                          '${u.fiyat} ₺',
+                          softWrap: false,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (u.aciklama.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      u.aciklama,
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        height: 1.4,
+                        fontWeight: FontWeight.w400,
+                        color: _descColor,
+                      ),
+                    ),
+                  ],
+                  if (u.icindekiler.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'İçindekiler: ${u.icindekiler}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  ],
+                  if (u.kalori != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '${u.kalori} kcal',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

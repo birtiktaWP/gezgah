@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dlibphonenumber/dlibphonenumber.dart' as libphone;
 import 'package:flutter/material.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl_phone_number_input/intl_phone_number_input.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -685,20 +687,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
 
-    final picker = ImagePicker();
     final source =
         action == 'camera' ? ImageSource.camera : ImageSource.gallery;
-    final XFile? file = await picker.pickImage(
-      source: source,
-      maxWidth: 1024,
-      maxHeight: 1024,
-      imageQuality: 85,
-    );
-    if (file == null || !mounted) return;
-    final bytes = await file.readAsBytes();
+    final bytes = await _cropAvatar(source);
+    if (bytes == null || !mounted) return;
     final b64 = 'data:image/jpeg;base64,${base64Encode(bytes)}';
     await _runAvatar(() => AuthService.instance.avatarYukle(b64),
         success: 'Avatar güncellendi.');
+  }
+
+  /// Avatar için görsel seçip **1:1 kare** kırpar, JPEG bytes döner (iptalde
+  /// null).
+  ///
+  /// Doğrudan `pickImage` çıktısı yüklendiğinde fotoğraf yan dönük
+  /// görünebiliyordu: kamera/galeri dosyaları yönü EXIF etiketiyle taşıyor ve
+  /// bu etiket her yerde uygulanmıyor. Kırpıcı görüntüyü yeniden kodladığı için
+  /// yön piksellere işlenir ve sorun ortadan kalkar.
+  Future<Uint8List?> _cropAvatar(ImageSource source) async {
+    final file = await ImagePicker().pickImage(
+      source: source,
+      maxWidth: 2000,
+      maxHeight: 2000,
+      imageQuality: 92,
+      requestFullMetadata: false,
+    );
+    if (file == null) return null;
+    final cropped = await ImageCropper().cropImage(
+      sourcePath: file.path,
+      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+      compressFormat: ImageCompressFormat.jpg,
+      compressQuality: 88,
+      maxWidth: 1024,
+      maxHeight: 1024,
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: 'Profil Fotoğrafı',
+          toolbarColor: AppColors.primary,
+          toolbarWidgetColor: Colors.white,
+          backgroundColor: Colors.black,
+          activeControlsWidgetColor: AppColors.primary,
+          lockAspectRatio: true,
+          hideBottomControls: true,
+        ),
+        IOSUiSettings(
+          title: 'Profil Fotoğrafı',
+          aspectRatioLockEnabled: true,
+          resetAspectRatioEnabled: false,
+          aspectRatioPickerButtonHidden: true,
+          rotateButtonsHidden: false, // gerekirse kullanıcı elle döndürebilir
+        ),
+      ],
+    );
+    if (cropped == null) return null;
+    return cropped.readAsBytes();
   }
 
   /// Avatar işlemini yükleme göstergesiyle çalıştırır; Plus hatasında paywall.
