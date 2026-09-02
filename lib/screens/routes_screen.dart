@@ -948,7 +948,7 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
         _igAction(
           // Beğenince dolu kırmızı kalp; değilse outline SVG.
           icon: r.begendim
-              ? const Icon(Icons.favorite, size: 23, color: AppColors.heart)
+              ? const Icon(Icons.favorite, size: 20, color: AppColors.heart)
               : _igSvg(AppIcons.heart),
           count: r.begeniSayisi,
           onTap: _toggleLike,
@@ -975,7 +975,7 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     );
   }
 
-  Widget _igSvg(String svg, {Color color = AppColors.ink, double size = 23}) =>
+  Widget _igSvg(String svg, {Color color = AppColors.ink, double size = 20}) =>
       AppSvgIcon(svg, size: size, color: color);
 
   Widget _igAction({
@@ -1273,26 +1273,8 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        // Konum durağının kayıtlı mekanı yok → detay açılmaz.
-        onTap: (m != null && !d.silinmis && !d.isKonum)
-            ? () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => DetailScreen(
-                      place: Place(
-                        id: m.id,
-                        name: m.name,
-                        category: '',
-                        subtitle: m.cityDistrict,
-                        rating: 0,
-                        distance: '',
-                        price: '',
-                        image: m.image,
-                      ),
-                    ),
-                  ),
-                )
-            : null,
+        // Durağa dokununca detay sheet'i açılır (fotoğraflar, not, ürünler).
+        onTap: d.silinmis ? null : () => _openStopSheet(d, index),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -1314,28 +1296,7 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                         fontWeight: FontWeight.w600)),
               ),
               const SizedBox(width: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: SizedBox(
-                  width: 52,
-                  height: 52,
-                  child: d.silinmis
-                      ? Container(
-                          color: AppColors.primarySoft,
-                          child: const Icon(Icons.image_not_supported_outlined,
-                              color: AppColors.muted),
-                        )
-                      // Konum durağı: görseli yoksa konum pini göster.
-                      : (d.isKonum && (m?.image.isEmpty ?? true))
-                          ? Container(
-                              color: AppColors.primarySoft,
-                              alignment: Alignment.center,
-                              child: const AppSvgIcon(AppIcons.pin,
-                                  size: 22, color: AppColors.primary),
-                            )
-                          : NetImage(m?.image ?? ''),
-                ),
-              ),
+              _stopThumb(d, m),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -1424,7 +1385,8 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
               ),
               // Durak fotoğrafları — yalnız görüntüleme (ekleme üç nokta
               // menüsündeki foto yönetiminde). rota-durak-gorsel.md.
-              if (d.gorseller.isNotEmpty) ...[
+              // Konum duraklarında fotoğraf kare alanda gösterilir → çip yok.
+              if (d.gorseller.isNotEmpty && !d.isKonum) ...[
                 const SizedBox(height: 10),
                 _fotoStrip(d),
               ],
@@ -1435,11 +1397,85 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     );
   }
 
+  /// Durak kartındaki kare görsel.
+  ///
+  /// Konum duraklarının kayıtlı mekan fotosu yoktur; kullanıcının yüklediği
+  /// durak fotoğrafı varsa pin ikonu yerine **o fotoğraf** gösterilir (birden
+  /// fazlaysa köşede adet rozeti). Dokununca görüntüleyici açılır.
+  Widget _stopThumb(RotaDurak d, RotaMekan? m) {
+    final fotos = d.gorseller;
+    final konumFoto = d.isKonum && fotos.isNotEmpty;
+
+    Widget inner;
+    if (d.silinmis) {
+      inner = Container(
+        color: AppColors.primarySoft,
+        child: const Icon(Icons.image_not_supported_outlined,
+            color: AppColors.muted),
+      );
+    } else if (konumFoto) {
+      inner = NetImage(fotos.first.url);
+    } else if (d.isKonum && (m?.image.isEmpty ?? true)) {
+      // Fotoğrafı olmayan konum durağı → konum pini.
+      inner = Container(
+        color: AppColors.primarySoft,
+        alignment: Alignment.center,
+        child: const AppSvgIcon(AppIcons.pin,
+            size: 22, color: AppColors.primary),
+      );
+    } else {
+      inner = NetImage(m?.image ?? '');
+    }
+
+    final thumb = ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: SizedBox(
+        width: 52,
+        height: 52,
+        child: konumFoto && fotos.length > 1
+            ? Stack(
+                fit: StackFit.expand,
+                children: [
+                  inner,
+                  Positioned(
+                    right: 3,
+                    bottom: 3,
+                    child: Container(
+                      width: 18,
+                      height: 18,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text('${fotos.length}',
+                          style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white)),
+                    ),
+                  ),
+                ],
+              )
+            : inner,
+      ),
+    );
+
+    if (!konumFoto) return thumb;
+    return GestureDetector(
+      onTap: () => _openFotoViewer(fotos, 0),
+      child: thumb,
+    );
+  }
+
   /// Durak fotoğrafları — yemek rozeti gibi sade çip: gri zemin, görsel ikonu +
   /// "N resim" (lacivert). Dokununca tüm fotoğrafları gösteren görüntüleyici açılır.
+  ///
+  /// Konum duraklarında fotoğraf zaten kare alanda gösterildiği için çip
+  /// tekrarlanmaz.
   Widget _fotoStrip(RotaDurak d) {
     final fotos = d.gorseller;
-    if (fotos.isEmpty) return const SizedBox.shrink();
+    if (fotos.isEmpty || d.isKonum) return const SizedBox.shrink();
     return Align(
       alignment: Alignment.centerLeft,
       child: GestureDetector(
@@ -1472,6 +1508,22 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     showDialog<void>(
       context: context,
       builder: (_) => _FotoViewer(fotos: fotos, index: index),
+    );
+  }
+
+  /// Durak detayı — alttan açılan panel: fotoğraflar, konum/adres, not ve
+  /// seçili ürünler. Mekan durağında "Mekan Detayı" ile işletme sayfasına,
+  /// harita bağlantısı varsa yol tarifine gidilebilir.
+  void _openStopSheet(RotaDurak d, int index) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _StopDetailSheet(
+        durak: d,
+        index: index,
+        onOpenFotos: (i) => _openFotoViewer(d.gorseller, i),
+      ),
     );
   }
 
@@ -1553,10 +1605,27 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
 // Ortak formlar / seçiciler
 // ===========================================================================
 
+/// Görsel seçer ve kırpıcıya vermeden önce boyutunu makul sınıra çeker.
+///
+/// Kamerayla çekilen ham fotoğraf 10-12 MP olabiliyor; bu boyutta
+/// [ImageCropper] bellek yüzünden başarısız olup `null` dönebiliyor ve önizleme
+/// boş kalıyordu (galeriden seçilenler genelde daha küçük olduğu için sorun
+/// çıkmıyordu). `maxWidth/maxHeight` verildiğinde image_picker görüntüyü
+/// yeniden kodlar; bu ayrıca EXIF yön bilgisini de düzleştirir.
+Future<XFile?> _pickImage(ImageSource source) {
+  return ImagePicker().pickImage(
+    source: source,
+    maxWidth: 2400,
+    maxHeight: 2400,
+    imageQuality: 92,
+    requestFullMetadata: false, // konum/EXIF meta izni gerekmesin
+  );
+}
+
 /// Galeri/kamera'dan görsel seçip **16:10** kırpar (kapak için); JPEG bytes
 /// döner. İptalde null. Alttaki taşan kontroller gizlenir.
 Future<Uint8List?> _cropCover(ImageSource source) async {
-  final file = await ImagePicker().pickImage(source: source);
+  final file = await _pickImage(source);
   if (file == null) return null;
   final cropped = await ImageCropper().cropImage(
     sourcePath: file.path,
@@ -1591,7 +1660,7 @@ Future<Uint8List?> _cropCover(ImageSource source) async {
 /// Galeri/kamera'dan görsel seçip **1:1 kare** kırpar (yemek fotoğrafı için,
 /// rota-yemek-gorsel.md); JPEG bytes döner. İptalde null.
 Future<Uint8List?> _cropSquare(ImageSource source) async {
-  final file = await ImagePicker().pickImage(source: source);
+  final file = await _pickImage(source);
   if (file == null) return null;
   final cropped = await ImageCropper().cropImage(
     sourcePath: file.path,
@@ -4305,7 +4374,13 @@ class _DurakFotoSheetState extends State<_DurakFotoSheet> {
       _snack('En fazla $_max fotoğraf ekleyebilirsin.');
       return;
     }
-    final files = await ImagePicker().pickMultiImage(imageQuality: 90);
+    // Boyut sınırı: büyük ham dosyalar bellek/yükleme sorununa yol açıyor.
+    final files = await ImagePicker().pickMultiImage(
+      imageQuality: 90,
+      maxWidth: 2400,
+      maxHeight: 2400,
+      requestFullMetadata: false,
+    );
     if (files.isEmpty || !mounted) return;
     setState(() => _busy = true);
     for (final f in files) {
@@ -5209,6 +5284,335 @@ class _YorumSheetState extends State<_YorumSheet> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Durak detay paneli — rota detayında bir durağa dokununca açılır.
+/// İçerik duraktan geliyor: fotoğraflar, ad/adres, not ve seçili ürünler.
+class _StopDetailSheet extends StatelessWidget {
+  final RotaDurak durak;
+  final int index; // 0 tabanlı sıra
+  final void Function(int index) onOpenFotos;
+
+  const _StopDetailSheet({
+    required this.durak,
+    required this.index,
+    required this.onOpenFotos,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final d = durak;
+    final m = d.mekan;
+    final fotos = d.gorseller;
+    final baslik = m?.name.isNotEmpty == true
+        ? m!.name
+        : (d.isKonum ? 'Konum' : 'Mekan');
+    final konum = m?.cityDistrict ?? '';
+    final bottom = MediaQuery.of(context).padding.bottom;
+
+    return Container(
+      constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 10, bottom: 8),
+            child: Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: AppColors.line,
+                  borderRadius: BorderRadius.circular(999)),
+            ),
+          ),
+          Flexible(
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(20, 4, 20, 16 + bottom),
+              children: [
+                // Başlık: sıra rozeti + ad + tip etiketi.
+                Row(
+                  children: [
+                    Container(
+                      width: 26,
+                      height: 26,
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(
+                          color: AppColors.primary, shape: BoxShape.circle),
+                      child: Text('${index + 1}',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(baslik,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.ink)),
+                    ),
+                    const SizedBox(width: 8),
+                    _tag(d.isKonum ? 'Konum' : 'Mekan'),
+                  ],
+                ),
+                if (konum.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const AppSvgIcon(AppIcons.pin,
+                          size: 13, color: AppColors.primary),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(konum,
+                            style: const TextStyle(
+                                fontSize: 13,
+                                height: 1.4,
+                                color: AppColors.muted)),
+                      ),
+                    ],
+                  ),
+                ],
+
+                // Fotoğraflar — tek foto tam genişlik, çok foto yatay galeri.
+                if (fotos.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  if (fotos.length == 1)
+                    GestureDetector(
+                      onTap: () => onOpenFotos(0),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: AspectRatio(
+                          aspectRatio: 16 / 10,
+                          child: NetImage(fotos.first.url),
+                        ),
+                      ),
+                    )
+                  else
+                    SizedBox(
+                      height: 150,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: fotos.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 10),
+                        itemBuilder: (_, i) => GestureDetector(
+                          onTap: () => onOpenFotos(i),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(14),
+                            child: SizedBox(
+                              width: 150,
+                              child: NetImage(fotos[i].url),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ] else if (!d.isKonum && (m?.image.isNotEmpty ?? false)) ...[
+                  // Fotoğraf yoksa mekanın kendi görseli.
+                  const SizedBox(height: 14),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: AspectRatio(
+                      aspectRatio: 16 / 10,
+                      child: NetImage(m!.image),
+                    ),
+                  ),
+                ],
+
+                // Not / açıklama.
+                if (d.yorum.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  const Text('Not',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.ink)),
+                  const SizedBox(height: 6),
+                  Text(d.yorum,
+                      style: const TextStyle(
+                          fontSize: 13.5, height: 1.5, color: AppColors.muted)),
+                ],
+
+                // Seçili ürünler (QR menüden).
+                if (d.urunler.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  const Text('Seçilen ürünler',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.ink)),
+                  const SizedBox(height: 8),
+                  for (final u in d.urunler) _urunRow(u),
+                ],
+
+                // Adres metni (konum durağında serbest adres).
+                if (d.isKonum &&
+                    (m?.adres.isNotEmpty ?? false) &&
+                    m!.adres != konum) ...[
+                  const SizedBox(height: 16),
+                  const Text('Adres',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.ink)),
+                  const SizedBox(height: 6),
+                  Text(m.adres,
+                      style: const TextStyle(
+                          fontSize: 13.5, height: 1.5, color: AppColors.muted)),
+                ],
+
+                const SizedBox(height: 18),
+                // Aksiyonlar.
+                if (!d.isKonum && m != null && m.id > 0)
+                  _primaryButton(
+                    label: 'Mekan Detayı',
+                    icon: Icons.storefront_outlined,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => DetailScreen(
+                            place: Place(
+                              id: m.id,
+                              name: m.name,
+                              category: '',
+                              subtitle: m.cityDistrict,
+                              rating: 0,
+                              distance: '',
+                              price: '',
+                              image: m.image,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                if (d.haritaLink.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _secondaryButton(
+                    label: 'Yol Tarifi',
+                    icon: Icons.directions_outlined,
+                    onTap: () async {
+                      try {
+                        await launchUrl(Uri.parse(d.haritaLink),
+                            mode: LaunchMode.externalApplication);
+                      } catch (_) {
+                        // sessizce yut: harita açılamazsa panel açık kalır
+                      }
+                    },
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tag(String text) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppColors.primarySoft,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(text,
+            style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary)),
+      );
+
+  Widget _urunRow(RotaUrun u) {
+    final img = u.foto.isNotEmpty ? u.foto : u.gorsel;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          if (img.isNotEmpty) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: SizedBox(width: 44, height: 44, child: NetImage(img)),
+            ),
+            const SizedBox(width: 10),
+          ],
+          Expanded(
+            child: Text(u.ad,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.ink)),
+          ),
+          if (u.fiyatLabel.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            Text(u.fiyatLabel,
+                style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _primaryButton({
+    required String label,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      height: 48,
+      child: ElevatedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 18),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+        label: Text(label,
+            style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+      ),
+    );
+  }
+
+  Widget _secondaryButton({
+    required String label,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      height: 48,
+      child: OutlinedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 18, color: AppColors.primary),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.primary,
+          side: const BorderSide(color: AppColors.line),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+        label: Text(label,
+            style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
       ),
     );
   }

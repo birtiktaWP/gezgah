@@ -49,6 +49,29 @@ class HomeConfig {
   static IconData iconFor(int id) =>
       categoryIcons[id] ?? Icons.restaurant_outlined;
 
+  /// Otopark alt tipleri için ikon (kategori adı/slug ya da filtre adı verilir).
+  /// Kategori çipleri, harita pinleri ve filtre listesi aynı eşlemeyi kullanır
+  /// ki "Açık / Kapalı / Katlı / İSPARK" her yerde aynı görünsün.
+  /// Eşleşme yoksa `null` döner (çağıran kendi varsayılanına düşer).
+  static IconData? otoparkIconFor(String text) {
+    final s = text.toLowerCase();
+    bool has(String k) => s.contains(k);
+    // "İSPARK" varyantları (İ/i küçültme farkı için 'spark' aranır).
+    if (has('spark')) return Icons.location_city_outlined;
+    if (has('katlı') || has('katli')) return Icons.layers_outlined;
+    if (has('kapalı') || has('kapali')) return Icons.garage_outlined;
+    if (has('açık') || has('acik')) return Icons.wb_sunny_outlined;
+    if (has('yol üstü') || has('yol ustu') || has('yol-ustu')) {
+      return Icons.add_road;
+    }
+    if (has('özel') || has('ozel')) return Icons.lock_outline;
+    if (has('vale')) return Icons.directions_car_outlined;
+    if (has('otopark') || has('otopak') || has('park')) {
+      return Icons.local_parking;
+    }
+    return null;
+  }
+
   /// Bazı kategoriler için SVG ikonu (Font Awesome). Verilirse Material ikon
   /// yerine bu kullanılır (bkz. AppIcons). Eşleşmezse null.
   static String? svgFor(int id) => _categorySvg[id];

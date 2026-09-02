@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../data/home_config.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
 
@@ -280,7 +281,10 @@ class _CustomSwitch extends StatelessWidget {
 IconData _filterFallbackIcon(Filter f) {
   final s = '${f.slug} ${f.name}'.toLowerCase();
   bool has(String k) => s.contains(k);
-  if (has('otopark') || has('park')) return Icons.local_parking_outlined;
+  // Otopark alt tipleri (Açık/Kapalı/Katlı/İSPARK…) — harita çipleri ve
+  // pinleriyle aynı eşleme kullanılır.
+  final otopark = HomeConfig.otoparkIconFor(s);
+  if (otopark != null) return otopark;
   if (has('wifi') || has('internet')) return Icons.wifi;
   if (has('alkolsüz') || has('alkolsuz')) return Icons.no_drinks;
   if (has('alkol') || has('bar')) return Icons.local_bar_outlined;

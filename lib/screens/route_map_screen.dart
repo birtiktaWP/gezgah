@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -28,19 +30,90 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
 
   List<RotaNokta> get _noktalar => widget.rota.koordinatlar;
 
+  /// Sıra numaralı pin ikonları (numara → ikon). Varsayılan kırmızı pin yerine
+  /// rotadaki sıra numarası gösterilir; ikonlar bir kez üretilip saklanır.
+  final Map<int, BitmapDescriptor> _pinCache = {};
+  Set<Marker> _markers = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _prepareMarkers();
+  }
+
+  /// Numaralı pinleri hazırlayıp marker setini kurar.
+  Future<void> _prepareMarkers() async {
+    for (final n in _noktalar) {
+      final no = n.sira > 0 ? n.sira : _noktalar.indexOf(n) + 1;
+      _pinCache[no] ??= await _numberedPin(no);
+    }
+    if (!mounted) return;
+    setState(() => _markers = _buildMarkers());
+  }
+
   Set<Marker> _buildMarkers() {
-    return {
-      for (final n in _noktalar)
-        Marker(
-          markerId: MarkerId('durak_${n.durakId}_${n.postId}'),
-          position: LatLng(n.lat!, n.lng!),
-          infoWindow: InfoWindow(
-            title: n.name.isEmpty ? '${n.sira}. Durak' : '${n.sira}. ${n.name}',
-            snippet: n.postId > 0 ? 'Detayı aç' : null,
-            onTap: n.postId > 0 ? () => _openMekan(n) : null,
-          ),
+    final markers = <Marker>{};
+    for (var i = 0; i < _noktalar.length; i++) {
+      final n = _noktalar[i];
+      final no = n.sira > 0 ? n.sira : i + 1;
+      markers.add(Marker(
+        markerId: MarkerId('durak_${n.durakId}_${n.postId}'),
+        position: LatLng(n.lat!, n.lng!),
+        icon: _pinCache[no] ?? BitmapDescriptor.defaultMarker,
+        anchor: const Offset(0.5, 0.5),
+        infoWindow: InfoWindow(
+          title: n.name.isEmpty ? '$no. Durak' : '$no. ${n.name}',
+          snippet: n.postId > 0 ? 'Detayı aç' : null,
+          onTap: n.postId > 0 ? () => _openMekan(n) : null,
         ),
-    };
+      ));
+    }
+    return markers;
+  }
+
+  /// Yuvarlak lacivert pin: beyaz kenar + ortada sıra numarası.
+  Future<BitmapDescriptor> _numberedPin(int no) async {
+    const double ratio = 3;
+    final double r = 15 * ratio;
+    final double border = 3 * ratio;
+    final double size = (r + border) * 2;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    final center = Offset(size / 2, size / 2);
+
+    // gölge
+    canvas.drawCircle(
+      center.translate(0, 1.5 * ratio),
+      r + border,
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.20)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+    // beyaz kenar + iç daire
+    canvas.drawCircle(center, r + border, Paint()..color = Colors.white);
+    canvas.drawCircle(center, r, Paint()..color = AppColors.primary);
+
+    final tp = TextPainter(textDirection: TextDirection.ltr)
+      ..text = TextSpan(
+        text: '$no',
+        style: TextStyle(
+          // Rakam sayısı arttıkça yazıyı biraz küçült (2-3 hane sığsın).
+          fontSize: (no >= 100 ? 16 : (no >= 10 ? 19 : 22)) * ratio * 0.72,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+        ),
+      )
+      ..layout();
+    tp.paint(canvas,
+        Offset(center.dx - tp.width / 2, center.dy - tp.height / 2));
+
+    final img = await recorder.endRecording().toImage(size.ceil(), size.ceil());
+    final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+    return BitmapDescriptor.bytes(
+      bytes!.buffer.asUint8List(),
+      imagePixelRatio: ratio,
+    );
   }
 
   Set<Polyline> _buildPolylines() {
@@ -123,7 +196,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
               target: LatLng(first.lat!, first.lng!),
               zoom: 13,
             ),
-            markers: _buildMarkers(),
+            markers: _markers,
             polylines: _buildPolylines(),
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,

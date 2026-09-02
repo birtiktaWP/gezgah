@@ -62,7 +62,22 @@ class _MapScreenState extends State<MapScreen> {
   Set<Marker> _markers = {};
 
   List<Category> _cats = const [];
+
+  /// Sunucudan gelen tüm mekanlar (`/harita` sayfalama yapmaz; otoparkta 1600+
+  /// kayıt gelebilir). Haritaya bunların tamamı basılmaz.
+  List<ApiPlace> _all = const [];
+
+  /// Haritada gösterilen alt küme: görünür bölgeye giren ve [_maxMarkers] ile
+  /// sınırlanan mekanlar. Binlerce marker'ı aynı anda çizmek haritayı
+  /// kilitlediği için görünür alan dışındakiler çizilmez.
   List<ApiPlace> _places = const [];
+
+  /// Aynı anda çizilecek en fazla marker sayısı.
+  static const int _maxMarkers = 220;
+
+  /// Marker kurulumu sırası — üst üste binen çağrılarda yalnız en son isteğin
+  /// sonucu uygulanır (eskimiş set haritaya basılmaz).
+  int _buildSeq = 0;
 
   ({double lat, double lng, bool real})? _loc;
   bool _myLocation = false; // gerçek konum alındıysa mavi nokta
@@ -268,13 +283,76 @@ class _MapScreenState extends State<MapScreen> {
     );
     if (!mounted) return;
     setState(() {
-      _places = places;
+      _all = places;
       _selected = null;
     });
-    _rebuildMarkers();
+    await _refreshVisible();
+  }
+
+  /// Görünür bölgeye göre gösterilecek mekanları seçer ve marker'ları kurar.
+  /// Kamera durduğunda ve veri değiştiğinde çağrılır.
+  Future<void> _refreshVisible() async {
+    if (_all.isEmpty) {
+      if (_places.isNotEmpty || _markers.isNotEmpty) {
+        setState(() {
+          _places = const [];
+          _markers = {};
+        });
+      }
+      return;
+    }
+
+    LatLngBounds? bounds;
+    try {
+      bounds = await _controller?.getVisibleRegion();
+    } catch (_) {
+      bounds = null; // harita henüz hazır değil
+    }
+
+    var list = _all;
+    if (bounds != null) {
+      final inView = <ApiPlace>[];
+      for (final p in _all) {
+        if (_inBounds(bounds, p.lat!, p.lng!)) inView.add(p);
+      }
+      list = inView;
+    }
+
+    // Sınırı aşarsa ekran merkezine en yakınlar seçilir (kenardakiler düşer).
+    if (list.length > _maxMarkers) {
+      final c = _center;
+      final sorted = List<ApiPlace>.from(list)
+        ..sort((a, b) => _sqDist(a, c).compareTo(_sqDist(b, c)));
+      list = sorted.take(_maxMarkers).toList();
+    }
+
+    // Seçili mekan görünür kümeden düşse de pini kaybolmasın.
+    final sel = _selected;
+    if (sel != null && !list.contains(sel)) list = [...list, sel];
+
+    if (!mounted) return;
+    setState(() => _places = list);
+    await _rebuildMarkers();
+  }
+
+  bool _inBounds(LatLngBounds b, double lat, double lng) {
+    if (lat < b.southwest.latitude || lat > b.northeast.latitude) return false;
+    // 180. meridyeni geçen görünüm (nadir) için sarma kontrolü.
+    if (b.southwest.longitude <= b.northeast.longitude) {
+      return lng >= b.southwest.longitude && lng <= b.northeast.longitude;
+    }
+    return lng >= b.southwest.longitude || lng <= b.northeast.longitude;
+  }
+
+  /// Karşılaştırma için yeterli olan kaba (karesel) uzaklık.
+  double _sqDist(ApiPlace p, LatLng c) {
+    final dy = (p.lat! - c.latitude);
+    final dx = (p.lng! - c.longitude);
+    return dy * dy + dx * dx;
   }
 
   Future<void> _rebuildMarkers() async {
+    final seq = ++_buildSeq;
     final markers = <Marker>{};
     for (final p in _places) {
       final isSel = identical(p, _selected);
@@ -293,16 +371,42 @@ class _MapScreenState extends State<MapScreen> {
         },
       ));
     }
-    if (mounted) setState(() => _markers = markers);
+    // Daha yeni bir kurulum başladıysa bu sonucu at.
+    if (!mounted || seq != _buildSeq) return;
+    setState(() => _markers = markers);
+  }
+
+  /// Kategori çipi ikonu. Otopark tipinde alt tipe göre (Açık/Kapalı/Katlı/
+  /// İSPARK…) ortak eşleme kullanılır; diğerlerinde id bazlı eşleme.
+  IconData _catIcon(Category c) {
+    if (_type == _MapType.otopark) {
+      final ic = HomeConfig.otoparkIconFor('${c.name} ${c.slug}');
+      if (ic != null) return ic;
+      return Icons.local_parking;
+    }
+    return HomeConfig.iconFor(c.id);
   }
 
   /// Mekanın harita ikonunu belirler.
   /// 1) API'den gelen işletmeye özel `custom_ikon` doluysa onu,
-  /// 2) yoksa kategori ikonunu (kategori_ids içinde tanımlı ilk ikon),
-  /// 3) o da yoksa varsayılanı kullanır.
+  /// 2) otopark tipinde mekanın kategorisine göre otopark alt tip ikonunu,
+  /// 3) yoksa kategori ikonunu (kategori_ids içinde tanımlı ilk ikon),
+  /// 4) o da yoksa varsayılanı kullanır.
   IconData _iconForPlace(ApiPlace p) {
     final custom = HomeConfig.customIconFor(p.customIcon);
     if (custom != null) return custom;
+
+    // Otopark: pin ikonu, çiplerdeki alt tip ikonuyla aynı olsun.
+    if (_type == _MapType.otopark) {
+      for (final id in p.categoryIds) {
+        for (final cat in _cats) {
+          if (cat.id != id) continue;
+          final ic = HomeConfig.otoparkIconFor('${cat.name} ${cat.slug}');
+          if (ic != null) return ic;
+        }
+      }
+      return Icons.local_parking;
+    }
     for (final id in p.categoryIds) {
       final ic = HomeConfig.categoryIcons[id];
       if (ic != null) return ic;
@@ -408,9 +512,15 @@ class _MapScreenState extends State<MapScreen> {
             onMapCreated: (c) {
               _controller = c;
               _goToUser(); // konum önceden geldiyse ona git
+              // Veri haritadan önce geldiyse görünür pinleri şimdi kur.
+              _refreshVisible();
             },
             onCameraMove: (pos) => _center = pos.target,
-            onCameraIdle: _updateLabel,
+            // Kamera durunca: konum etiketi + görünür alandaki pinleri yenile.
+            onCameraIdle: () {
+              _updateLabel();
+              _refreshVisible();
+            },
             onTap: (_) {
               if (_selected != null) {
                 setState(() => _selected = null);
@@ -519,7 +629,7 @@ class _MapScreenState extends State<MapScreen> {
             final label = i == 0 ? 'Tümü' : _cats[i - 1].name;
             final icon = i == 0
                 ? Icons.explore_outlined
-                : HomeConfig.iconFor(_cats[i - 1].id);
+                : _catIcon(_cats[i - 1]);
             final svg = i == 0 ? null : HomeConfig.svgFor(_cats[i - 1].id);
             return CategoryPill(
               icon: icon,

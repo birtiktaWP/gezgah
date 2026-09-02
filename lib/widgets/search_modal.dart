@@ -1014,6 +1014,7 @@ class _SearchModalState extends State<_SearchModal>
     // Yalnız ürünün kendi görseli gösterilir; yoksa mekan fotosu yerine nötr
     // yer tutucu çizilir (yanlış görsel izlenimi vermesin).
     final foodImg = f.gorsel;
+    final km = _km(f.mesafeM); // fiyatın yanında gösterilir
     return GestureDetector(
       onTap: () {
         // Arama modalı kapatılmaz: detay üstüne açılır, geri dönünce kullanıcı
@@ -1062,12 +1063,11 @@ class _SearchModalState extends State<_SearchModal>
                           size: 13, color: AppColors.primary),
                       const SizedBox(width: 4),
                       Expanded(
+                        // Mesafe fiyatın yanında gösterildiği için burada yok.
                         child: Text(
-                            [
-                              p.name,
-                              _km(f.mesafeM),
-                              loc
-                            ].where((s) => s.isNotEmpty).join(' · '),
+                            [p.name, loc]
+                                .where((s) => s.isNotEmpty)
+                                .join(' · '),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -1075,7 +1075,7 @@ class _SearchModalState extends State<_SearchModal>
                       ),
                     ],
                   ),
-                  if (f.fiyat.isNotEmpty || f.begeni > 0) ...[
+                  if (f.fiyat.isNotEmpty || f.begeni > 0 || km.isNotEmpty) ...[
                     const SizedBox(height: 5),
                     Row(
                       children: [
@@ -1085,8 +1085,19 @@ class _SearchModalState extends State<_SearchModal>
                                   fontSize: 12.5,
                                   fontWeight: FontWeight.w600,
                                   color: AppColors.primary)),
-                        if (f.begeni > 0) ...[
+                        // Mesafe fiyatın hemen yanında.
+                        if (km.isNotEmpty) ...[
                           if (f.fiyat.isNotEmpty) const SizedBox(width: 10),
+                          const AppSvgIcon(AppIcons.pin,
+                              size: 11, color: AppColors.primary),
+                          const SizedBox(width: 3),
+                          Text(km,
+                              style: const TextStyle(
+                                  fontSize: 12, color: AppColors.muted)),
+                        ],
+                        if (f.begeni > 0) ...[
+                          if (f.fiyat.isNotEmpty || km.isNotEmpty)
+                            const SizedBox(width: 10),
                           const Icon(Icons.favorite,
                               size: 12, color: AppColors.heart),
                           const SizedBox(width: 3),
