@@ -276,10 +276,11 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _loadPlaces() async {
-    // Mekan (restoran) tipinde `type` gönderilmez → sunucu varsayılanı korunur.
+    // `type` gönderilmezse sunucu TÜM tipleri döndürüyor (otopark dahil 1864
+    // kayıt); bu yüzden seçili tip her zaman açıkça gönderilir.
     final places = await HomeRepository.instance.harita(
       kategori: _activeCategoryId,
-      type: _type == _MapType.mekan ? null : _type.slug,
+      type: _type.slug,
     );
     if (!mounted) return;
     setState(() {
