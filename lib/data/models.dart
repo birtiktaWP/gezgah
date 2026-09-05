@@ -732,6 +732,28 @@ class RotaNokta {
       );
 }
 
+/// Kişi adını "Ömer Çelik" biçimine getirir: her kelimenin ilk harfi büyük,
+/// kalanı küçük. Türkçe i/I dönüşümleri elle yapılır (Dart'ın varsayılan
+/// `toUpperCase` çevirisi `i` → `I` verir, doğrusu `İ`).
+String titleCaseTr(String value) {
+  final s = value.trim();
+  if (s.isEmpty) return s;
+  return s.split(RegExp(r'\s+')).map((w) {
+    if (w.isEmpty) return w;
+    final first = switch (w[0]) {
+      'i' => 'İ',
+      'ı' => 'I',
+      final c => c.toUpperCase(),
+    };
+    final rest = w
+        .substring(1)
+        .replaceAll('I', 'ı')
+        .replaceAll('İ', 'i')
+        .toLowerCase();
+    return '$first$rest';
+  }).join(' ');
+}
+
 /// Rota sahibi özeti (`/rotalar` keşfet + detay `sahip`, SOSYAL_BEGENI_TAKIP.md).
 class RotaSahip {
   final int uyeId;
@@ -747,8 +769,9 @@ class RotaSahip {
     this.takipEdiyorum,
   });
 
-  String get adSoyad =>
-      [isim, soyisim].where((s) => s.trim().isNotEmpty).join(' ').trim();
+  /// "Ömer Çelik" — baş harfler büyük (veri küçük/büyük gelse de tutarlı).
+  String get adSoyad => titleCaseTr(
+      [isim, soyisim].where((s) => s.trim().isNotEmpty).join(' '));
 
   factory RotaSahip.fromJson(Map<String, dynamic> j, {String host = ''}) =>
       RotaSahip(
@@ -919,8 +942,8 @@ class TakipUye {
     this.takipEdiyorum,
   });
 
-  String get adSoyad =>
-      [isim, soyisim].where((s) => s.trim().isNotEmpty).join(' ').trim();
+  String get adSoyad => titleCaseTr(
+      [isim, soyisim].where((s) => s.trim().isNotEmpty).join(' '));
 
   TakipUye copyWith({bool? takipEdiyorum}) => TakipUye(
         uyeId: uyeId,
@@ -1114,7 +1137,8 @@ class UyeProfil {
   });
 
   String get adSoyad {
-    final n = [isim, soyisim].where((s) => s.trim().isNotEmpty).join(' ').trim();
+    final n = titleCaseTr(
+        [isim, soyisim].where((s) => s.trim().isNotEmpty).join(' '));
     return n.isEmpty ? 'Üye' : n;
   }
 

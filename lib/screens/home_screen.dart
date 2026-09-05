@@ -45,7 +45,8 @@ class _HomeScreenState extends State<HomeScreen> {
   late final Future<List<Place>> _sponsoredFuture;
   late final Future<List<Place>> _nearbyFuture;
   late final Future<List<Place>> _newestFuture;
-  late final Future<List<GeziRota>> _popularRoutesFuture; // Gezi Rotaları
+  // Gezi Rotaları rayı — rota ekranlarından dönüşte tazelenir (final değil).
+  late Future<List<GeziRota>> _popularRoutesFuture;
   late final Future<List<FeaturedEvent>> _eventsFuture;
   late final Future<List<String>> _marqueeFuture; // kayan yazı şeridi
 
@@ -427,7 +428,9 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icons.explore, // yedek; asıl ikon iconWidget ile çizilir
               iconWidget: const ShipWheelIcon(size: 15),
               label: 'Gezi Rotaları',
-              onTap: () => openDiscoverRoutes(context),
+              // Dönüşte "Gezi Rotaları" rayı tazelenir.
+              onTap: () =>
+                  _openRoutesAndRefresh(() => openDiscoverRoutes(context)),
             );
           }
           final s = HomeConfig.tumu[i - 1];
@@ -947,6 +950,21 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Yatay kaydırmalı kompakt mekan rayı (PopCard).
+  /// Gezi Rotaları rayını yeniden yükler (rota ekranlarından dönüşte çağrılır:
+  /// yeni rota, beğeni/yorum değişimi listeye yansısın).
+  void _refreshRoutes() {
+    if (!mounted) return;
+    setState(() {
+      _popularRoutesFuture = RotaRepository.instance.populer(limit: 10);
+    });
+  }
+
+  /// Rota ekranını açar ve dönüşte rayı tazeler.
+  Future<void> _openRoutesAndRefresh(Future<void> Function() open) async {
+    await open();
+    _refreshRoutes();
+  }
+
   /// Popüler gezi rotaları rayı — "Yeni Eklenenler" ile aynı şablon (yatay
   /// kaydırmalı kompakt kartlar). Rota yoksa bölüm tamamen gizlenir.
   Widget _routesRail() {
@@ -990,7 +1008,8 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 22),
               child: SectionHead(
                 'Gezi Rotaları',
-                onAll: () => openDiscoverRoutes(context),
+                onAll: () =>
+                    _openRoutesAndRefresh(() => openDiscoverRoutes(context)),
               ),
             ),
             SizedBox(
@@ -1004,10 +1023,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   final r = routes[i];
                   return _RouteRailCard(
                     rota: r,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => RouteDetailScreen(rotaId: r.id),
+                    // Detaydan dönünce ray tazelenir (beğeni/yorum sayısı).
+                    onTap: () => _openRoutesAndRefresh(
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => RouteDetailScreen(rotaId: r.id),
+                        ),
                       ),
                     ),
                   );

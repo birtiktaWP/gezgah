@@ -1647,15 +1647,27 @@ class HomeRepository {
   /// Restoran dışı yerler — `GET /yerler?type=<type>` (yeni-endpoints.md).
   /// Kategori değil **post type** bazlıdır (otopark | muze | mesire | plaj).
   /// Redis önbellekli; gerçek sayfalama meta'sı (`total`, `pages`) döner.
+  /// [filtreler] verilirse süzme **sunucuda** (AND) yapılır; `total`/`pages`
+  /// filtreli kümeye ait olur (YERLER_FILTRE_IDS.md §8). Eşleşmeler listenin
+  /// derinlerinde olsa bile ilk sayfada görünür.
   Future<({List<Place> items, bool hasMore, int? nextPage, int total})> yerler(
     String type, {
     int page = 1,
     int limit = 20,
+    List<int>? filtreler,
   }) async {
+    final fq = (filtreler == null || filtreler.isEmpty)
+        ? ''
+        : (filtreler.toList()..sort()).join(',');
     try {
       final res = await _dio.get(
         '/yerler',
-        queryParameters: {'type': type, 'page': page, 'limit': limit},
+        queryParameters: {
+          'type': type,
+          'page': page,
+          'limit': limit,
+          if (fq.isNotEmpty) 'filtreler': fq,
+        },
       );
       final body = res.data;
       if (body is! Map || body['success'] != true) {

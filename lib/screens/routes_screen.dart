@@ -3641,6 +3641,10 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen>
   double? _lat;
   double? _lng;
 
+  /// Akış yenileme sayacı — artınca sekmelerdeki listeler baştan yüklenir.
+  /// Yeni rota oluşturma, detaydan dönüş ve sekme değişiminde artırılır.
+  int _tick = 0;
+
   static const Map<String, String> _sortLabels = {
     'yeni': 'En yeni',
     'begeni': 'En beğenilen',
@@ -3658,7 +3662,12 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen>
   };
 
   void _onTab() {
-    if (mounted) setState(() {}); // sekme değişince header ikonlarını güncelle
+    if (!mounted) return;
+    // Sekme değişince header ikonları güncellenir ve açılan sekme tazelenir
+    // (aradaki değişiklikler — yeni rota, beğeni — hemen görünsün).
+    setState(() {
+      if (!_tab.indexIsChanging) _tick++;
+    });
   }
 
   @override
@@ -3699,8 +3708,9 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen>
                   ilce: _ilce,
                   lat: _lat,
                   lng: _lng,
+                  refreshTick: _tick,
                 ),
-                const _RouteFeed(follow: true),
+                _RouteFeed(follow: true, refreshTick: _tick),
               ],
             ),
           ),
@@ -3744,6 +3754,8 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen>
         context,
         MaterialPageRoute(builder: (_) => RouteDetailScreen(rotaId: rota.id)),
       );
+      // Detaydan dönünce akışlar tazelensin; yeni rota listede görünsün.
+      if (mounted) setState(() => _tick++);
     } on PlusRequiredException catch (e) {
       if (!mounted) return;
       await _handlePlus(context, e);
@@ -3990,6 +4002,11 @@ class _RouteFeed extends StatefulWidget {
   final int? ilce;
   final double? lat;
   final double? lng;
+
+  /// Dışarıdan yenileme tetikleyicisi: değeri değişince liste baştan yüklenir
+  /// (yeni rota oluşturma, rota detayından dönüş, sekme değişimi).
+  final int refreshTick;
+
   const _RouteFeed({
     required this.follow,
     this.sort = 'yeni',
@@ -3997,6 +4014,7 @@ class _RouteFeed extends StatefulWidget {
     this.ilce,
     this.lat,
     this.lng,
+    this.refreshTick = 0,
   });
 
   @override
@@ -4025,12 +4043,14 @@ class _RouteFeedState extends State<_RouteFeed>
   @override
   void didUpdateWidget(covariant _RouteFeed old) {
     super.didUpdateWidget(old);
-    // Header'dan sıralama/filtre değişince listeyi baştan yükle.
+    // Header'dan sıralama/filtre değişince ya da dışarıdan yenileme
+    // istendiğinde (yeni rota / detaydan dönüş / sekme değişimi) baştan yükle.
     if (old.sort != widget.sort ||
         old.tip != widget.tip ||
         old.ilce != widget.ilce ||
         old.lat != widget.lat ||
-        old.lng != widget.lng) {
+        old.lng != widget.lng ||
+        old.refreshTick != widget.refreshTick) {
       _load();
     }
   }
@@ -4205,10 +4225,14 @@ class _RouteFeedState extends State<_RouteFeed>
       padding: const EdgeInsets.only(bottom: 12),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => RouteDetailScreen(rotaId: r.id)),
-        ),
+        // Detaydan dönünce listeyi tazele (beğeni/yorum sayısı, silme vb.).
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => RouteDetailScreen(rotaId: r.id)),
+          );
+          if (mounted) _load();
+        },
         child: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
@@ -4275,6 +4299,14 @@ class _RouteFeedState extends State<_RouteFeed>
                                 size: 13, color: AppColors.muted),
                         const SizedBox(width: 3),
                         Text('${r.begeniSayisi}',
+                            style: const TextStyle(
+                                fontSize: 12.5, color: AppColors.muted)),
+                        // Yorum sayısı (beğeninin yanında, ikonuyla).
+                        const SizedBox(width: 10),
+                        const AppSvgIcon(AppIcons.comment,
+                            size: 13, color: AppColors.muted),
+                        const SizedBox(width: 3),
+                        Text('${r.yorumSayisi}',
                             style: const TextStyle(
                                 fontSize: 12.5, color: AppColors.muted)),
                       ],

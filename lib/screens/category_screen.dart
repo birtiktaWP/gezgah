@@ -136,8 +136,13 @@ class _CategoryScreenState extends State<CategoryScreen> {
         // Tipe ait filtreler paralel çekilir (FILTRELER_TIP_BAZLI.md).
         // Not: `meta.ozellikler` tipe göre süzülmediği ve restoran odaklı
         // olduğu için otopark/plaj/mesire'de özellik grubu gösterilmez.
+        // Süzme sunucuda yapılır (YERLER_FILTRE_IDS.md §8).
         final results = await Future.wait([
-          HomeRepository.instance.yerler(type, limit: 20),
+          HomeRepository.instance.yerler(
+            type,
+            limit: 20,
+            filtreler: _selectedFilters.toList(),
+          ),
           HomeRepository.instance.filtreler(type: type),
         ]);
         final r = results[0]
@@ -224,11 +229,15 @@ class _CategoryScreenState extends State<CategoryScreen> {
     }
     setState(() => _loadingMore = true);
 
-    // Type modu: sonraki sayfayı GET /yerler?type= ile çek.
+    // Type modu: sonraki sayfayı GET /yerler?type= ile çek (filtreli).
     if (type != null) {
       try {
-        final r = await HomeRepository.instance
-            .yerler(type, page: _nextPage!, limit: 20);
+        final r = await HomeRepository.instance.yerler(
+          type,
+          page: _nextPage!,
+          limit: 20,
+          filtreler: _selectedFilters.toList(),
+        );
         if (!mounted) return;
         final loc = _loc;
         if (loc != null) _applyDistances(r.items, loc);
@@ -269,10 +278,16 @@ class _CategoryScreenState extends State<CategoryScreen> {
   bool get _hasActiveFilter =>
       _selectedFilters.isNotEmpty || _selectedOzellikler.isNotEmpty;
 
-  /// Süzme istemci tarafında yalnız yüklenmiş kayıtlara uygulandığı için,
-  /// filtreli sonuç ekranı doldurmuyorsa sonraki sayfalar otomatik çekilir.
-  /// Aksi halde liste kaydırılamaz ve `_loadMore` hiç tetiklenmez.
+  /// Süzme sunucuda mı yapılıyor? Type modunda (`/yerler`) `filtreler=`
+  /// gönderiliyor; kategori modunda (`/kategoriler/{id}`) böyle bir parametre
+  /// olmadığı için istemci tarafında süzülür (YERLER_FILTRE_IDS.md §8).
+  bool get _serverFiltered => widget.type != null;
+
+  /// Kategori modunda süzme istemci tarafında ve yalnız yüklenmiş kayıtlara
+  /// uygulandığı için, filtreli sonuç ekranı doldurmuyorsa sonraki sayfalar
+  /// otomatik çekilir. Aksi halde liste kaydırılamaz ve `_loadMore` tetiklenmez.
   Future<void> _fillFilteredResults() async {
+    if (_serverFiltered) return; // sunucu süzüyor, sayfa doldurmaya gerek yok
     var guard = 0; // en fazla 5 ek sayfa (100 kayıt) — istek yağmuru olmasın
     while (mounted &&
         _hasActiveFilter &&
@@ -287,15 +302,17 @@ class _CategoryScreenState extends State<CategoryScreen> {
   }
 
   bool _matchesFilters(Place p) {
-    if (!_hasActiveFilter) return true;
+    // Sunucu süzdüyse gelen kayıtlar zaten uygun.
+    if (_serverFiltered || !_hasActiveFilter) return true;
     // AND mantığı: tüm seçili filtre + tüm seçili özellik id'leri mekanda olmalı.
     return _selectedFilters.every((id) => p.filterIds.contains(id)) &&
         _selectedOzellikler.every((id) => p.ozellikIds.contains(id));
   }
 
   /// Seçili filtre/özelliklere göre görünecek mekanlar.
-  List<Place> get _visiblePlaces =>
-      !_hasActiveFilter ? _places : _places.where(_matchesFilters).toList();
+  List<Place> get _visiblePlaces => (_serverFiltered || !_hasActiveFilter)
+      ? _places
+      : _places.where(_matchesFilters).toList();
 
   Place? get _visiblePinned {
     final p = _pinned;
@@ -322,6 +339,19 @@ class _CategoryScreenState extends State<CategoryScreen> {
           ..clear()
           ..addAll(result.ozellikler);
       });
+      _onFilterChanged();
+    }
+  }
+
+  /// Filtre seçimi değişti. Sunucu süzmeli modda liste 1. sayfadan yeniden
+  /// çekilir (total/pages filtreli kümeye ait olur); kategori modunda mevcut
+  /// kayıtlar üzerinde süzülüp gerekiyorsa sayfa doldurulur.
+  void _onFilterChanged() {
+    if (_serverFiltered) {
+      _nextPage = null;
+      _hasMore = false;
+      _load();
+    } else {
       _fillFilteredResults();
     }
   }
@@ -617,9 +647,12 @@ class _CategoryScreenState extends State<CategoryScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
+              // Sunucu süzmeli modda `_total` filtreli kümenin toplamıdır.
               !_hasActiveFilter
                   ? '$_total mekan bulundu'
-                  : '${_visiblePlaces.length} mekan (filtreli)',
+                  : (_serverFiltered
+                      ? '$_total mekan (filtreli)'
+                      : '${_visiblePlaces.length} mekan (filtreli)'),
               style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -678,7 +711,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                     _selectedFilters.remove(c.id);
                   }
                 });
-                _fillFilteredResults();
+                _onFilterChanged();
               },
               child: Container(
                 padding: const EdgeInsets.fromLTRB(12, 7, 9, 7),
