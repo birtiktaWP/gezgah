@@ -240,8 +240,9 @@ class _MenuScreenState extends State<MenuScreen> {
                     alignment: Alignment.center,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
-                      color:
-                          i == _active ? AppColors.primary : AppColors.primarySoft,
+                      color: i == _active
+                          ? AppColors.primary
+                          : AppColors.primarySoft,
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
@@ -334,7 +335,7 @@ class _MenuScreenState extends State<MenuScreen> {
         final bottom = MediaQuery.of(ctx).padding.bottom;
         return Container(
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(ctx).size.height * 0.85,
+            maxHeight: MediaQuery.of(ctx).size.height * 0.7,
           ),
           decoration: const BoxDecoration(
             color: Colors.white,
@@ -359,14 +360,16 @@ class _MenuScreenState extends State<MenuScreen> {
                   padding: EdgeInsets.fromLTRB(20, 4, 20, 20 + bottom),
                   children: [
                     if (u.gorsel.isNotEmpty) ...[
+                      // Panel gereksiz uzamasın: sabit ve kısa görsel şeridi.
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: AspectRatio(
-                          aspectRatio: 16 / 10,
+                        borderRadius: BorderRadius.circular(14),
+                        child: SizedBox(
+                          height: 140,
+                          width: double.infinity,
                           child: NetImage(u.gorsel),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                     ],
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -406,40 +409,33 @@ class _MenuScreenState extends State<MenuScreen> {
                         ),
                       ),
                     ],
+                    // İçindekiler ve kalori: ayrı başlıklar yerine tek satırda
+                    // sıkıştırıldı (panel kısa kalsın).
                     if (u.icindekiler.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      const Text(
-                        'İçindekiler',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.ink,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 10),
                       Text(
-                        u.icindekiler,
+                        'İçindekiler: ${u.icindekiler}',
                         style: const TextStyle(
-                          fontSize: 13.5,
-                          height: 1.5,
+                          fontSize: 13,
+                          height: 1.45,
                           color: _descColor,
                         ),
                       ),
                     ],
                     if (u.kalori != null) ...[
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 10),
                       Row(
                         children: [
                           const Icon(
                             Icons.local_fire_department_outlined,
-                            size: 16,
+                            size: 15,
                             color: AppColors.primary,
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 5),
                           Text(
                             '${u.kalori} kcal',
                             style: const TextStyle(
-                              fontSize: 13.5,
+                              fontSize: 13,
                               fontWeight: FontWeight.w600,
                               color: AppColors.ink,
                             ),
@@ -447,21 +443,6 @@ class _MenuScreenState extends State<MenuScreen> {
                         ],
                       ),
                     ],
-                    const SizedBox(height: 18),
-                    const Divider(
-                      height: 1,
-                      thickness: 1,
-                      color: AppColors.line,
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Menü fiyat ve bilgiler değişiklik gösterebilir.',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        height: 1.45,
-                        color: AppColors.muted,
-                      ),
-                    ),
                   ],
                 ),
               ),
