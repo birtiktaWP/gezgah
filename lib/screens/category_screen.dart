@@ -23,8 +23,12 @@ class CategoryScreen extends StatefulWidget {
   /// listelenir (otopark | muze | mesire | plaj). Alt kategori/pin/filtre yok.
   final String? type;
   final String title;
-  const CategoryScreen(
-      {super.key, this.categoryId, this.type, this.title = 'Kategori'});
+  const CategoryScreen({
+    super.key,
+    this.categoryId,
+    this.type,
+    this.title = 'Kategori',
+  });
 
   @override
   State<CategoryScreen> createState() => _CategoryScreenState();
@@ -62,8 +66,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
   void initState() {
     super.initState();
     _scroll.addListener(() {
-      if (_scroll.position.pixels >=
-          _scroll.position.maxScrollExtent - 300) {
+      if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 300) {
         _loadMore();
       }
     });
@@ -88,8 +91,12 @@ class _CategoryScreenState extends State<CategoryScreen> {
   void _applyDistances(List<Place> list, _Loc loc) {
     for (final p in list) {
       if (!p.lat.isNaN && !p.lng.isNaN) {
-        final m =
-            LocationService.distanceMeters(loc.lat, loc.lng, p.lat, p.lng);
+        final m = LocationService.distanceMeters(
+          loc.lat,
+          loc.lng,
+          p.lat,
+          p.lng,
+        );
         p.subtitle = LocationService.format(m);
       } else {
         p.subtitle = p.distance.isNotEmpty ? p.distance : 'Konum bilgisi yok';
@@ -108,7 +115,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
       case _SortMode.yakinlik:
         if (loc != null) {
           _places.sort(
-              (a, b) => _distMeters(a, loc).compareTo(_distMeters(b, loc)));
+            (a, b) => _distMeters(a, loc).compareTo(_distMeters(b, loc)),
+          );
         }
         break;
       case _SortMode.tarih:
@@ -145,8 +153,14 @@ class _CategoryScreenState extends State<CategoryScreen> {
           ),
           HomeRepository.instance.filtreler(type: type),
         ]);
-        final r = results[0]
-            as ({List<Place> items, bool hasMore, int? nextPage, int total});
+        final r =
+            results[0]
+                as ({
+                  List<Place> items,
+                  bool hasMore,
+                  int? nextPage,
+                  int total,
+                });
         final f =
             results[1] as ({List<Filter> filtreler, List<Filter> ozellikler});
         if (!mounted) return;
@@ -172,7 +186,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
         HomeRepository.instance.filtreler(type: 'restoran'),
       ]);
       final d = results[0] as CategoryDetail;
-      final f = results[1] as ({List<Filter> filtreler, List<Filter> ozellikler});
+      final f =
+          results[1] as ({List<Filter> filtreler, List<Filter> ozellikler});
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -255,8 +270,11 @@ class _CategoryScreenState extends State<CategoryScreen> {
     }
 
     try {
-      final d = await HomeRepository.instance
-          .kategoriDetay(id!, page: _nextPage!, limit: 20);
+      final d = await HomeRepository.instance.kategoriDetay(
+        id!,
+        page: _nextPage!,
+        limit: 20,
+      );
       if (!mounted) return;
       // Konum çözülmüşse mesafeleri uygula; değilse İl·İlçe kalır (bloklama).
       final loc = _loc;
@@ -368,13 +386,18 @@ class _CategoryScreenState extends State<CategoryScreen> {
         Widget option(_SortMode mode, IconData icon, String label) {
           final selected = _sort == mode;
           return ListTile(
-            leading: Icon(icon,
-                color: selected ? AppColors.primary : AppColors.muted),
-            title: Text(label,
-                style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w600,
-                    color: selected ? AppColors.primary : AppColors.ink)),
+            leading: Icon(
+              icon,
+              color: selected ? AppColors.primary : AppColors.muted,
+            ),
+            title: Text(
+              label,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w600,
+                color: selected ? AppColors.primary : AppColors.ink,
+              ),
+            ),
             trailing: selected
                 ? const Icon(Icons.check, color: AppColors.primary)
                 : null,
@@ -399,22 +422,26 @@ class _CategoryScreenState extends State<CategoryScreen> {
                 width: 42,
                 height: 4,
                 decoration: BoxDecoration(
-                    color: AppColors.line,
-                    borderRadius: BorderRadius.circular(999)),
+                  color: AppColors.line,
+                  borderRadius: BorderRadius.circular(999),
+                ),
               ),
               const Padding(
                 padding: EdgeInsets.fromLTRB(20, 14, 20, 4),
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: Text('Sırala',
-                      style: TextStyle(
-                          fontSize: 17, fontWeight: FontWeight.w600)),
+                  child: Text(
+                    'Sırala',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                  ),
                 ),
               ),
-              option(_SortMode.yakinlik, Icons.near_me_outlined,
-                  'Yakınlığa göre'),
-              option(_SortMode.tarih, Icons.schedule,
-                  'Eklenme tarihine göre'),
+              option(
+                _SortMode.yakinlik,
+                Icons.near_me_outlined,
+                'Yakınlığa göre',
+              ),
+              option(_SortMode.tarih, Icons.schedule, 'Eklenme tarihine göre'),
               const SizedBox(height: 8),
             ],
           ),
@@ -427,10 +454,12 @@ class _CategoryScreenState extends State<CategoryScreen> {
 
   void _openDetail(Place p, {Object? heroTag}) {
     Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (_) => DetailScreen(
-                place: p, heroTag: heroTag, type: widget.type)));
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            DetailScreen(place: p, heroTag: heroTag, type: widget.type),
+      ),
+    );
   }
 
   @override
@@ -460,7 +489,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
                             width: 28,
                             height: 28,
                             child: CircularProgressIndicator(
-                                strokeWidth: 2.5, color: AppColors.primary),
+                              strokeWidth: 2.5,
+                              color: AppColors.primary,
+                            ),
                           ),
                         ),
                       )
@@ -480,10 +511,12 @@ class _CategoryScreenState extends State<CategoryScreen> {
                             heroTag: _visiblePinned!.id > 0
                                 ? 'cat-pin-${_visiblePinned!.id}'
                                 : null,
-                            onTap: () => _openDetail(_visiblePinned!,
-                                heroTag: _visiblePinned!.id > 0
-                                    ? 'cat-pin-${_visiblePinned!.id}'
-                                    : null),
+                            onTap: () => _openDetail(
+                              _visiblePinned!,
+                              heroTag: _visiblePinned!.id > 0
+                                  ? 'cat-pin-${_visiblePinned!.id}'
+                                  : null,
+                            ),
                           ),
                         ),
                     ],
@@ -515,11 +548,14 @@ class _CategoryScreenState extends State<CategoryScreen> {
                       padding: const EdgeInsets.fromLTRB(22, 30, 22, 30),
                       child: Center(
                         child: Text(
-                            !_hasActiveFilter
-                                ? 'Bu kategoride mekan bulunamadı'
-                                : 'Seçili filtrelere uygun mekan bulunamadı',
-                            style: const TextStyle(
-                                fontSize: 13, color: AppColors.muted)),
+                          !_hasActiveFilter
+                              ? 'Bu kategoride mekan bulunamadı'
+                              : 'Seçili filtrelere uygun mekan bulunamadı',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.muted,
+                          ),
+                        ),
                       ),
                     ),
                   if (_loadingMore)
@@ -530,7 +566,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
                           width: 24,
                           height: 24,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2.5, color: AppColors.primary),
+                            strokeWidth: 2.5,
+                            color: AppColors.primary,
+                          ),
                         ),
                       ),
                     ),
@@ -542,7 +580,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
             alignment: Alignment.bottomCenter,
             child: SafeArea(
               child: FloatingTabBar(
-                  activeIndex: -1, onTap: MainNav.instance.select),
+                activeIndex: -1,
+                onTap: MainNav.instance.select,
+              ),
             ),
           ),
         ],
@@ -559,44 +599,59 @@ class _CategoryScreenState extends State<CategoryScreen> {
       ),
       child: SafeArea(
         bottom: false,
-        child: Row(
+        // Başlık ekranın tam ortasında dursun: solda 1, sağda 2 buton olduğu
+        // için `Expanded + Center` başlığı sola kaydırıyordu. Stack ile başlık
+        // tüm genişlikte ortalanır, butonlar üstüne yerleşir.
+        child: Stack(
+          alignment: Alignment.center,
           children: [
-            GlassButton(
-              icon: Icons.chevron_left,
-              flat: true,
-              onTap: () => Navigator.pop(context),
-            ),
-            Expanded(
-              child: Center(
-                child: Text(_title,
-                    style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primary)),
-              ),
-            ),
-            GlassButton(
-              icon: Icons.search,
-              flat: true,
-              onTap: () =>
-                  showSearchModal(context, onOpenDetail: _openDetail),
-            ),
-            const SizedBox(width: 4),
-            GlassButton(
-              icon: Icons.location_on_outlined,
-              svg: AppIcons.pin,
-              flat: true,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => MapScreen(
-                    initialCategoryId: _category?.id ?? widget.categoryId,
-                    // Otopark/mesire/plaj listesinden geçilirse haritada da
-                    // aynı tip seçili gelsin.
-                    initialType: widget.type,
-                  ),
+            Padding(
+              // Butonların altına girmesin (sağ taraf daha geniş).
+              padding: const EdgeInsets.symmetric(horizontal: 96),
+              child: Text(
+                _title,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
                 ),
               ),
+            ),
+            Row(
+              children: [
+                GlassButton(
+                  icon: Icons.chevron_left,
+                  flat: true,
+                  onTap: () => Navigator.pop(context),
+                ),
+                const Spacer(),
+                GlassButton(
+                  icon: Icons.search,
+                  flat: true,
+                  onTap: () =>
+                      showSearchModal(context, onOpenDetail: _openDetail),
+                ),
+                const SizedBox(width: 4),
+                GlassButton(
+                  icon: Icons.location_on_outlined,
+                  svg: AppIcons.pin,
+                  flat: true,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MapScreen(
+                        initialCategoryId: _category?.id ?? widget.categoryId,
+                        // Otopark/mesire/plaj listesinden geçilirse haritada da
+                        // aynı tip seçili gelsin.
+                        initialType: widget.type,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -607,10 +662,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
   /// Kategori hapları — ilk hap mevcut kategori (aktif), sonrakiler alt
   /// kategoriler. Tasarım (CategoryPill) korunur; veri API'den gelir.
   Widget _categoryPills() {
-    final items = <Category>[
-      ?_category,
-      ..._subs,
-    ];
+    final items = <Category>[?_category, ..._subs];
     return SizedBox(
       height: 44,
       child: ListView.separated(
@@ -647,29 +699,34 @@ class _CategoryScreenState extends State<CategoryScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
-              // Sunucu süzmeli modda `_total` filtreli kümenin toplamıdır.
-              !_hasActiveFilter
-                  ? '$_total mekan bulundu'
-                  : (_serverFiltered
+            // Sunucu süzmeli modda `_total` filtreli kümenin toplamıdır.
+            !_hasActiveFilter
+                ? '$_total mekan bulundu'
+                : (_serverFiltered
                       ? '$_total mekan (filtreli)'
                       : '${_visiblePlaces.length} mekan (filtreli)'),
-              style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.muted)),
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.muted,
+            ),
+          ),
           Row(
             children: [
               GestureDetector(
-                  onTap: _openSortSheet,
-                  child: _actBtn(Icons.swap_vert, svg: AppIcons.sort)),
+                onTap: _openSortSheet,
+                child: _actBtn(Icons.swap_vert, svg: AppIcons.sort),
+              ),
               // Bu liste için hiç filtre/özellik yoksa butonu gizle.
               if (_filters.isNotEmpty || _ozellikler.isNotEmpty) ...[
                 const SizedBox(width: 8),
                 GestureDetector(
                   onTap: _openFilterSheet,
-                  child: _actBtn(Icons.filter_list,
-                      active: _hasActiveFilter,
-                      svg: AppIcons.filter),
+                  child: _actBtn(
+                    Icons.filter_list,
+                    active: _hasActiveFilter,
+                    svg: AppIcons.filter,
+                  ),
                 ),
               ],
             ],
@@ -722,14 +779,20 @@ class _CategoryScreenState extends State<CategoryScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(c.name,
-                        style: const TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.primary)),
+                    Text(
+                      c.name,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                    ),
                     const SizedBox(width: 6),
-                    const AppSvgIcon(AppIcons.xmark,
-                        size: 10, color: AppColors.primary),
+                    const AppSvgIcon(
+                      AppIcons.xmark,
+                      size: 10,
+                      color: AppColors.primary,
+                    ),
                   ],
                 ),
               ),
@@ -750,12 +813,16 @@ class _CategoryScreenState extends State<CategoryScreen> {
         border: Border.all(color: active ? AppColors.primary : AppColors.line),
       ),
       child: svg != null
-          ? AppSvgIcon(svg,
-              size: 17, color: active ? Colors.white : AppColors.primary)
-          : Icon(icon,
-              size: 18, color: active ? Colors.white : AppColors.primary),
+          ? AppSvgIcon(
+              svg,
+              size: 17,
+              color: active ? Colors.white : AppColors.primary,
+            )
+          : Icon(
+              icon,
+              size: 18,
+              color: active ? Colors.white : AppColors.primary,
+            ),
     );
   }
 }
-
-

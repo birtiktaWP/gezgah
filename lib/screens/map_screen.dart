@@ -292,7 +292,25 @@ class _MapScreenState extends State<MapScreen> {
 
   /// Görünür bölgeye göre gösterilecek mekanları seçer ve marker'ları kurar.
   /// Kamera durduğunda ve veri değiştiğinde çağrılır.
+  ///
+  /// Hatalar burada yutulmaz: bir istisna oluşursa pinler eskimiş kalır ve
+  /// kullanıcı "kaydırdım ama yüklenmiyor" durumuyla karşılaşır. Bu yüzden
+  /// tüm gövde korumalı ve kilit `finally` ile bırakılıyor.
   Future<void> _refreshVisible() async {
+    if (_refreshing) return; // üst üste binmeyi engelle
+    _refreshing = true;
+    try {
+      await _refreshVisibleInner();
+    } catch (_) {
+      // sessizce geç: bir sonraki kamera durağında yeniden denenir
+    } finally {
+      _refreshing = false;
+    }
+  }
+
+  bool _refreshing = false;
+
+  Future<void> _refreshVisibleInner() async {
     if (_all.isEmpty) {
       if (_places.isNotEmpty || _markers.isNotEmpty) {
         setState(() {
@@ -310,10 +328,12 @@ class _MapScreenState extends State<MapScreen> {
       bounds = null; // harita henüz hazır değil
     }
 
-    var list = _all;
+    // Koordinatsız kayıt gelmemeli (sunucu süzüyor) ama gelirse pin kurulumu
+    // patlamasın diye burada da eleniyor.
+    var list = _all.where((p) => p.hasCoord).toList();
     if (bounds != null) {
       final inView = <ApiPlace>[];
-      for (final p in _all) {
+      for (final p in list) {
         if (_inBounds(bounds, p.lat!, p.lng!)) inView.add(p);
       }
       list = inView;
@@ -478,12 +498,19 @@ class _MapScreenState extends State<MapScreen> {
   Future<void> _updateLabel() async {
     if (_geocoding) return;
     _geocoding = true;
-    final label = await LocationService.cityDistrict(
-        _center.latitude, _center.longitude,
-        districtFirst: true);
-    _geocoding = false;
-    if (!mounted || label == null) return;
-    setState(() => _locationLabel = label);
+    try {
+      final label = await LocationService.cityDistrict(
+          _center.latitude, _center.longitude,
+          districtFirst: true);
+      if (!mounted || label == null) return;
+      setState(() => _locationLabel = label);
+    } catch (_) {
+      // Geocoding hatası etiketi dondurmamalı.
+    } finally {
+      // ÖNEMLİ: hata durumunda da bırakılmalı; aksi halde kilit açık kalıp
+      // adres etiketi bir daha hiç güncellenmiyordu.
+      _geocoding = false;
+    }
   }
 
   String _distanceText(ApiPlace p) {
