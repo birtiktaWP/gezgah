@@ -138,16 +138,23 @@ class _MenuScreenState extends State<MenuScreen> {
           else ...[
             _pillBar(),
             const Divider(height: 1, thickness: 1, color: AppColors.line),
+            // Not: tembel `ListView` yerine tüm bölümleri oluşturan
+            // `SingleChildScrollView` kullanılıyor. Aksi halde ekran dışına
+            // çıkan bölüm başlıklarının GlobalKey bağlamı yok oluyor ve
+            // sekmeye dokunmak (kaydırdıktan sonra) hiçbir şey yapmıyordu.
             Expanded(
-              child: ListView(
+              child: SingleChildScrollView(
                 key: _listKey,
                 controller: _list,
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 48),
-                children: [
-                  for (var i = 0; i < _sections.length; i++)
-                    ..._section(i, _sections[i]),
-                  _footerNote(),
-                ],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var i = 0; i < _sections.length; i++)
+                      ..._section(i, _sections[i]),
+                    _footerNote(),
+                  ],
+                ),
               ),
             ),
           ],
@@ -216,37 +223,42 @@ class _MenuScreenState extends State<MenuScreen> {
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: SizedBox(
         height: 38,
-        child: ListView.separated(
+        // Tüm pill'ler oluşturulur (kategori sayısı az): böylece aktif pill
+        // ekran dışında olsa da ona kaydırma yapılabilir.
+        child: SingleChildScrollView(
           controller: _pills,
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          itemCount: _sections.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 10),
-          itemBuilder: (_, i) {
-            final active = i == _active;
-            return GestureDetector(
-              key: _pillKeys[i],
-              onTap: () => _jumpToSection(i),
-              child: Container(
-                alignment: Alignment.center,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: active ? AppColors.primary : AppColors.primarySoft,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  _sections[i].kategori.isEmpty
-                      ? 'Menü'
-                      : _sections[i].kategori,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: active ? Colors.white : AppColors.primary,
+          child: Row(
+            children: [
+              for (var i = 0; i < _sections.length; i++) ...[
+                if (i > 0) const SizedBox(width: 10),
+                GestureDetector(
+                  key: _pillKeys[i],
+                  onTap: () => _jumpToSection(i),
+                  child: Container(
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color:
+                          i == _active ? AppColors.primary : AppColors.primarySoft,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      _sections[i].kategori.isEmpty
+                          ? 'Menü'
+                          : _sections[i].kategori,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: i == _active ? Colors.white : AppColors.primary,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
+              ],
+            ],
+          ),
         ),
       ),
     );

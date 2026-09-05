@@ -12,7 +12,9 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Profil avatarını seçebilmen için fotoğraf galerine erişim gerekir.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Profil avatarı için fotoğraf çekebilmen adına kameraya erişim gerekir.</string>
+	<string>Profil avatarı ve gezi rotası fotoğrafları için kameraya erişim gerekir.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Çektiğin fotoğrafı kaydedebilmek için fotoğraf galerine yazma izni gerekir.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

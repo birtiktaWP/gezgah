@@ -398,7 +398,11 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     }
     final bytes = await _cropCover(
         action == 'camera' ? ImageSource.camera : ImageSource.gallery);
-    if (bytes == null || !mounted) return;
+    if (!mounted) return;
+    if (bytes == null) {
+      _showPickError(context);
+      return;
+    }
     final b64 = 'data:image/jpeg;base64,${base64Encode(bytes)}';
     // Yükleme sırasında kırpılan görseli anında (blob) göster.
     setState(() => _pendingCover = bytes);
@@ -1622,6 +1626,22 @@ Future<XFile?> _pickImage(ImageSource source) {
   );
 }
 
+/// Görsel seçme/kırpma sırasında oluşan son hata (teşhis için). Bu akıştaki
+/// hatalar eskiden sessizce yutuluyordu; artık kullanıcıya gösterilir ki
+/// "fotoğraf eklenmiyor" durumunun nedeni belli olsun.
+String? _lastPickError;
+
+/// Son hatayı (varsa) kullanıcıya gösterir ve temizler.
+void _showPickError(BuildContext context) {
+  final err = _lastPickError;
+  _lastPickError = null;
+  if (err == null || !context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    content: Text('Fotoğraf alınamadı: $err'),
+    duration: const Duration(seconds: 6),
+  ));
+}
+
 /// Görsel seçip verilen orana göre kırpar; JPEG bytes döner.
 ///
 /// - Kullanıcı görsel seçmezse ya da kırpmayı iptal ederse `null`.
@@ -1635,7 +1655,14 @@ Future<Uint8List?> _pickAndCrop(
   required int maxWidth,
   required int maxHeight,
 }) async {
-  final file = await _pickImage(source);
+  XFile? file;
+  try {
+    file = await _pickImage(source);
+  } catch (e) {
+    // Kamera/galeri açılamadı ya da sonuç alınamadı (izin, bellek, platform).
+    _lastPickError = e.toString();
+    return null;
+  }
   if (file == null) return null; // seçim yapılmadı
   try {
     final cropped = await ImageCropper().cropImage(
@@ -1666,9 +1693,15 @@ Future<Uint8List?> _pickAndCrop(
     );
     if (cropped == null) return null; // kullanıcı kırpmayı iptal etti
     return cropped.readAsBytes();
-  } catch (_) {
-    // Kırpıcı çalışmadı → ham (küçültülmüş) görselle devam et.
-    return file.readAsBytes();
+  } catch (e) {
+    // Kırpıcı çalışmadı → ham (küçültülmüş) görselle devam et; hatayı not al.
+    _lastPickError = 'kırpma: $e';
+    try {
+      return await file.readAsBytes();
+    } catch (e2) {
+      _lastPickError = 'okuma: $e2';
+      return null;
+    }
   }
 }
 
@@ -1769,7 +1802,12 @@ Future<
           if (src == null || src == 'remove') return;
           final b = await _cropCover(
               src == 'camera' ? ImageSource.camera : ImageSource.gallery);
-          if (b != null) setSheet(() => kapak = b);
+          if (!ctx.mounted) return;
+          if (b == null) {
+            _showPickError(ctx);
+            return;
+          }
+          setSheet(() => kapak = b);
         }
 
         return Padding(
@@ -3079,7 +3117,12 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
     }
     final bytes = await _cropSquare(
         src == 'camera' ? ImageSource.camera : ImageSource.gallery);
-    if (bytes != null && mounted) setState(() => _konumFoto = bytes);
+    if (!mounted) return;
+    if (bytes == null) {
+      _showPickError(context); // sebebi göster (izin/bellek/platform hatası)
+      return;
+    }
+    setState(() => _konumFoto = bytes);
   }
 
   Future<void> _submitKonum() async {
@@ -4580,7 +4623,11 @@ class _UrunFotoSheetState extends State<_UrunFotoSheet> {
     }
     final bytes = await _cropSquare(
         src == 'camera' ? ImageSource.camera : ImageSource.gallery);
-    if (bytes == null || !mounted) return;
+    if (!mounted) return;
+    if (bytes == null) {
+      _showPickError(context);
+      return;
+    }
     setState(() => _busy = true);
     try {
       final b64 = 'data:image/jpeg;base64,${base64Encode(bytes)}';
