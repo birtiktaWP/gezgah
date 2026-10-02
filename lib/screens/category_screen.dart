@@ -5,6 +5,7 @@ import '../data/home_config.dart';
 import '../data/location_service.dart';
 import '../data/mock_data.dart';
 import '../data/models.dart';
+import '../data/view_tracker.dart';
 import '../navigation/main_nav.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_icons.dart';
@@ -13,6 +14,7 @@ import '../widgets/filter_sheet.dart';
 import '../widgets/place_cards.dart';
 import '../widgets/search_modal.dart';
 import '../widgets/tabbar.dart';
+import '../widgets/track_impression.dart';
 import 'detail_screen.dart';
 import 'map_screen.dart';
 
@@ -42,6 +44,14 @@ enum _SortMode { yakinlik, tarih }
 
 class _CategoryScreenState extends State<CategoryScreen> {
   final ScrollController _scroll = ScrollController();
+
+  // Ekranda görünen mekanlar bu ziyaret için bir kez sayılır (GORUNTULENME.md).
+  late final ImpressionScope _impressions = widget.type != null
+      ? ImpressionScope(kaynak: 'tip', kaynakId: widget.type)
+      : ImpressionScope(
+          kaynak: 'kategori',
+          kaynakId: widget.categoryId?.toString(),
+        );
 
   bool _loading = true;
   bool _loadingMore = false;
@@ -504,18 +514,23 @@ class _CategoryScreenState extends State<CategoryScreen> {
                       _listHead(),
                       if (_hasActiveFilter) _selectedChips(),
                       if (_visiblePinned != null)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
-                          child: ListTileCard(
-                            place: _visiblePinned!,
-                            heroTag: _visiblePinned!.id > 0
-                                ? 'cat-pin-${_visiblePinned!.id}'
-                                : null,
-                            onTap: () => _openDetail(
-                              _visiblePinned!,
+                        TrackImpression(
+                          scope: _impressions,
+                          placeId: _visiblePinned!.id,
+                          featured: true,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
+                            child: ListTileCard(
+                              place: _visiblePinned!,
                               heroTag: _visiblePinned!.id > 0
                                   ? 'cat-pin-${_visiblePinned!.id}'
                                   : null,
+                              onTap: () => _openDetail(
+                                _visiblePinned!,
+                                heroTag: _visiblePinned!.id > 0
+                                    ? 'cat-pin-${_visiblePinned!.id}'
+                                    : null,
+                              ),
                             ),
                           ),
                         ),
@@ -528,13 +543,18 @@ class _CategoryScreenState extends State<CategoryScreen> {
               if (i < _visiblePlaces.length) {
                 final p = _visiblePlaces[i];
                 final tag = p.id > 0 ? 'cat-${p.id}' : null;
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
-                  child: ListTileCard(
-                    place: p,
-                    heroTag: tag,
-                    hideImage: widget.type == 'otopark',
-                    onTap: () => _openDetail(p, heroTag: tag),
+                return TrackImpression(
+                  scope: _impressions,
+                  placeId: p.id,
+                  position: i,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
+                    child: ListTileCard(
+                      place: p,
+                      heroTag: tag,
+                      hideImage: widget.type == 'otopark',
+                      onTap: () => _openDetail(p, heroTag: tag),
+                    ),
                   ),
                 );
               }

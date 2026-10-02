@@ -1,7 +1,7 @@
 name: gezgah
 description: "Gezgah - yakınındaki en iyi yerleri keşfet."
 publish_to: 'none'
-version: 1.0.7+53
+version: 1.0.8+54
 
 environment:
   sdk: ^3.11.4
@@ -34,6 +34,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   video_player: 2.14.0 # mekan galerisindeki videolar (Videolar sekmesi)
+  visibility_detector: 0.4.0+2 # listede ekranda görünen mekanlar (GORUNTULENME.md)
 
 dev_dependencies:
   flutter_test:

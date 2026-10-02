@@ -1264,6 +1264,7 @@ class PlaceDetail {
   final List<GaleriItem> galeri;
   final List<MenuKategori> menu;
   final List<Etkinlik> etkinlikler; // mekana ait aktif etkinlikler
+  final List<MekanVideo> videolar; // ERP'den yüklenen videolar (MEKAN_VIDEO.md)
 
   const PlaceDetail({
     required this.id,
@@ -1289,6 +1290,7 @@ class PlaceDetail {
     this.galeri = const [],
     this.menu = const [],
     this.etkinlikler = const [],
+    this.videolar = const [],
   });
 
   bool get hasCoord => lat != null && lng != null;
@@ -1359,6 +1361,10 @@ class PlaceDetail {
       menu: parseList(j['menu'], MenuKategori.fromJson),
       etkinlikler:
           parseList(j['etkinlikler'], (m) => Etkinlik.fromJson(m, host: host)),
+      videolar: parseList(
+              j['videolar'], (m) => MekanVideo.fromJson(m, host: host))
+          .where((v) => v.url.isNotEmpty)
+          .toList(),
     );
   }
 }
@@ -1420,6 +1426,67 @@ class GaleriItem {
       mimeType: (j['mime_type'] as String?)?.trim() ?? '',
     );
   }
+}
+
+/// Mekan videosu (`GET /mekanlar/{id}` → `videolar[]`, MEKAN_VIDEO.md §2).
+/// ERP'de Galeri > Videolar'dan yüklenir; sıra ERP'deki gösterim sırasıdır.
+class MekanVideo {
+  final String file;
+  final String url; // mutlak video URL'i
+  final String poster; // kapak görseli (mutlak) — yoksa ''
+  final String title;
+  final String mime; // video/mp4 | video/quicktime | video/webm
+  final int size; // bayt
+  final double? duration; // sn — yalnız gösterim amaçlı, null olabilir
+  final int width; // 0 olabilir
+  final int height; // 0 olabilir
+
+  const MekanVideo({
+    this.file = '',
+    required this.url,
+    this.poster = '',
+    this.title = '',
+    this.mime = '',
+    this.size = 0,
+    this.duration,
+    this.width = 0,
+    this.height = 0,
+  });
+
+  /// Dikey video mu? (`w/h` 0 ise yatay 16:9 varsayılır.)
+  bool get isPortrait => width > 0 && height > 0 && width < height;
+
+  /// "0:12" / "1:05:30" biçiminde süre; bilinmiyorsa ''.
+  String get durationLabel {
+    final d = duration;
+    if (d == null || d <= 0) return '';
+    final s = d.round();
+    final h = s ~/ 3600, m = (s % 3600) ~/ 60, sec = s % 60;
+    final ss = sec.toString().padLeft(2, '0');
+    return h > 0 ? '$h:${m.toString().padLeft(2, '0')}:$ss' : '$m:$ss';
+  }
+
+  factory MekanVideo.fromJson(Map<String, dynamic> j, {String host = ''}) {
+    num? n(dynamic v) => v is num ? v : num.tryParse('${v ?? ''}');
+    return MekanVideo(
+      file: (j['file'] as String?)?.trim() ?? '',
+      url: _absUrl(j['url'], host),
+      poster: _absUrl(j['poster'], host),
+      title: (j['title'] as String?)?.trim() ?? '',
+      mime: (j['mime'] as String?)?.trim().toLowerCase() ?? '',
+      size: n(j['size'])?.toInt() ?? 0,
+      duration: n(j['duration'])?.toDouble(),
+      width: n(j['width'])?.toInt() ?? 0,
+      height: n(j['height'])?.toInt() ?? 0,
+    );
+  }
+
+  /// Eski yol: `galeri[]` içinde `mime_type: video/*` ile gelen öğe.
+  factory MekanVideo.fromGaleri(GaleriItem g) => MekanVideo(
+        url: g.url,
+        poster: g.videoPoster,
+        mime: g.mimeType.toLowerCase(),
+      );
 }
 
 /// QR menü kategorisi (`menu[]`).

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +11,7 @@ import '../data/auth_service.dart';
 import '../data/favorites_service.dart';
 import '../data/home_config.dart';
 import '../data/models.dart';
+import '../data/view_tracker.dart';
 import '../navigation/main_nav.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_icons.dart';
@@ -57,6 +60,13 @@ class _DetailScreenState extends State<DetailScreen> {
   bool _loading = true;
   PlaceDetail? _detail;
 
+  // Giriş videosu: detayda `videolar[]` doluysa ilk video, detay sayfası
+  // görünmeden önce tam ekran ve kontrolsüz oynatılır (atlanamaz), bitince
+  // kapanır. Detay gelene kadar sayfa bir örtüyle gizlenir; detay geç
+  // gelirse örtü [_introCoverMax] sonra kalkar, video yine de oynatılır.
+  bool _introCover = true;
+  static const Duration _introCoverMax = Duration(milliseconds: 1500);
+
   // Rezervasyon seçenekleri (rezervasyon-api.md). `aktif` (Gezgah Plus) ise
   // footer'daki "Rezerve" butonu etkinleşir. Detay ile birlikte çekilir.
   RezervasyonSecenekler? _rez;
@@ -87,6 +97,11 @@ class _DetailScreenState extends State<DetailScreen> {
       final show = _scroll.offset > 60;
       if (show != _showTabbar) setState(() => _showTabbar = show);
     });
+    Future.delayed(_introCoverMax, () {
+      if (mounted && _introCover) setState(() => _introCover = false);
+    });
+    // Detay görüntülenmesi: sayfa her açılışta bir kez (GORUNTULENME.md).
+    ViewTracker.instance.detay(widget.place.id);
     _fetch();
   }
 
@@ -111,8 +126,37 @@ class _DetailScreenState extends State<DetailScreen> {
       _topIds = results[1] as Set<int>;
       _loading = false;
     });
+    _playIntro(d);
     _fetchSimilar(d);
     _fetchRezervasyon();
+  }
+
+  /// `videolar[]` varsa ilk videoyu zorunlu giriş videosu olarak oynatır;
+  /// ardından (ya da video yoksa hemen) örtüyü kaldırır.
+  Future<void> _playIntro(PlaceDetail? d) async {
+    // iOS WebM oynatamaz → orada ilk oynatılabilir videoya geç.
+    final ios = defaultTargetPlatform == TargetPlatform.iOS;
+    final intro = d?.videolar
+        .where((v) =>
+            v.url.isNotEmpty &&
+            !(ios &&
+                (v.mime == 'video/webm' ||
+                    v.url.toLowerCase().endsWith('.webm'))))
+        .firstOrNull;
+    if (intro != null) {
+      final done = Navigator.of(context).push(PageRouteBuilder<void>(
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+        pageBuilder: (_, __, ___) => _IntroVideoScreen(url: intro.url),
+      ));
+      // Rota çizildikten sonra (video arkasında) örtüyü kaldır.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _introCover = false);
+      });
+      await done;
+      return;
+    }
+    if (mounted && _introCover) setState(() => _introCover = false);
   }
 
   /// Rezervasyon seçeneklerini çeker (Plus mı, bölge/masa/saatler). Hata/kapalı
@@ -180,11 +224,28 @@ class _DetailScreenState extends State<DetailScreen> {
     return imgs;
   }
 
-  /// Galerideki videolar (panelden yüklenen, `mime_type: video/*`).
-  List<GaleriItem> get _videos => [
-        for (final g in _detail?.galeri ?? const <GaleriItem>[])
-          if (g.url.isNotEmpty && g.isVideo) g,
-      ];
+  /// Mekan videoları: `videolar[]` (MEKAN_VIDEO.md) + eski yoldan `galeri[]`
+  /// içinde `video/*` olarak gelenler (URL'e göre tekilleştirilir). iOS
+  /// WebM'i oynatamadığı için orada WebM'ler gizlenir.
+  List<MekanVideo> get _videos {
+    final d = _detail;
+    if (d == null) return const [];
+    final seen = <String>{};
+    final out = <MekanVideo>[];
+    void add(MekanVideo v) {
+      if (v.url.isEmpty || !seen.add(v.url)) return;
+      final webm =
+          v.mime == 'video/webm' || v.url.toLowerCase().endsWith('.webm');
+      if (webm && defaultTargetPlatform == TargetPlatform.iOS) return;
+      out.add(v);
+    }
+
+    d.videolar.forEach(add);
+    for (final g in d.galeri) {
+      if (g.url.isNotEmpty && g.isVideo) add(MekanVideo.fromGaleri(g));
+    }
+    return out;
+  }
 
   String get _name => _detail?.name.isNotEmpty == true
       ? _detail!.name
@@ -378,6 +439,21 @@ class _DetailScreenState extends State<DetailScreen> {
             bottom: _showTabbar ? 0 : -(160 + bottomInset),
             child: SafeArea(child: _detailTabbar()),
           ),
+          // Giriş videosu kararı verilene kadar detayı gizler.
+          if (_introCover)
+            const Positioned.fill(
+              child: ColoredBox(
+                color: AppColors.bg,
+                child: Center(
+                  child: SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.5, color: AppColors.primary),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -1683,15 +1759,15 @@ class _GalleryViewerState extends State<_GalleryViewer> {
 /// Tam ekran video oynatıcı: otomatik başlar, döngüde oynar; dokununca
 /// durdur/devam, altta kaydırılabilir ilerleme çubuğu, üstte kapat butonu.
 class _VideoViewer extends StatefulWidget {
-  final String url;
-  const _VideoViewer({required this.url});
+  final MekanVideo video;
+  const _VideoViewer({required this.video});
 
   @override
   State<_VideoViewer> createState() => _VideoViewerState();
 }
 
 class _VideoViewerState extends State<_VideoViewer> {
-  late final VideoPlayerController _c = _videoController(widget.url);
+  late final VideoPlayerController _c = _videoController(widget.video.url);
   bool _error = false;
 
   @override
@@ -1704,7 +1780,8 @@ class _VideoViewerState extends State<_VideoViewer> {
         ..setLooping(true)
         ..play();
     }).catchError((Object e) {
-      debugPrint('Video oynatılamadı: ${widget.url} → $e');
+      debugPrint('Video oynatılamadı: ${widget.video.url} '
+          '(${widget.video.mime}) → $e');
       if (mounted) setState(() => _error = true);
     });
   }
@@ -1734,8 +1811,16 @@ class _VideoViewerState extends State<_VideoViewer> {
               onTap: _toggle,
               child: Center(
                 child: _error
-                    ? const Text('Video oynatılamadı.',
-                        style: TextStyle(color: Colors.white, fontSize: 15))
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: Text(
+                            widget.video.mime == 'video/quicktime'
+                                ? 'Bu video (MOV) cihazında oynatılamadı.'
+                                : 'Video oynatılamadı.',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 15)),
+                      )
                     : !ready || _c.value.size.isEmpty
                         ? const CircularProgressIndicator(color: Colors.white)
                         : SizedBox.expand(
@@ -1882,15 +1967,151 @@ class _VideoFirstFrameState extends State<_VideoFirstFrame> {
   }
 }
 
+/// Mekan detayı açılırken oynatılan zorunlu giriş videosu: tam sayfa, hiçbir
+/// kontrol yok (durdur/kapat/ileri sar yok, geri tuşu kapalı), sistem
+/// çubukları gizli. Video bitince kendiliğinden kapanır. Yüklenemezse ya da
+/// [_loadTimeout] içinde başlayamazsa kullanıcıyı bekletmeden kapanır.
+class _IntroVideoScreen extends StatefulWidget {
+  final String url;
+  const _IntroVideoScreen({required this.url});
+
+  @override
+  State<_IntroVideoScreen> createState() => _IntroVideoScreenState();
+}
+
+class _IntroVideoScreenState extends State<_IntroVideoScreen> {
+  static const Duration _loadTimeout = Duration(seconds: 10);
+  // Oynatma ortasında ağ koparsa video sonsuza dek "buffering"de kalabilir;
+  // konum bu süre boyunca ilerlemezse kullanıcı serbest bırakılır.
+  static const Duration _stallTimeout = Duration(seconds: 8);
+  late final VideoPlayerController _c = _videoController(widget.url);
+  bool _closed = false;
+  bool _buffering = true;
+  Timer? _watchdog;
+  Duration _lastPos = Duration.zero;
+  DateTime _lastProgress = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    _c.addListener(_onTick);
+    _c.initialize().timeout(_loadTimeout).then((_) {
+      if (!mounted) return;
+      setState(() {});
+      _c.play();
+      _lastProgress = DateTime.now();
+      _watchdog = Timer.periodic(const Duration(seconds: 1), (_) => _checkStall());
+    }).catchError((Object e) {
+      debugPrint('Giriş videosu oynatılamadı: ${widget.url} → $e');
+      _close();
+    });
+  }
+
+  void _checkStall() {
+    final pos = _c.value.position;
+    if (pos != _lastPos) {
+      _lastPos = pos;
+      _lastProgress = DateTime.now();
+      return;
+    }
+    // Uygulama arka plandayken video_player duraklatır; bu durumda bekle.
+    final paused = !_c.value.isPlaying && !_c.value.isBuffering;
+    if (paused) {
+      _lastProgress = DateTime.now();
+      return;
+    }
+    if (DateTime.now().difference(_lastProgress) > _stallTimeout) {
+      debugPrint('Giriş videosu takıldı, kapatılıyor: ${widget.url}');
+      _close();
+    }
+  }
+
+  void _onTick() {
+    final v = _c.value;
+    if (v.hasError) {
+      _close();
+      return;
+    }
+    final buffering = !v.isInitialized || v.isBuffering;
+    if (buffering != _buffering && mounted) {
+      setState(() => _buffering = buffering);
+    }
+    final ended = v.isCompleted ||
+        (v.isInitialized &&
+            v.duration > Duration.zero &&
+            !v.isPlaying &&
+            v.position >= v.duration - const Duration(milliseconds: 200));
+    if (ended) _close();
+  }
+
+  void _close() {
+    if (_closed || !mounted) return;
+    _closed = true;
+    Navigator.of(context).pop();
+  }
+
+  @override
+  void dispose() {
+    _watchdog?.cancel();
+    _c.removeListener(_onTick);
+    _c.dispose();
+    // main.dart'taki varsayılan sistem çubuğu moduna dön.
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.edgeToEdge,
+      overlays: SystemUiOverlay.values,
+    );
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final v = _c.value;
+    return PopScope(
+      canPop: _closed, // geri tuşu/hareketiyle atlanamaz
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (v.isInitialized && !v.size.isEmpty)
+              SizedBox.expand(
+                child: FittedBox(
+                  fit: BoxFit.cover, // tam sayfa
+                  clipBehavior: Clip.hardEdge,
+                  child: SizedBox(
+                    width: v.size.width,
+                    height: v.size.height,
+                    child: IgnorePointer(child: VideoPlayer(_c)),
+                  ),
+                ),
+              ),
+            // Yalnız yükleniyor göstergesi; kontrol değil, dokunulmaz.
+            if (_buffering)
+              const Center(
+                child: SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2.5, color: Colors.white),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Tam ekran video oynatıcıyı açar.
-void openVideoPlayer(BuildContext context, String url) {
-  if (url.isEmpty) return;
+void openVideoPlayer(BuildContext context, MekanVideo video) {
+  if (video.url.isEmpty) return;
   // Opak rota, geçiş animasyonu yok: native video görünümü opaklık/şeffaf
   // rota katmanında yanlış boyutta (sol üstte küçük) çizilebiliyordu.
   Navigator.of(context).push(PageRouteBuilder(
     transitionDuration: Duration.zero,
     reverseTransitionDuration: Duration.zero,
-    pageBuilder: (_, __, ___) => _VideoViewer(url: url),
+    pageBuilder: (_, __, ___) => _VideoViewer(video: video),
   ));
 }
 
@@ -1915,7 +2136,7 @@ void openGalleryViewer(BuildContext context, List<String> images, int index) {
 class _GalleryGridScreen extends StatelessWidget {
   final String title;
   final List<String> images;
-  final List<GaleriItem> videos;
+  final List<MekanVideo> videos;
   const _GalleryGridScreen({
     required this.title,
     required this.images,
@@ -1987,8 +2208,8 @@ class _GalleryGridScreen extends StatelessWidget {
             style: const TextStyle(fontSize: 14, color: AppColors.muted)),
       );
 
-  /// Videolar: 2 sütunlu ızgara; kapak görseli varsa o, yoksa koyu zemin +
-  /// oynat ikonu.
+  /// Videolar: 2 sütunlu ızgara. Kapak (`poster`) varsa o gösterilir; yoksa
+  /// videonun ilk karesi. Video yalnız dokunulunca tam ekranda oynatılır.
   Widget _videoGrid(BuildContext context) {
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 28),
@@ -2003,19 +2224,62 @@ class _GalleryGridScreen extends StatelessWidget {
         final v = videos[i];
         return Semantics(
           button: true,
-          label: 'Video ${i + 1} oynat',
+          label: v.title.isNotEmpty
+              ? '${v.title} videosunu oynat'
+              : 'Video ${i + 1} oynat',
           child: GestureDetector(
-            onTap: () => openVideoPlayer(context, v.url),
+            onTap: () => openVideoPlayer(context, v),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (v.videoPoster.isNotEmpty)
-                    NetImage(v.videoPoster)
+                  if (v.poster.isNotEmpty)
+                    NetImage(v.poster)
                   else
                     _VideoFirstFrame(url: v.url),
                   const ColoredBox(color: Color(0x33000000)),
+                  if (v.durationLabel.isNotEmpty)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(v.durationLabel,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                  if (v.title.isNotEmpty)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(10, 18, 10, 9),
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Color(0x00000000), Color(0xAA000000)],
+                          ),
+                        ),
+                        child: Text(v.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600)),
+                      ),
+                    ),
                   Center(
                     child: Container(
                       width: 52,
