@@ -103,8 +103,9 @@ workflows:
           xcode-project use-profiles
       - name: IPA derle (release, otomatik build no)
         script: |
+          # Sürüm adı (CFBundleShortVersionString) pubspec.yaml'daki
+          # "version:" satırından gelir; burada sabitlenmez. Build no Codemagic'ten.
           flutter build ipa --release \
-            --build-name=1.0.5 \
             --build-number=$BUILD_NUMBER \
             --export-options-plist=/Users/builder/export_options.plist
     artifacts:
