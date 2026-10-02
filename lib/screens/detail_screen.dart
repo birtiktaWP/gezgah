@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:video_player/video_player.dart';
 import '../data/api.dart';
 import '../data/auth_service.dart';
 import '../data/favorites_service.dart';
@@ -168,7 +170,7 @@ class _DetailScreenState extends State<DetailScreen> {
     final d = _detail;
     if (d != null) {
       for (final g in d.galeri) {
-        if (g.url.isNotEmpty) imgs.add(g.url);
+        if (g.url.isNotEmpty && !g.isVideo) imgs.add(g.url);
       }
       if (imgs.isEmpty && d.image.isNotEmpty) imgs.add(d.image);
     }
@@ -177,6 +179,12 @@ class _DetailScreenState extends State<DetailScreen> {
     }
     return imgs;
   }
+
+  /// Galerideki videolar (panelden yüklenen, `mime_type: video/*`).
+  List<GaleriItem> get _videos => [
+        for (final g in _detail?.galeri ?? const <GaleriItem>[])
+          if (g.url.isNotEmpty && g.isVideo) g,
+      ];
 
   String get _name => _detail?.name.isNotEmpty == true
       ? _detail!.name
@@ -388,11 +396,14 @@ class _DetailScreenState extends State<DetailScreen> {
         fit: StackFit.expand,
         children: [
           if (images.isEmpty)
-            Container(
-              color: AppColors.primarySoft,
-              child: const Center(
-                child: Icon(Icons.restaurant_outlined,
-                    size: 48, color: AppColors.primary),
+            GestureDetector(
+              onTap: _openGalleryGrid, // yalnız video varsa bir şey açar
+              child: Container(
+                color: AppColors.primarySoft,
+                child: const Center(
+                  child: Icon(Icons.restaurant_outlined,
+                      size: 48, color: AppColors.primary),
+                ),
               ),
             )
           else
@@ -1521,15 +1532,18 @@ class _DetailScreenState extends State<DetailScreen> {
   /// Hero görseline dokununca: tek fotoğraf varsa doğrudan tam ekran
   /// görüntüleyici (fancybox), birden fazla varsa önce mozaik foto ızgarası
   /// açılır; ızgaradaki fotoğrafa dokununca görüntüleyici açılır.
+  /// Video varsa sayfa "Görseller / Videolar" sekmeleriyle açılır.
   void _openGalleryGrid() {
     final images = _images;
-    if (images.isEmpty) return;
-    if (images.length == 1) {
+    final videos = _videos;
+    if (images.isEmpty && videos.isEmpty) return;
+    if (videos.isEmpty && images.length == 1) {
       openGalleryViewer(context, images, 0);
       return;
     }
     Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => _GalleryGridScreen(title: _name, images: images),
+      builder: (_) =>
+          _GalleryGridScreen(title: _name, images: images, videos: videos),
     ));
   }
 
@@ -1666,6 +1680,219 @@ class _GalleryViewerState extends State<_GalleryViewer> {
   }
 }
 
+/// Tam ekran video oynatıcı: otomatik başlar, döngüde oynar; dokununca
+/// durdur/devam, altta kaydırılabilir ilerleme çubuğu, üstte kapat butonu.
+class _VideoViewer extends StatefulWidget {
+  final String url;
+  const _VideoViewer({required this.url});
+
+  @override
+  State<_VideoViewer> createState() => _VideoViewerState();
+}
+
+class _VideoViewerState extends State<_VideoViewer> {
+  late final VideoPlayerController _c = _videoController(widget.url);
+  bool _error = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _c.initialize().then((_) {
+      if (!mounted) return;
+      setState(() {});
+      _c
+        ..setLooping(true)
+        ..play();
+    }).catchError((Object _) {
+      if (mounted) setState(() => _error = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  void _toggle() {
+    if (!_c.value.isInitialized) return;
+    _c.value.isPlaying ? _c.pause() : _c.play();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ready = _c.value.isInitialized;
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        fit: StackFit.expand, // tam ekran; yoksa Stack kapat butonu boyutunda kalıyordu
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _toggle,
+              child: Center(
+                child: _error
+                    ? const Text('Video oynatılamadı.',
+                        style: TextStyle(color: Colors.white, fontSize: 15))
+                    : !ready || _c.value.size.isEmpty
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : SizedBox.expand(
+                            child: FittedBox(
+                              fit: BoxFit.contain,
+                              child: SizedBox(
+                                width: _c.value.size.width,
+                                height: _c.value.size.height,
+                                child: VideoPlayer(_c),
+                              ),
+                            ),
+                          ),
+              ),
+            ),
+          ),
+          if (ready)
+            ValueListenableBuilder<VideoPlayerValue>(
+              valueListenable: _c,
+              builder: (_, v, __) => v.isPlaying
+                  ? const SizedBox.shrink()
+                  : IgnorePointer(
+                      child: Center(
+                        child: Container(
+                          width: 68,
+                          height: 68,
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.45),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.play_arrow_rounded,
+                              size: 44, color: Colors.white),
+                        ),
+                      ),
+                    ),
+            ),
+          Align(
+            alignment: Alignment.topLeft,
+            child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Semantics(
+                button: true,
+                label: 'Kapat',
+                child: GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      shape: BoxShape.circle,
+                    ),
+                    child:
+                        const Icon(Icons.close, color: Colors.white, size: 22),
+                  ),
+                ),
+              ),
+            ),
+            ),
+          ),
+          if (ready)
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 0,
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: VideoProgressIndicator(
+                    _c,
+                    allowScrubbing: true,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    colors: const VideoProgressColors(
+                      playedColor: Colors.white,
+                      bufferedColor: Color(0x66FFFFFF),
+                      backgroundColor: Color(0x26FFFFFF),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Ağ videosu için controller. Android'de texture modu bazı cihaz/emülatörlerde
+/// görüntüyü sol üstte küçük çiziyordu; platform view modu bunu önler.
+VideoPlayerController _videoController(String url) =>
+    VideoPlayerController.networkUrl(
+      Uri.parse(url),
+      viewType: defaultTargetPlatform == TargetPlatform.android
+          ? VideoViewType.platformView
+          : VideoViewType.textureView,
+    );
+
+/// Videolar sekmesindeki kutucuk önizlemesi: videonun ilk karesi (oynatılmaz,
+/// sessiz). Yüklenene kadar / hata olursa koyu zemin gösterilir.
+class _VideoFirstFrame extends StatefulWidget {
+  final String url;
+  const _VideoFirstFrame({required this.url});
+
+  @override
+  State<_VideoFirstFrame> createState() => _VideoFirstFrameState();
+}
+
+class _VideoFirstFrameState extends State<_VideoFirstFrame> {
+  late final VideoPlayerController _c = _videoController(widget.url);
+
+  @override
+  void initState() {
+    super.initState();
+    _c.initialize().then((_) async {
+      await _c.setVolume(0);
+      await _c.seekTo(Duration.zero);
+      if (mounted) setState(() {});
+    }).catchError((Object _) {});
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_c.value.isInitialized || _c.value.size.isEmpty) {
+      return const ColoredBox(color: AppColors.primary);
+    }
+    final size = _c.value.size;
+    return ClipRect(
+      child: FittedBox(
+        fit: BoxFit.cover,
+        child: SizedBox(
+          width: size.width,
+          height: size.height,
+          child: IgnorePointer(child: VideoPlayer(_c)),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tam ekran video oynatıcıyı açar.
+void openVideoPlayer(BuildContext context, String url) {
+  if (url.isEmpty) return;
+  // Opak rota, geçiş animasyonu yok: native video görünümü opaklık/şeffaf
+  // rota katmanında yanlış boyutta (sol üstte küçük) çizilebiliyordu.
+  Navigator.of(context).push(PageRouteBuilder(
+    transitionDuration: Duration.zero,
+    reverseTransitionDuration: Duration.zero,
+    pageBuilder: (_, __, ___) => _VideoViewer(url: url),
+  ));
+}
+
 /// Fancybox tarzı tam ekran görüntüleyiciyi [index]'ten açar (galeri + zoom).
 void openGalleryViewer(BuildContext context, List<String> images, int index) {
   if (images.isEmpty) return;
@@ -1682,34 +1909,134 @@ void openGalleryViewer(BuildContext context, List<String> images, int index) {
 
 /// Mekan fotoğraflarını mozaik ızgarada gösteren sayfa. Bir fotoğrafa
 /// dokununca ilgili indeksten [openGalleryViewer] (fancybox) açılır.
+/// Mekanın videosu varsa üstte "Görseller / Videolar" sekmeleri çıkar;
+/// Videolar sekmesindeki bir videoya dokununca tam ekran oynatıcı açılır.
 class _GalleryGridScreen extends StatelessWidget {
   final String title;
   final List<String> images;
-  const _GalleryGridScreen({required this.title, required this.images});
+  final List<GaleriItem> videos;
+  const _GalleryGridScreen({
+    required this.title,
+    required this.images,
+    this.videos = const [],
+  });
 
   static const double _gap = 8;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _header(context),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(14, 6, 14, 28),
-                children: _mosaic(context),
+    if (videos.isEmpty) {
+      return Scaffold(
+        backgroundColor: Colors.white,
+        body: SafeArea(
+          child: Column(
+            children: [
+              _header(context, showCount: true),
+              Expanded(child: _photos(context)),
+            ],
+          ),
+        ),
+      );
+    }
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: SafeArea(
+          child: Column(
+            children: [
+              _header(context, showCount: false),
+              TabBar(
+                labelColor: AppColors.primary,
+                unselectedLabelColor: AppColors.muted,
+                indicatorColor: AppColors.primary,
+                indicatorSize: TabBarIndicatorSize.label,
+                dividerColor: AppColors.line,
+                labelStyle: const TextStyle(
+                    fontSize: 14.5, fontWeight: FontWeight.w600),
+                unselectedLabelStyle: const TextStyle(
+                    fontSize: 14.5, fontWeight: FontWeight.w500),
+                tabs: [
+                  Tab(text: 'Görseller (${images.length})'),
+                  Tab(text: 'Videolar (${videos.length})'),
+                ],
               ),
-            ),
-          ],
+              Expanded(
+                child: TabBarView(
+                  children: [_photos(context), _videoGrid(context)],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _header(BuildContext context) {
+  Widget _photos(BuildContext context) {
+    if (images.isEmpty) return _empty('Bu mekan için görsel yok.');
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(14, 6, 14, 28),
+      children: _mosaic(context),
+    );
+  }
+
+  Widget _empty(String text) => Center(
+        child: Text(text,
+            style: const TextStyle(fontSize: 14, color: AppColors.muted)),
+      );
+
+  /// Videolar: 2 sütunlu ızgara; kapak görseli varsa o, yoksa koyu zemin +
+  /// oynat ikonu.
+  Widget _videoGrid(BuildContext context) {
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 28),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: _gap,
+        crossAxisSpacing: _gap,
+        childAspectRatio: 0.8,
+      ),
+      itemCount: videos.length,
+      itemBuilder: (_, i) {
+        final v = videos[i];
+        return Semantics(
+          button: true,
+          label: 'Video ${i + 1} oynat',
+          child: GestureDetector(
+            onTap: () => openVideoPlayer(context, v.url),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (v.videoPoster.isNotEmpty)
+                    NetImage(v.videoPoster)
+                  else
+                    _VideoFirstFrame(url: v.url),
+                  const ColoredBox(color: Color(0x33000000)),
+                  Center(
+                    child: Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.play_arrow_rounded,
+                          size: 34, color: AppColors.primary),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _header(BuildContext context, {required bool showCount}) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 4, 12, 6),
       child: Row(
@@ -1729,8 +2056,10 @@ class _GalleryGridScreen extends StatelessWidget {
                   color: AppColors.primary),
             ),
           ),
-          Text('${images.length} fotoğraf',
-              style: const TextStyle(fontSize: 12.5, color: AppColors.muted)),
+          if (showCount)
+            Text('${images.length} fotoğraf',
+                style:
+                    const TextStyle(fontSize: 12.5, color: AppColors.muted)),
         ],
       ),
     );

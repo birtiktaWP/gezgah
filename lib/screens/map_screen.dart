@@ -82,7 +82,7 @@ class _MapScreenState extends State<MapScreen> {
   ({double lat, double lng, bool real})? _loc;
   bool _myLocation = false; // gerçek konum alındıysa mavi nokta
 
-  // İkon marker cache'i (codePoint + seçili durumuna göre).
+  // İkon marker cache'i (codePoint + seçili + Plus durumuna göre).
   final Map<String, BitmapDescriptor> _iconCache = {};
 
 
@@ -377,13 +377,15 @@ class _MapScreenState extends State<MapScreen> {
     final markers = <Marker>{};
     for (final p in _places) {
       final isSel = identical(p, _selected);
-      final icon = await _markerIcon(_iconForPlace(p), isSel);
+      final icon =
+          await _markerIcon(_iconForPlace(p), isSel, plus: p.isPlus);
       markers.add(Marker(
         markerId: MarkerId(p.id.toString()),
         position: LatLng(p.lat!, p.lng!),
         icon: icon,
         anchor: const Offset(0.5, 0.5),
-        zIndexInt: isSel ? 2 : 1,
+        // Seçili en üstte; Plus pinleri normal pinlerin üstünde.
+        zIndexInt: isSel ? 3 : (p.isPlus ? 2 : 1),
         onTap: () {
           setState(() => _selected = p);
           _rebuildMarkers();
@@ -435,17 +437,20 @@ class _MapScreenState extends State<MapScreen> {
     return Icons.restaurant;
   }
 
-  Future<BitmapDescriptor> _markerIcon(IconData icon, bool active) async {
-    final key = '${icon.codePoint}_$active';
+  Future<BitmapDescriptor> _markerIcon(IconData icon, bool active,
+      {bool plus = false}) async {
+    final key = '${icon.codePoint}_${active}_$plus';
     final cached = _iconCache[key];
     if (cached != null) return cached;
-    final desc = await _buildPin(icon, active);
+    final desc = await _buildPin(icon, active, plus: plus);
     _iconCache[key] = desc;
     return desc;
   }
 
   /// Yuvarlak konum işaretçisi — beyaz kenarlı, içinde kategori ikonu.
-  Future<BitmapDescriptor> _buildPin(IconData icon, bool active) async {
+  /// [plus] ise (Gezgah Plus işletme) iç daire turuncu ([AppColors.plus]).
+  Future<BitmapDescriptor> _buildPin(IconData icon, bool active,
+      {bool plus = false}) async {
     const double ratio = 3;
     final double rBase = (active ? 22 : 18) * ratio;
     final double r = rBase * 0.8; // daire %20 küçük
@@ -467,8 +472,10 @@ class _MapScreenState extends State<MapScreen> {
     // beyaz kenar
     canvas.drawCircle(center, r + border, Paint()..color = Colors.white);
     // iç daire
-    canvas.drawCircle(center, r,
-        Paint()..color = active ? AppColors.primary2 : AppColors.primary);
+    final fill = plus
+        ? (active ? AppColors.plus2 : AppColors.plus)
+        : (active ? AppColors.primary2 : AppColors.primary);
+    canvas.drawCircle(center, r, Paint()..color = fill);
 
     // kategori ikonu (beyaz) — %10 küçük
     final iconSize = rBase * 1.15 * 0.9;

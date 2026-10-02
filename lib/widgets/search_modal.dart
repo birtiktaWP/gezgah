@@ -111,6 +111,9 @@ class _SearchModalState extends State<_SearchModal>
   final Set<int> _foodFilters = {}; // seçili filtre id'leri (yemek)
   final Set<int> _placeFilters = {}; // seçili filtre id'leri (mekan)
   List<Filter> _allFilters = const []; // /filtreler (filtre sheet için)
+  final Set<int> _foodOzellikler = {}; // seçili özellik id'leri (yemek)
+  final Set<int> _placeOzellikler = {}; // seçili özellik id'leri (mekan)
+  List<Filter> _allOzellikler = const []; // /filtreler meta.ozellikler
 
   /// Aranan mekan tipi (ARAMA_TIP_BAZLI.md). `mekan` dışındaki tiplerde QR menü
   /// bulunmadığı için Yemekler sekmesi gösterilmez.
@@ -267,6 +270,7 @@ class _SearchModalState extends State<_SearchModal>
         lng: _lng,
         sort: _mekanSort,
         filtreler: _placeFilters.toList(),
+        ozellikler: _placeOzellikler.toList(),
         type: _type.slug,
       );
       if (!mounted || _controller.text.trim() != term) return;
@@ -311,6 +315,7 @@ class _SearchModalState extends State<_SearchModal>
         lng: _lng,
         sort: _foodSort,
         filtreler: _foodFilters.toList(),
+        ozellikler: _foodOzellikler.toList(),
       );
       if (!mounted || _controller.text.trim() != term) return;
       setState(() {
@@ -353,6 +358,7 @@ class _SearchModalState extends State<_SearchModal>
         lng: _lng,
         sort: _mekanSort,
         filtreler: _placeFilters.toList(),
+        ozellikler: _placeOzellikler.toList(),
         type: _type.slug,
       );
       if (!mounted) return;
@@ -383,6 +389,7 @@ class _SearchModalState extends State<_SearchModal>
         lng: _lng,
         sort: _foodSort,
         filtreler: _foodFilters.toList(),
+        ozellikler: _foodOzellikler.toList(),
       );
       if (!mounted) return;
       setState(() {
@@ -518,26 +525,43 @@ class _SearchModalState extends State<_SearchModal>
   String get _filterType =>
       _type == _SearchType.mekan ? 'restoran' : _type.slug;
 
+  /// Özellikler (Teras, Bahçe…) restoran odaklıdır ve `/filtreler`
+  /// `meta.ozellikler` tipe göre süzülmez → yalnız `mekan` tipinde gösterilir
+  /// (kategori ekranındaki tip modu davranışıyla aynı).
+  List<Filter> get _visibleOzellikler =>
+      _type == _SearchType.mekan ? _allOzellikler : const [];
+
+  /// Filtre + özellik listelerini (tip bazlı) bir kez çeker.
+  Future<void> _ensureFilterLists() async {
+    if (_allFilters.isNotEmpty || _allOzellikler.isNotEmpty) return;
+    // Filtre id'leri tipe özeldir (FILTRELER_TIP_BAZLI.md).
+    final f = await HomeRepository.instance.filtreler(type: _filterType);
+    _allFilters = f.filtreler;
+    _allOzellikler = f.ozellikler;
+  }
+
   Future<void> _openFoodFilter() async {
-    if (_allFilters.isEmpty) {
-      _allFilters =
-          (await HomeRepository.instance.filtreler(type: _filterType))
-              .filtreler;
-    }
+    await _ensureFilterLists();
     if (!mounted) return;
-    if (_allFilters.isEmpty) {
+    if (_allFilters.isEmpty && _visibleOzellikler.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Filtre bulunamadı')),
       );
       return;
     }
     final result = await showFilterSheet(context,
-        filters: _allFilters, selected: _foodFilters);
+        filters: _allFilters,
+        selected: _foodFilters,
+        ozellikler: _visibleOzellikler,
+        selectedOzellikler: _foodOzellikler);
     if (result != null && mounted) {
       setState(() {
         _foodFilters
           ..clear()
           ..addAll(result.filters);
+        _foodOzellikler
+          ..clear()
+          ..addAll(result.ozellikler);
       });
       final term = _query.trim();
       if (term.length >= 2) _runFood(term);
@@ -546,26 +570,27 @@ class _SearchModalState extends State<_SearchModal>
 
   /// Mekanlar sekmesi filtre seçimi (ortak `showFilterSheet`).
   Future<void> _openPlaceFilter() async {
-    if (_allFilters.isEmpty) {
-      // Filtre id'leri tipe özeldir (FILTRELER_TIP_BAZLI.md).
-      _allFilters =
-          (await HomeRepository.instance.filtreler(type: _filterType))
-              .filtreler;
-    }
+    await _ensureFilterLists();
     if (!mounted) return;
-    if (_allFilters.isEmpty) {
+    if (_allFilters.isEmpty && _visibleOzellikler.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Filtre bulunamadı')),
       );
       return;
     }
     final result = await showFilterSheet(context,
-        filters: _allFilters, selected: _placeFilters);
+        filters: _allFilters,
+        selected: _placeFilters,
+        ozellikler: _visibleOzellikler,
+        selectedOzellikler: _placeOzellikler);
     if (result != null && mounted) {
       setState(() {
         _placeFilters
           ..clear()
           ..addAll(result.filters);
+        _placeOzellikler
+          ..clear()
+          ..addAll(result.ozellikler);
       });
       final term = _query.trim();
       if (term.length >= 2) _runMekan(term);
@@ -739,8 +764,8 @@ class _SearchModalState extends State<_SearchModal>
     );
   }
 
-  /// Tip değişti: seçili filtreler tipe özel olduğu için sıfırlanır, filtre
-  /// listesi yeniden çekilir ve arama tekrar çalıştırılır.
+  /// Tip değişti: seçili filtreler ve özellikler tipe özel olduğu için
+  /// sıfırlanır, listeler yeniden çekilir ve arama tekrar çalıştırılır.
   void _changeType(_SearchType t) {
     if (t == _type) return;
     HapticFeedback.selectionClick();
@@ -749,6 +774,9 @@ class _SearchModalState extends State<_SearchModal>
       _placeFilters.clear();
       _foodFilters.clear();
       _allFilters = const [];
+      _placeOzellikler.clear();
+      _foodOzellikler.clear();
+      _allOzellikler = const [];
       _placeItems = const [];
       _foodItems = const [];
       _foodTerm = '';
@@ -833,8 +861,7 @@ class _SearchModalState extends State<_SearchModal>
     return Column(
       children: [
         _placeToolbar(),
-        _filterChips(_placeFilters, (id) {
-          setState(() => _placeFilters.remove(id));
+        _filterChips(_placeFilters, _placeOzellikler, () {
           final term = _query.trim();
           if (term.length >= 2) _runMekan(term);
         }),
@@ -843,17 +870,23 @@ class _SearchModalState extends State<_SearchModal>
     );
   }
 
-  /// Seçili filtreleri ikonsuz badge olarak gösterir; her badge'deki × ile o
-  /// filtre kaldırılır (kategori listelemesindeki davranışla aynı).
-  Widget _filterChips(Set<int> selected, void Function(int id) onRemove) {
-    if (selected.isEmpty || _allFilters.isEmpty) {
-      return const SizedBox.shrink();
+  /// Seçili filtre ve özellikleri ikonsuz badge olarak gösterir; her
+  /// badge'deki × ile o filtre/özellik kaldırılır ve [onChanged] çağrılır
+  /// (kategori listelemesindeki davranışla aynı).
+  Widget _filterChips(
+      Set<int> filters, Set<int> ozellikler, VoidCallback onChanged) {
+    // Seçili id'leri (filtre + özellik) ad + kaynak kümesiyle eşle.
+    final chips = <({int id, String name, bool ozellik})>[];
+    for (final f in _allFilters) {
+      if (filters.contains(f.id)) {
+        chips.add((id: f.id, name: f.name, ozellik: false));
+      }
     }
-    final byId = {for (final f in _allFilters) f.id: f};
-    final chips = [
-      for (final id in selected)
-        if (byId[id] != null) byId[id]!,
-    ];
+    for (final f in _visibleOzellikler) {
+      if (ozellikler.contains(f.id)) {
+        chips.add((id: f.id, name: f.name, ozellik: true));
+      }
+    }
     if (chips.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
@@ -865,7 +898,16 @@ class _SearchModalState extends State<_SearchModal>
           children: [
             for (final f in chips)
               GestureDetector(
-                onTap: () => onRemove(f.id),
+                onTap: () {
+                  setState(() {
+                    if (f.ozellik) {
+                      ozellikler.remove(f.id);
+                    } else {
+                      filters.remove(f.id);
+                    }
+                  });
+                  onChanged();
+                },
                 child: Container(
                   padding: const EdgeInsets.fromLTRB(12, 7, 9, 7),
                   decoration: BoxDecoration(
@@ -907,7 +949,9 @@ class _SearchModalState extends State<_SearchModal>
           ),
           GestureDetector(
             onTap: _openPlaceFilter,
-            child: _sfBtn(Icons.filter_list, active: _placeFilters.isNotEmpty),
+            child: _sfBtn(Icons.filter_list,
+                active:
+                    _placeFilters.isNotEmpty || _placeOzellikler.isNotEmpty),
           ),
         ],
       ),
@@ -933,8 +977,7 @@ class _SearchModalState extends State<_SearchModal>
     return Column(
       children: [
         _foodToolbar(),
-        _filterChips(_foodFilters, (id) {
-          setState(() => _foodFilters.remove(id));
+        _filterChips(_foodFilters, _foodOzellikler, () {
           final term = _query.trim();
           if (term.length >= 2) _runFood(term);
         }),
@@ -985,7 +1028,8 @@ class _SearchModalState extends State<_SearchModal>
           const SizedBox(width: 8),
           GestureDetector(
             onTap: _openFoodFilter,
-            child: _sfBtn(Icons.filter_list, active: _foodFilters.isNotEmpty),
+            child: _sfBtn(Icons.filter_list,
+                active: _foodFilters.isNotEmpty || _foodOzellikler.isNotEmpty),
           ),
         ],
       ),
@@ -1196,6 +1240,16 @@ class _SearchModalState extends State<_SearchModal>
                   if (r.matchedProducts.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text('Menü: ${r.matchedProducts.take(3).join(', ')}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary)),
+                  ],
+                  if (r.matchedOzellikler.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text('Özellik: ${r.matchedOzellikler.take(3).join(', ')}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(

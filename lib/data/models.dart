@@ -1376,18 +1376,39 @@ class OzellikItem {
       );
 }
 
-/// Galeri görseli (`galeri[]`).
+/// Galeri öğesi (`galeri[]`). Panelden yüklenen videolar da bu listede gelir;
+/// `mime_type` (örn. `video/mp4`) veya dosya uzantısıyla ayırt edilir.
 class GaleriItem {
   final int id;
   final String url;
   final String thumbnail;
   final bool isFeatured;
+  final String mimeType; // "image/jpeg", "video/mp4"… — yoksa ''
   const GaleriItem({
     required this.id,
     this.url = '',
     this.thumbnail = '',
     this.isFeatured = false,
+    this.mimeType = '',
   });
+
+  static final RegExp _videoExt =
+      RegExp(r'\.(mp4|m4v|mov|webm|3gp|mkv|m3u8)(\?.*)?$', caseSensitive: false);
+
+  /// Video mu? Önce `mime_type`, o yoksa URL uzantısı belirler.
+  bool get isVideo {
+    final m = mimeType.toLowerCase();
+    if (m.isNotEmpty) return m.startsWith('video/');
+    return _videoExt.hasMatch(url);
+  }
+
+  /// Video için gösterilebilir bir kapak görseli (thumbnail videonun kendisi
+  /// değilse). Yoksa ''.
+  String get videoPoster =>
+      (thumbnail.isNotEmpty && thumbnail != url && !_videoExt.hasMatch(thumbnail))
+          ? thumbnail
+          : '';
+
   factory GaleriItem.fromJson(Map<String, dynamic> j, {String host = ''}) {
     final url = _absUrl(j['url'], host);
     final thumb = _absUrl(j['thumbnail'], host);
@@ -1396,6 +1417,7 @@ class GaleriItem {
       url: url.isNotEmpty ? url : thumb,
       thumbnail: thumb.isNotEmpty ? thumb : url,
       isFeatured: j['is_featured'] == true,
+      mimeType: (j['mime_type'] as String?)?.trim() ?? '',
     );
   }
 }

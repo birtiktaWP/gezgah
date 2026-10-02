@@ -17,6 +17,9 @@ class AppColors {
   static const Color open = Color(0xFF16A34A);
   static const Color closing = Color(0xFFE0533D);
   static const Color heart = Color(0xFFFF3D6E);
+
+  static const Color plus = Color(0xFFFF7A00); // Plus işletme (harita pini)
+  static const Color plus2 = Color(0xFFE06A00); // seçili Plus pini
 }
 
 class AppRadius {

@@ -8,6 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'app_secrets.dart';
 import 'device_service.dart';
 import 'models.dart';
+import 'place_flags.dart';
 
 /// Sunucu kökü (göreli görsel yollarını tamamlamak için).
 const String kApiHost = 'https://api.gezgah.com';
@@ -944,6 +945,10 @@ class ApiPlace {
   /// ikonuna düşülür.
   final String customIcon;
 
+  /// Gezgah Plus işletme mi (`is_plus`). Haritada turuncu pinle gösterilir.
+  /// Alan gelmezse false (HARITA_PLUS_IKON.md).
+  final bool isPlus;
+
   // Önceden üretilmiş thumbnail'ler (thumbnail-update.md). Yoksa null.
   final String? thumbnail;
   final String? thumbSquare;
@@ -963,6 +968,7 @@ class ApiPlace {
     this.filterIds = const [],
     this.ozellikIds = const [],
     this.customIcon = '',
+    this.isPlus = false,
     this.thumbnail,
     this.thumbSquare,
     this.thumbCard,
@@ -1023,6 +1029,7 @@ class ApiPlace {
     'dogrulanmis': verified,
     'category_ids': categoryIds,
     'custom_ikon': customIcon,
+    'is_plus': isPlus,
   };
 
   factory ApiPlace.fromCache(Map<String, dynamic> j) => ApiPlace(
@@ -1038,24 +1045,36 @@ class ApiPlace {
         (j['category_ids'] as List?)?.map((e) => (e as num).toInt()).toList() ??
         const [],
     customIcon: (j['custom_ikon'] as String?) ?? '',
+    isPlus: parsePlusFlag(j),
   );
+}
+
+/// Id listesini API'nin beklediği biçime çevirir: sıralı, virgüllü
+/// (`3,12,40`). Boş/null → '' (parametre hiç gönderilmez).
+String idsCsv(Iterable<int>? ids) {
+  if (ids == null || ids.isEmpty) return '';
+  return (ids.toList()..sort()).join(',');
 }
 
 /// Arama sonucu: mekan bilgisi + eşleşme ayrıntıları (ARAMA.md).
 class SearchResult {
   final ApiPlace place;
   final List<String> matchedProducts; // eslesen_urunler
-  final List<String> matchTypes; // eslesme: "isim" ve/veya "menu"
+  final List<String> matchTypes; // eslesme: "isim" | "menu" | "ozellik"
+  final List<String> matchedOzellikler; // eslesen_ozellikler (ad listesi)
   final int? mesafeM; // konum verildiyse sunucudan gelen mesafe (metre)
 
   const SearchResult({
     required this.place,
     this.matchedProducts = const [],
     this.matchTypes = const [],
+    this.matchedOzellikler = const [],
     this.mesafeM,
   });
 
   bool get matchedByMenu => matchTypes.contains('menu');
+  bool get matchedByOzellik =>
+      matchTypes.contains('ozellik') || matchedOzellikler.isNotEmpty;
 }
 
 /// Kategori detay/listeleme yanıtı (KATEGORI_LISTELEME.md).
@@ -1774,6 +1793,9 @@ class HomeRepository {
   ///
   /// [type] mekan tipi (ARAMA_TIP_BAZLI.md): `mekan` | `plaj` | `mesire` |
   /// `otopark`. Verilmezse sunucu varsayılanı (`mekan` = restoran) kullanılır.
+  ///
+  /// [ozellikler] verilirse `ozellikler=` (virgüllü id, AND) gönderilir;
+  /// sunucu desteklemiyorsa yok sayılır (ARAMA_OZELLIK_FILTRE.md).
   Future<({List<SearchResult> items, bool hasMore, int? nextPage, int total})>
   aramaMekan(
     String q, {
@@ -1785,6 +1807,7 @@ class HomeRepository {
     double? lng,
     String? sort,
     List<int>? filtreler,
+    List<int>? ozellikler,
     String? type,
   }) async {
     const empty = (
@@ -1796,11 +1819,10 @@ class HomeRepository {
     final term = q.trim();
     if (term.length < 2) return empty;
 
-    final fq = (filtreler == null || filtreler.isEmpty)
-        ? ''
-        : (filtreler.toList()..sort()).join(',');
+    final fq = idsCsv(filtreler);
+    final oq = idsCsv(ozellikler);
     final key =
-        '$term|$page|$limit|${sort ?? ''}|$fq|${_coordKey(lat, lng)}|${type ?? ''}';
+        '$term|$page|$limit|${sort ?? ''}|$fq|$oq|${_coordKey(lat, lng)}|${type ?? ''}';
     final c = _mekanCache[key];
     if (c != null && DateTime.now().difference(c.at) < _searchTtl) {
       return (
@@ -1823,6 +1845,7 @@ class HomeRepository {
         if (lat != null && lng != null) 'lng': lng,
         if (sort != null && sort.isNotEmpty) 'sort': sort,
         if (fq.isNotEmpty) 'filtreler': fq,
+        if (oq.isNotEmpty) 'ozellikler': oq,
         if (userId != null && userId.isNotEmpty) 'user_id': userId,
       },
       cancelToken: cancelToken,
@@ -1841,6 +1864,11 @@ class HomeRepository {
                   const [],
               matchTypes:
                   (j['eslesme'] as List<dynamic>?)
+                      ?.whereType<String>()
+                      .toList() ??
+                  const [],
+              matchedOzellikler:
+                  (j['eslesen_ozellikler'] as List<dynamic>?)
                       ?.whereType<String>()
                       .toList() ??
                   const [],
@@ -1871,6 +1899,9 @@ class HomeRepository {
   /// Arama — "Yemekler" sekmesi (`GET /arama?tab=yemek`, arama-yeni-3.md).
   /// Menü/ürün adına göre; eşleşen ürünler + ait olduğu mekanla döner
   /// (beğeni azalan). Kullanıcı Yemekler sekmesine geçince çağrılır.
+  ///
+  /// [ozellikler] verilirse `ozellikler=` (virgüllü id, AND) gönderilir;
+  /// sunucu desteklemiyorsa yok sayılır (ARAMA_OZELLIK_FILTRE.md).
   Future<({List<FoodResult> items, bool hasMore, int? nextPage, int total})>
   aramaYemek(
     String q, {
@@ -1882,6 +1913,7 @@ class HomeRepository {
     double? lng,
     String? sort,
     List<int>? filtreler,
+    List<int>? ozellikler,
   }) async {
     const empty = (
       items: <FoodResult>[],
@@ -1892,10 +1924,10 @@ class HomeRepository {
     final term = q.trim();
     if (term.length < 2) return empty;
 
-    final fq = (filtreler == null || filtreler.isEmpty)
-        ? ''
-        : (filtreler.toList()..sort()).join(',');
-    final key = '$term|$page|$limit|${sort ?? ''}|$fq|${_coordKey(lat, lng)}';
+    final fq = idsCsv(filtreler);
+    final oq = idsCsv(ozellikler);
+    final key =
+        '$term|$page|$limit|${sort ?? ''}|$fq|$oq|${_coordKey(lat, lng)}';
     final c = _yemekCache[key];
     if (c != null && DateTime.now().difference(c.at) < _searchTtl) {
       return (
@@ -1917,6 +1949,7 @@ class HomeRepository {
         if (lat != null && lng != null) 'lng': lng,
         if (sort != null && sort.isNotEmpty) 'sort': sort,
         if (fq.isNotEmpty) 'filtreler': fq,
+        if (oq.isNotEmpty) 'ozellikler': oq,
         if (userId != null && userId.isNotEmpty) 'user_id': userId,
       },
       cancelToken: cancelToken,
@@ -2287,6 +2320,7 @@ class HomeRepository {
               .toList() ??
           const [],
       customIcon: (j['custom_ikon'] as String?)?.trim() ?? '',
+      isPlus: parsePlusFlag(j),
       thumbnail: thumbs.thumbnail,
       thumbSquare: thumbs.square,
       thumbCard: thumbs.card,
