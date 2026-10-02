@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -1703,7 +1703,8 @@ class _VideoViewerState extends State<_VideoViewer> {
       _c
         ..setLooping(true)
         ..play();
-    }).catchError((Object _) {
+    }).catchError((Object e) {
+      debugPrint('Video oynatılamadı: ${widget.url} → $e');
       if (mounted) setState(() => _error = true);
     });
   }
