@@ -36,6 +36,7 @@ class LocationService {
         : (lat: _fallbackLat, lng: _fallbackLng, real: false);
     _cached = r;
     _cachedAt = DateTime.now();
+    if (r.real) _lastReal = (lat: r.lat, lng: r.lng);
     return r;
   }
 
@@ -78,11 +79,18 @@ class LocationService {
       {Duration timeout = const Duration(seconds: 3)}) async {
     try {
       final r = await resolve().timeout(timeout);
-      return r.real ? (lat: r.lat, lng: r.lng) : null;
+      if (r.real) return (lat: r.lat, lng: r.lng);
     } catch (_) {
-      return null; // zaman aşımı: çözüm arka planda sürer ve cache'lenir
+      // zaman aşımı: çözüm arka planda sürer ve cache'lenir
     }
+    // Taze konum gelmediyse süresi dolmuş olsa da son gerçek konumu kullan;
+    // aksi halde detay isteği konumsuz gider ve mesafe görünmez.
+    final last = _lastReal;
+    return last == null ? null : (lat: last.lat, lng: last.lng);
   }
+
+  /// En son alınan gerçek cihaz konumu (TTL'siz; yalnız [realLocation] yedeği).
+  static ({double lat, double lng})? _lastReal;
 
   /// İki koordinat arasındaki kuş uçuşu mesafe (metre). Yalnız **sıralama**
   /// için kullanılır; ekranda gösterilmez (MESAFE-MOBIL.md: ekranda yalnız
