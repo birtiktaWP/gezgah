@@ -13,7 +13,9 @@ X-App-Key, X-Timestamp, X-Nonce, X-Signature   (HMAC, GUVENLIK.md §4)
 Content-Type: application/json
 ```
 
-Üye girişi gerekmez, cihaz token'ı yeterli. Üye token'ı **gönderilmez**.
+Üye girişi gerekmez. Uygulama her zaman cihaz token'ı gönderir, üye girişli olsa da.
+
+Backend uygulaması: Bearer olarak üye token'ı gelirse de kabul edilir ve olay üye kimliğiyle sayılır (tekilleştirme anahtarında cihaz yerine üye). Uygulama bugün bu yolu kullanmıyor. İleride üye token'ına geçilirse aynı kişinin cihaz ve üye kimliği iki ayrı tekil sayılabilir, bu bilinçli bir karar olmalı.
 
 ### Gövde
 
@@ -76,7 +78,7 @@ Bu yüzden **geçerli bir istekte asla 404 dönmeyin.** Bilinmeyen ya da yayınd
 
 - `olaylar` dizi değilse ya da 100'den fazlaysa → 400.
 - Her olay: `mekan_id` pozitif int, `tip` ∈ {`liste`, `detay`}, `kaynak` `^[a-z_]{1,20}$`, `kaynak_id` ≤ 32 karakter, `sira` 0–10000. Geçersiz olay atlanır, istek reddedilmez.
-- `mekan_id`'ler tek sorguyla (`WHERE id IN (...) AND post_status = 'publish'`) kontrol edilir. Bulunmayanlar atlanır.
+- `mekan_id`'ler tek sorguyla (`WHERE id IN (...)` + yayında koşulu) kontrol edilir. Bulunmayanlar atlanır. Not: `yzd_posts`'ta alanın adı `post_status` değil, `status`.
 - **Sayımda sunucu zamanı kullanın.** `zaman` yalnız bilgi amaçlı. 24 saatten eski ya da ileri tarihliyse olay atlanabilir.
 
 ### Tekilleştirme (sayaç şişmesin diye)
@@ -151,7 +153,7 @@ public function goruntulenme(): void
     $ids = array_values(array_unique(array_column($ok, 0)));
     $var = $ids ? array_flip(Database::column(
         "SELECT id FROM {$this->config['prefix']}posts WHERE id IN (" .
-        implode(',', array_fill(0, count($ids), '?')) . ") AND post_status = 'publish'",
+        implode(',', array_fill(0, count($ids), '?')) . ") AND status = 'publish'",  // alan adı: status
         $ids
     )) : [];
 
@@ -177,7 +179,7 @@ public function goruntulenme(): void
 }
 ```
 
-`Request::json`, `Database::column`, `Redis::setNx`, `$this->auth->cihazId()` yer tutucudur. Projedeki karşılıklarıyla değiştirin.
+`Request::json`, `Database::column`, `Redis::setNx`, `$this->auth->cihazId()` yer tutucudur. Projedeki karşılıklarıyla değiştirin. (Backend'de kimlik üye token'ıyla gelirse `$cihazId` yerine üye kimliği kullanılıyor, bkz. §1.)
 
 ### Hız sınırı
 

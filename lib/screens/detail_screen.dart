@@ -10,6 +10,7 @@ import '../data/api.dart';
 import '../data/auth_service.dart';
 import '../data/favorites_service.dart';
 import '../data/home_config.dart';
+import '../data/location_service.dart';
 import '../data/models.dart';
 import '../data/view_tracker.dart';
 import '../navigation/main_nav.dart';
@@ -127,6 +128,7 @@ class _DetailScreenState extends State<DetailScreen> {
       _loading = false;
     });
     _playIntro(d);
+    _resolveDistance();
     _fetchSimilar(d);
     _fetchRezervasyon();
   }
@@ -279,6 +281,35 @@ class _DetailScreenState extends State<DetailScreen> {
     // Önizlemedeki alt yazı (mesafe olabilir) — konum benzeri değilse boş bırak.
     final sub = widget.place.subtitle;
     return sub;
+  }
+
+  /// Konum satırı: "İl · İlçe · 1.2 km". Mesafe burada koordinattan
+  /// hesaplanır; listeden gelen `place.distance` kullanılmaz, çünkü bazı
+  /// listeler o alana il · ilçe koyuyor ve satırda tekrar ediyordu.
+  String get _locationLine {
+    final loc = _location;
+    final km = _distanceKm;
+    if (km.isEmpty || loc == km || loc.contains(km)) return loc;
+    return loc.isEmpty ? km : '$loc · $km';
+  }
+
+  /// Cihaz konumu ile mekan koordinatı arasındaki mesafe ("1.2 km") ya da ''.
+  String _distanceKm = '';
+
+  Future<void> _resolveDistance() async {
+    final d = _detail;
+    double? lat = d?.lat, lng = d?.lng;
+    if (lat == null || lng == null) {
+      final p = widget.place;
+      if (p.lat.isNaN || p.lng.isNaN) return;
+      lat = p.lat;
+      lng = p.lng;
+    }
+    final me = await LocationService.resolve();
+    if (!mounted) return;
+    final km = LocationService.format(
+        LocationService.distanceMeters(me.lat, me.lng, lat, lng));
+    if (km != _distanceKm) setState(() => _distanceKm = km);
   }
 
   /// Çalışma saatleri özeti: tüm günler aynı ve açıksa "Her gün X",
@@ -597,7 +628,7 @@ class _DetailScreenState extends State<DetailScreen> {
             ],
           ],
         ),
-        if (_location.isNotEmpty) ...[
+        if (_locationLine.isNotEmpty) ...[
           const SizedBox(height: 6),
           Row(
             children: [
@@ -605,10 +636,7 @@ class _DetailScreenState extends State<DetailScreen> {
                   size: 14, color: AppColors.primary),
               const SizedBox(width: 6),
               Expanded(
-                child: Text(
-                    widget.place.distance.isNotEmpty
-                        ? '$_location · ${widget.place.distance}'
-                        : _location,
+                child: Text(_locationLine,
                     style: const TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w600,
@@ -1967,9 +1995,10 @@ class _VideoFirstFrameState extends State<_VideoFirstFrame> {
   }
 }
 
-/// Mekan detayı açılırken oynatılan zorunlu giriş videosu: tam sayfa, hiçbir
-/// kontrol yok (durdur/kapat/ileri sar yok, geri tuşu kapalı), sistem
-/// çubukları gizli. Video bitince kendiliğinden kapanır. Yüklenemezse ya da
+/// Mekan detayı açılırken oynatılan giriş videosu: tam sayfa, oynatıcı
+/// kontrolü yok (durdur/ileri sar yok, geri tuşu kapalı), sistem çubukları
+/// gizli. Yalnız sağ üstteki kapat butonuyla erken çıkılabilir. Video bitince
+/// kendiliğinden kapanır. Yüklenemezse ya da
 /// [_loadTimeout] içinde başlayamazsa kullanıcıyı bekletmeden kapanır.
 class _IntroVideoScreen extends StatefulWidget {
   final String url;
@@ -2096,6 +2125,34 @@ class _IntroVideoScreenState extends State<_IntroVideoScreen> {
                       strokeWidth: 2.5, color: Colors.white),
                 ),
               ),
+            // Sağ üstte kapat: videoyu bitirmeden detaya geçer.
+            Align(
+              alignment: Alignment.topRight,
+              child: SafeArea(
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Semantics(
+                    button: true,
+                    label: 'Videoyu kapat',
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _close,
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.35),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.close,
+                            color: Colors.white, size: 22),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
