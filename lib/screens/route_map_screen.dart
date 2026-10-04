@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../data/location_service.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
@@ -281,7 +282,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     final m = widget.rota.toplamMesafeM;
     final s = widget.rota.toplamSureSn;
     if (m != null) {
-      parts.add(m >= 1000 ? '${(m / 1000).toStringAsFixed(1)} km' : '$m m');
+      parts.add(LocationService.formatM(m)); // MESAFE-MOBIL.md §5 biçimi
     }
     if (s != null) {
       final dk = (s / 60).round();

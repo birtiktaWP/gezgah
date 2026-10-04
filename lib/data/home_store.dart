@@ -71,9 +71,17 @@ class HomeStore {
         (v) => cachedSponsored = v,
       );
 
-  Future<List<ApiPlace>> yakindakiler() => _nearF ??= _fetch(
+  /// Yakındakiler. [lat]/[lng] yalnız gerçek cihaz konumu olmalı; verilirse
+  /// sunucu mesafeye göre sıralı ve `mesafe_km`'li döner (MESAFE-MOBIL.md §2).
+  /// Oturumda bir kez çekilir; mesafe diske yazılmaz (eski konuma ait olur).
+  Future<List<ApiPlace>> yakindakiler({double? lat, double? lng}) =>
+      _nearF ??= _fetch(
         _kNearby,
-        () => HomeRepository.instance.yakindakiler(),
+        () => HomeRepository.instance.yakindakiler(
+          limit: lat != null && lng != null ? 20 : 100,
+          lat: lat,
+          lng: lng,
+        ),
         (p) => p.toCacheJson(),
         () => cachedNearby,
         (v) => cachedNearby = v,

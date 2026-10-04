@@ -1265,6 +1265,7 @@ class PlaceDetail {
   final List<MenuKategori> menu;
   final List<Etkinlik> etkinlikler; // mekana ait aktif etkinlikler
   final List<MekanVideo> videolar; // ERP'den yüklenen videolar (MEKAN_VIDEO.md)
+  final int? mesafeM; // tahmini yol mesafesi (m); yalnız konumlu istekte
 
   const PlaceDetail({
     required this.id,
@@ -1291,6 +1292,7 @@ class PlaceDetail {
     this.menu = const [],
     this.etkinlikler = const [],
     this.videolar = const [],
+    this.mesafeM,
   });
 
   bool get hasCoord => lat != null && lng != null;
@@ -1365,6 +1367,7 @@ class PlaceDetail {
               j['videolar'], (m) => MekanVideo.fromJson(m, host: host))
           .where((v) => v.url.isNotEmpty)
           .toList(),
+      mesafeM: parseMesafeM(j),
     );
   }
 }
@@ -1537,6 +1540,18 @@ class MenuUrun {
       icindekiler: (j['icindekiler'] as String?)?.trim() ?? '',
     );
   }
+}
+
+/// Sunucunun tahmini yol mesafesi (metre): önce `mesafe_m`, yoksa
+/// `mesafe_km` × 1000. Alan yok/null ise null (MESAFE-MOBIL.md §1–3).
+/// `kus_ucusu_km` bilinçli olarak okunmaz.
+int? parseMesafeM(Map<String, dynamic> j) {
+  num? n(dynamic v) => v is num ? v : num.tryParse('${v ?? ''}');
+  final m = n(j['mesafe_m']);
+  if (m != null && m >= 0) return m.round();
+  final km = n(j['mesafe_km']);
+  if (km != null && km >= 0) return (km * 1000).round();
+  return null;
 }
 
 /// Göreli URL'i sunucu köküyle tamamlar (zaten `http` ile başlıyorsa dokunmaz).

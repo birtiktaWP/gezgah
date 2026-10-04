@@ -6,8 +6,8 @@ class LocationService {
   LocationService._();
 
   /// Konum hiç alınamazsa kullanılacak varsayılan merkez (İstanbul, Kadıköy).
-  /// Böylece vitrinde mesafe her zaman gösterilir; gerçek cihazda gerçek
-  /// konumla değişir.
+  /// Yalnız harita merkezi vb. için; `real: false` döner ve mesafe
+  /// hesabında/isteklerinde kullanılmaz (MESAFE-MOBIL.md §6).
   static const double _fallbackLat = 40.9904;
   static const double _fallbackLng = 29.0292;
 
@@ -71,17 +71,43 @@ class LocationService {
     }
   }
 
-  /// İki koordinat arasındaki mesafeyi metre cinsinden hesaplar.
+  /// Gerçek cihaz konumu; izin yoksa ya da [timeout] içinde alınamazsa null.
+  /// Mesafe isteyen uçlara yalnız bu gönderilir (MESAFE-MOBIL.md §6):
+  /// varsayılan merkez (Kadıköy) asla mesafe hesabına girmez.
+  static Future<({double lat, double lng})?> realLocation(
+      {Duration timeout = const Duration(seconds: 3)}) async {
+    try {
+      final r = await resolve().timeout(timeout);
+      return r.real ? (lat: r.lat, lng: r.lng) : null;
+    } catch (_) {
+      return null; // zaman aşımı: çözüm arka planda sürer ve cache'lenir
+    }
+  }
+
+  /// İki koordinat arasındaki kuş uçuşu mesafe (metre). Yalnız **sıralama**
+  /// için kullanılır; ekranda gösterilmez (MESAFE-MOBIL.md: ekranda yalnız
+  /// sunucunun tahmini yol mesafesi).
   static double distanceMeters(
       double lat1, double lng1, double lat2, double lng2) {
     return Geolocator.distanceBetween(lat1, lng1, lat2, lng2);
   }
 
-  /// Metreyi okunabilir mesafeye çevirir: tek ondalıklı km — "1.1 km" / "0.8 km".
+  /// Sunucu mesafesini (metre) ekran metnine çevirir (MESAFE-MOBIL.md §5):
+  /// < 1 km → 50 m'ye yuvarlı "350 m", 1–10 km → "7,6 km", ≥ 10 km → "31 km".
   static String format(double meters) {
+    if (meters.isNaN || meters.isInfinite || meters < 0) return '';
+    if (meters < 1000) {
+      final m = (meters / 50).round() * 50;
+      if (m < 1000) return '${m < 50 ? 50 : m} m';
+    }
     final km = meters / 1000;
-    return '${km.toStringAsFixed(1)} km';
+    if (km < 9.95) return '${km.toStringAsFixed(1).replaceAll('.', ',')} km';
+    return '${km.round()} km';
   }
+
+  /// Sunucudan gelen `mesafe_m` (metre) → metin; null ise ''.
+  static String formatM(num? meters) =>
+      meters == null ? '' : format(meters.toDouble());
 
   /// Koordinattan "İl, İlçe" (veya [districtFirst] ile "İlçe, İl") etiketini
   /// üretir (reverse geocoding). Başarısız olursa `null` döner.

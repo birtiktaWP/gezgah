@@ -520,13 +520,10 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  String _distanceText(ApiPlace p) {
-    final loc = _loc;
-    if (loc == null || !p.hasCoord) return p.cityDistrict;
-    final m =
-        LocationService.distanceMeters(loc.lat, loc.lng, p.lat!, p.lng!);
-    return LocationService.format(m);
-  }
+  /// Seçili mekan kartındaki konum metni. `/harita` sunucu mesafesi
+  /// döndürmediği için km gösterilmez, İl · İlçe yazılır (MESAFE-MOBIL.md:
+  /// ekranda yalnız sunucunun yol mesafesi; kuş uçuşu gösterilmez).
+  String _distanceText(ApiPlace p) => p.cityDistrict;
 
   @override
   Widget build(BuildContext context) {

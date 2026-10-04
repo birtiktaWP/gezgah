@@ -955,6 +955,10 @@ class ApiPlace {
   final String? thumbCard;
   final String? thumbWide;
 
+  /// Sunucunun tahmini yol mesafesi (metre). Yalnız konumlu isteklerde gelir
+  /// (`/mekanlar/yakindakiler`, `/arama`); diske cache'lenmez (MESAFE-MOBIL.md).
+  final int? mesafeM;
+
   const ApiPlace({
     required this.id,
     required this.name,
@@ -973,6 +977,7 @@ class ApiPlace {
     this.thumbSquare,
     this.thumbCard,
     this.thumbWide,
+    this.mesafeM,
   });
 
   /// Ekran alanına göre en uygun görsel: istenen boyut → `thumbnail` → `image`.
@@ -1539,10 +1544,19 @@ class HomeRepository {
   /// `GET /mekanlar/{id}` — tam detay (MEKAN_DETAY.md): adres, çalışma
   /// saatleri, özellikler, galeri ve QR menüsü dahil. Hata/404'te `null`.
   /// (Not: bu çağrı sunucuda `tiklama` sayacını +1 arttırır.)
-  Future<PlaceDetail?> mekanDetay(int id) async {
+  ///
+  /// [lat]/[lng] (gerçek cihaz konumu) verilirse yanıtta tahmini yol mesafesi
+  /// `mesafe_m`/`mesafe_km` gelir (MESAFE-MOBIL.md §1).
+  Future<PlaceDetail?> mekanDetay(int id, {double? lat, double? lng}) async {
     if (id <= 0) return null;
     try {
-      final res = await _dio.get('/mekanlar/$id');
+      final res = await _dio.get(
+        '/mekanlar/$id',
+        queryParameters: {
+          if (lat != null && lng != null) 'lat': lat,
+          if (lat != null && lng != null) 'lng': lng,
+        },
+      );
       final body = res.data;
       if (body is! Map || body['success'] != true) return null;
       final data = body['data'];
@@ -1779,10 +1793,20 @@ class HomeRepository {
     return mekanlar(limit: limit);
   }
 
-  /// Yakındakiler havuzu. Özel endpoint yayınlıysa onu, değilse `/mekanlar`
-  /// listesini kullanır. Mesafe sıralaması app tarafında yapılır.
-  Future<List<ApiPlace>> yakindakiler({int limit = 100}) async {
-    final special = await _tryList('/mekanlar/yakindakiler', {'limit': limit});
+  /// Yakındakiler (MESAFE-MOBIL.md §2). Konum verilirse sunucu tahmini yol
+  /// mesafesine (`mesafe_km`) göre en yakından sıralı döner; uygulamada tekrar
+  /// sıralanmaz. Konumsuz çağrı "havuz modu"dur: mesafe ve sıralama yoktur.
+  /// Özel uç yayında değilse `/mekanlar` listesine düşer.
+  Future<List<ApiPlace>> yakindakiler({
+    int limit = 100,
+    double? lat,
+    double? lng,
+  }) async {
+    final special = await _tryList('/mekanlar/yakindakiler', {
+      'limit': limit,
+      if (lat != null && lng != null) 'lat': lat,
+      if (lat != null && lng != null) 'lng': lng,
+    });
     if (special != null) return special;
     return mekanlar(limit: limit);
   }
@@ -2022,7 +2046,8 @@ class HomeRepository {
       gorsel: img(j['gorsel']),
       begeni: (j['begeni'] as num?)?.toInt() ?? 0,
       mekan: place,
-      mesafeM: (m['mesafe_m'] as num?)?.toInt(),
+      // Canlıda `mekan.mesafe_m`; doküman ürün düzeyinde `mesafe` (metre) diyor.
+      mesafeM: parseMesafeM(m) ?? (j['mesafe'] as num?)?.round(),
     );
   }
 
@@ -2325,6 +2350,7 @@ class HomeRepository {
       thumbSquare: thumbs.square,
       thumbCard: thumbs.card,
       thumbWide: thumbs.wide,
+      mesafeM: parseMesafeM(j),
     );
   }
 

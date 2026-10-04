@@ -97,23 +97,26 @@ class _CategoryScreenState extends State<CategoryScreen> {
     return r;
   }
 
-  /// Koordinatı olanların alt yazısına km, olmayanların İl·İlçe yazılır.
-  void _applyDistances(List<Place> list, _Loc loc) {
+  /// Kart alt yazısı: tür etiketi; konum satırı (pin): İl · İlçe.
+  ///
+  /// Mesafe (km) bu listede gösterilmez: `/kategoriler/{id}` ve `/yerler`
+  /// sunucu mesafesi döndürmüyor, uygulamanın kuş uçuşu hesabı da detaydaki
+  /// yol mesafesiyle çelişiyordu (MESAFE-MOBIL.md §7: "mesafeyi gösterme").
+  void _applyLabels(List<Place> list) {
+    final label = switch (widget.type) {
+      'plaj' => 'Plaj',
+      'mesire' => 'Mesire',
+      'otopark' => 'Otopark',
+      'muze' => 'Müze',
+      _ => 'Restoran',
+    };
     for (final p in list) {
-      if (!p.lat.isNaN && !p.lng.isNaN) {
-        final m = LocationService.distanceMeters(
-          loc.lat,
-          loc.lng,
-          p.lat,
-          p.lng,
-        );
-        p.subtitle = LocationService.format(m);
-      } else {
-        p.subtitle = p.distance.isNotEmpty ? p.distance : 'Konum bilgisi yok';
-      }
+      p.subtitle = label;
+      if (p.distance.isEmpty) p.distance = 'Konum bilgisi yok';
     }
   }
 
+  /// Kuş uçuşu mesafe — yalnız "Yakınlık" sıralaması için, ekranda gösterilmez.
   double _distMeters(Place p, _Loc loc) {
     if (p.lat.isNaN || p.lng.isNaN) return double.infinity;
     return LocationService.distanceMeters(loc.lat, loc.lng, p.lat, p.lng);
@@ -123,7 +126,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
     final loc = _loc;
     switch (_sort) {
       case _SortMode.yakinlik:
-        if (loc != null) {
+        // Konum izni yoksa varsayılan merkeze göre sıralama yapılmaz;
+        // sunucu sırası korunur (MESAFE-MOBIL.md §6).
+        if (loc != null && loc.real) {
           _places.sort(
             (a, b) => _distMeters(a, loc).compareTo(_distMeters(b, loc)),
           );
@@ -218,16 +223,16 @@ class _CategoryScreenState extends State<CategoryScreen> {
     }
   }
 
-  /// Konum (paralel) çözülünce mesafeleri uygular ve listeyi yeniden sıralar.
-  /// Konum gelene kadar liste İl·İlçe alt yazısıyla ve sunucu sırasıyla görünür.
+  /// Etiketleri hemen uygular; konum (paralel) çözülünce listeyi yakınlığa
+  /// göre yeniden sıralar. Konum gelene kadar sunucu sırası görünür.
   Future<void> _applyLocationWhenReady(Future<_Loc> locFuture) async {
-    final loc = await locFuture;
-    if (!mounted) return;
     setState(() {
-      _applyDistances(_places, loc);
-      if (_pinned != null) _applyDistances([_pinned!], loc);
-      _sortPlaces();
+      _applyLabels(_places);
+      if (_pinned != null) _applyLabels([_pinned!]);
     });
+    await locFuture;
+    if (!mounted) return;
+    setState(_sortPlaces);
   }
 
   void _useFallback() {
@@ -264,8 +269,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
           filtreler: _selectedFilters.toList(),
         );
         if (!mounted) return;
-        final loc = _loc;
-        if (loc != null) _applyDistances(r.items, loc);
+        _applyLabels(r.items);
         setState(() {
           _places.addAll(r.items);
           _hasMore = r.hasMore;
@@ -286,9 +290,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
         limit: 20,
       );
       if (!mounted) return;
-      // Konum çözülmüşse mesafeleri uygula; değilse İl·İlçe kalır (bloklama).
-      final loc = _loc;
-      if (loc != null) _applyDistances(d.places, loc);
+      _applyLabels(d.places);
       setState(() {
         _places.addAll(d.places);
         _total = d.total;

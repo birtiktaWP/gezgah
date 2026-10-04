@@ -116,8 +116,11 @@ class _DetailScreenState extends State<DetailScreen> {
   Future<void> _fetch() async {
     // Detay + kategori parent eşlemesini birlikte çek (parent eşlemesi cache'li
     // olduğu için başlık üstü kategoriler ilk çizimde doğru süzülür).
+    // Mesafe için gerçek konum (en fazla 3 sn beklenir; izin yoksa/gelmezse
+    // konumsuz istenir ve mesafe gösterilmez — MESAFE-MOBIL.md §1, §6).
     final results = await Future.wait([
-      HomeRepository.instance.mekanDetay(widget.place.id),
+      LocationService.realLocation().then((me) => HomeRepository.instance
+          .mekanDetay(widget.place.id, lat: me?.lat, lng: me?.lng)),
       HomeRepository.instance.ustDuzeyKategoriIdleri(),
     ]);
     if (!mounted) return;
@@ -128,7 +131,6 @@ class _DetailScreenState extends State<DetailScreen> {
       _loading = false;
     });
     _playIntro(d);
-    _resolveDistance();
     _fetchSimilar(d);
     _fetchRezervasyon();
   }
@@ -283,33 +285,15 @@ class _DetailScreenState extends State<DetailScreen> {
     return sub;
   }
 
-  /// Konum satırı: "İl · İlçe · 1.2 km". Mesafe burada koordinattan
-  /// hesaplanır; listeden gelen `place.distance` kullanılmaz, çünkü bazı
-  /// listeler o alana il · ilçe koyuyor ve satırda tekrar ediyordu.
+  /// Konum satırı: "İl · İlçe · 7,6 km". Mesafe yalnız sunucunun detay
+  /// yanıtındaki tahmini yol mesafesidir (`mesafe_m`, MESAFE-MOBIL.md §1);
+  /// uygulama hesaplamaz, listeden gelen `place.distance` de kullanılmaz.
+  /// Konum izni yoksa ya da mekanın koordinatı yoksa mesafe gösterilmez.
   String get _locationLine {
     final loc = _location;
-    final km = _distanceKm;
+    final km = LocationService.formatM(_detail?.mesafeM);
     if (km.isEmpty || loc == km || loc.contains(km)) return loc;
     return loc.isEmpty ? km : '$loc · $km';
-  }
-
-  /// Cihaz konumu ile mekan koordinatı arasındaki mesafe ("1.2 km") ya da ''.
-  String _distanceKm = '';
-
-  Future<void> _resolveDistance() async {
-    final d = _detail;
-    double? lat = d?.lat, lng = d?.lng;
-    if (lat == null || lng == null) {
-      final p = widget.place;
-      if (p.lat.isNaN || p.lng.isNaN) return;
-      lat = p.lat;
-      lng = p.lng;
-    }
-    final me = await LocationService.resolve();
-    if (!mounted) return;
-    final km = LocationService.format(
-        LocationService.distanceMeters(me.lat, me.lng, lat, lng));
-    if (km != _distanceKm) setState(() => _distanceKm = km);
   }
 
   /// Çalışma saatleri özeti: tüm günler aynı ve açıksa "Her gün X",

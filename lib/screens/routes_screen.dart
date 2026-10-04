@@ -3866,8 +3866,15 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen>
     );
     if (secili == null || secili == _sort) return;
     if (secili == 'mesafe') {
+      // Yalnız gerçek konum gönderilir; varsayılan merkez uydurulmaz
+      // (MESAFE-MOBIL.md §6).
       final loc = await LocationService.resolve();
       if (!mounted) return;
+      if (!loc.real) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Mesafeye göre sıralamak için konum izni gerekli.')));
+        return;
+      }
       _lat = loc.lat;
       _lng = loc.lng;
     }

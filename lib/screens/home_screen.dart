@@ -115,26 +115,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// ApiPlace listesini Place kartlarına çevirir.
   ///
-  /// Koordinat varsa mesafe hesaplanır ve `place.distance`e yazılır.
+  /// Mesafe yalnız sunucudan gelirse (`mesafe_m`/`mesafe_km`) gösterilir ve
+  /// `place.distance`e yazılır; uygulama kendisi hesaplamaz (MESAFE-MOBIL.md).
   /// Alt yazı (`subtitle`):
   ///  - [preferDistance] true ve mesafe varsa → mesafe (Yakındakiler).
   ///  - aksi halde "İl · İlçe" (yoksa mesafe, o da yoksa "Restoran").
   List<Place> _toPlaces(
-    List<ApiPlace> items,
-    _Loc loc, {
+    List<ApiPlace> items, {
     bool preferDistance = false,
   }) {
     return items.map((a) {
-      String distance = '';
-      if (a.hasCoord) {
-        final m = LocationService.distanceMeters(
-          loc.lat,
-          loc.lng,
-          a.lat!,
-          a.lng!,
-        );
-        distance = LocationService.format(m);
-      }
+      final distance = LocationService.formatM(a.mesafeM);
       final cd = a.cityDistrict;
       final String sub;
       if (preferDistance && distance.isNotEmpty) {
@@ -152,46 +143,38 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Sponsorlu restoranlar (home_page_settings → sponsorlu_restoranlar).
   Future<List<Place>> _loadSponsored() async {
-    final loc = await _loc;
     try {
       final items = await HomeStore.instance.sponsorlu();
-      return _toPlaces(items, loc);
+      return _toPlaces(items);
     } catch (_) {
       return const [];
     }
   }
 
-  /// Yakındakiler: havuzu çekip cihaz konumuna göre en yakın 10'u seçer.
+  /// Yakındakiler (MESAFE-MOBIL.md §2): gerçek konum varsa sunucuya gönderilir;
+  /// liste sunucuda tahmini yol mesafesine göre sıralı ve `mesafe_km`'li gelir,
+  /// uygulamada yeniden sıralanmaz. Konum izni yoksa konum gönderilmez ve
+  /// mesafe gösterilmez (havuzdan ilk 10).
   Future<List<Place>> _loadNearby() async {
     final loc = await _loc;
     List<ApiPlace> pool;
     try {
-      pool = await HomeStore.instance.yakindakiler();
+      pool = await HomeStore.instance.yakindakiler(
+        lat: loc.real ? loc.lat : null,
+        lng: loc.real ? loc.lng : null,
+      );
     } catch (_) {
       return MockData.nearby;
     }
-
-    final withCoord = pool.where((p) => p.hasCoord).toList();
-
-    // Koordinatlı kayıt yoksa (API havuzunda kordinat boş olabilir) ilk 10'u
-    // mesafesiz göster; o da boşsa mock vitrine düş.
-    if (withCoord.isEmpty) {
-      final list = _toPlaces(pool.take(10).toList(), loc, preferDistance: true);
-      return list.isEmpty ? MockData.nearby : list;
-    }
-
-    double dist(ApiPlace p) =>
-        LocationService.distanceMeters(loc.lat, loc.lng, p.lat!, p.lng!);
-    withCoord.sort((a, b) => dist(a).compareTo(dist(b)));
-    return _toPlaces(withCoord.take(10).toList(), loc, preferDistance: true);
+    final list = _toPlaces(pool.take(10).toList(), preferDistance: true);
+    return list.isEmpty ? MockData.nearby : list;
   }
 
   /// Yeni eklenenler (date DESC).
   Future<List<Place>> _loadNewest() async {
-    final loc = await _loc;
     try {
       final items = await HomeStore.instance.yeniEklenenler();
-      return _toPlaces(items, loc);
+      return _toPlaces(items);
     } catch (_) {
       return const [];
     }
