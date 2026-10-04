@@ -8,7 +8,9 @@ import '../data/mock_data.dart';
 import '../data/models.dart';
 import '../data/search_history.dart';
 import '../data/user_service.dart';
+import '../data/view_tracker.dart';
 import 'filter_sheet.dart';
+import 'track_impression.dart';
 import '../screens/category_screen.dart';
 import '../theme/app_theme.dart';
 import 'app_icons.dart';
@@ -275,6 +277,7 @@ class _SearchModalState extends State<_SearchModal>
       );
       if (!mounted || _controller.text.trim() != term) return;
       setState(() {
+        _renewSearchScope(term);
         _placeItems = r.items;
         _placeHasMore = r.hasMore;
         _placeNextPage = r.nextPage;
@@ -967,9 +970,35 @@ class _SearchModalState extends State<_SearchModal>
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
       itemCount: _placeItems.length + (_placeMoreLoading ? 1 : 0),
       separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (_, i) =>
-          i >= _placeItems.length ? _moreSpinner() : _resultTile(_placeItems[i]),
+      itemBuilder: (_, i) {
+        if (i >= _placeItems.length) return _moreSpinner();
+        final r = _placeItems[i];
+        // Pro "Listeleme": ekranda görünen mekan sonuçları (yalnız Mekanlar
+        // sekmesi; yemek kartları sayılmaz — ISTATISTIK-OLAYLARI-MOBIL.md §1).
+        return TrackImpression(
+          scope: _searchScope,
+          placeId: r.place.id,
+          position: i,
+          child: _resultTile(r),
+        );
+      },
     );
+  }
+
+  /// Arama sonuçlarının görünme kapsamı. Yeni terim/tip/filtre durumunda
+  /// yenilenir (o aramada her mekan bir kez sayılır). `kaynak_id` aranan metin
+  /// (≤ 32 karakter); filtre/özellik seçiliyse gönderilmez.
+  ImpressionScope _searchScope = ImpressionScope(kaynak: 'arama');
+  String _searchScopeKey = '';
+
+  void _renewSearchScope(String term) {
+    final filtered = _placeFilters.isNotEmpty || _placeOzellikler.isNotEmpty;
+    final key = '$term|${_type.slug}|$filtered';
+    if (key == _searchScopeKey) return;
+    _searchScopeKey = key;
+    final id = term.length > 32 ? term.substring(0, 32) : term;
+    _searchScope =
+        ImpressionScope(kaynak: 'arama', kaynakId: filtered ? null : id);
   }
 
   Widget _foodsTab() {

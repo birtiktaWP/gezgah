@@ -1154,6 +1154,8 @@ class _DetailScreenState extends State<DetailScreen> {
     }
     final uri = Uri.parse(
         'https://www.google.com/maps/dir/?api=1&destination=${Uri.encodeComponent(dest)}');
+    // Pro: Yol Tarifi — harita açılmadan önce kuyruğa (arka plana geçişte gider).
+    ViewTracker.instance.yolTarifi(widget.place.id);
     try {
       final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!ok && mounted) _snack('Harita uygulaması açılamadı.');
@@ -1611,6 +1613,7 @@ class _DetailScreenState extends State<DetailScreen> {
   void _openMenu() {
     final d = _detail;
     if (d == null || d.menu.isEmpty) return;
+    ViewTracker.instance.qr(widget.place.id); // Pro: QR Tıklama
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => MenuScreen(title: _name, menu: d.menu)),

@@ -8,10 +8,12 @@ import 'api.dart';
 
 /// Mekan görüntülenme sayacı (GORUNTULENME.md).
 ///
-/// İki olay türü toplanır:
-///  - `liste`: mekan kartı bir listede ekranda en az %50 görünür halde
-///    1 sn kaldı (bkz. `TrackImpression` widget'ı).
+/// Olay türleri (Gezgah Pro raporları, ISTATISTIK-OLAYLARI-MOBIL.md):
+///  - `liste`: mekan kartı bir listede (kategori, tip, arama) ekranda en az
+///    %50 görünür halde 1 sn kaldı (bkz. `TrackImpression` widget'ı).
 ///  - `detay`: mekan detay sayfası açıldı.
+///  - `qr`: mekanın QR menüsü açıldı.
+///  - `yol_tarifi`: mekan için yol tarifi başlatıldı.
 ///
 /// Olaylar bellekte biriktirilir ve `POST /istatistik/goruntulenme` ile toplu
 /// gönderilir: [_flushAt] olay birikince, [_flushEvery] aralıkla ve uygulama
@@ -57,8 +59,17 @@ class ViewTracker with WidgetsBindingObserver {
     });
   }
 
-  /// Detay sayfası açılma olayı.
+  /// Detay sayfası açılma olayı (Pro: Tıklanma).
   void detay(int mekanId) => _add({'mekan_id': mekanId, 'tip': 'detay'});
+
+  /// QR menü açıldı (Pro: QR Tıklama, ISTATISTIK-OLAYLARI-MOBIL.md §2).
+  void qr(int mekanId) => _add({'mekan_id': mekanId, 'tip': 'qr'});
+
+  /// Yol tarifi başlatıldı (Pro: Yol Tarifi, ISTATISTIK-OLAYLARI-MOBIL.md §3).
+  /// Harici harita uygulaması açılmadan **önce** çağrılmalı; Gezgah arka plana
+  /// geçerken kuyruk gönderilir.
+  void yolTarifi(int mekanId) =>
+      _add({'mekan_id': mekanId, 'tip': 'yol_tarifi'});
 
   void _add(Map<String, dynamic> e) {
     if (_disabled || (e['mekan_id'] as int) <= 0) return;

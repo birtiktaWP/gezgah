@@ -13,6 +13,7 @@ import '../data/api.dart';
 import '../data/auth_service.dart';
 import '../data/location_service.dart';
 import '../data/models.dart';
+import '../data/view_tracker.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
@@ -5591,6 +5592,11 @@ class _StopDetailSheet extends StatelessWidget {
                     label: 'Yol Tarifi',
                     icon: Icons.directions_outlined,
                     onTap: () async {
+                      // Mekan durağıysa Pro "Yol Tarifi" sayılır; harita
+                      // açılmadan önce kuyruğa (ISTATISTIK-OLAYLARI-MOBIL.md §3).
+                      if (!d.isKonum && m != null && m.id > 0) {
+                        ViewTracker.instance.yolTarifi(m.id);
+                      }
                       try {
                         await launchUrl(Uri.parse(d.haritaLink),
                             mode: LaunchMode.externalApplication);
