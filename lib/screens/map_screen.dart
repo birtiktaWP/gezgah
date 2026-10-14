@@ -520,7 +520,7 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  /// Seçili mekan kartındaki mesafe ("≈ 3,4 km") ya da ''. Önce sunucu yol
+  /// Seçili mekan kartındaki mesafe ("3,4 km") ya da ''. Önce sunucu yol
   /// mesafesi (`mesafe_m`); `/harita` bunu vermediği için yoksa kategori
   /// listesindeki yedek tahmin (kuş uçuşu × 1,3, MESAFE-MOBIL.md §7).
   /// Konum izni yoksa ''. (Eskiden burada İl · İlçe yazıyordu ve kartta

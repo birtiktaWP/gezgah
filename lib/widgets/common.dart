@@ -32,8 +32,16 @@ class NetImage extends StatelessWidget {
   /// görsel. Örn. detayda listenin küçük görseli.
   final String? placeholderUrl;
 
+  /// true ise [url] değiştiğinde yeni görsel hazır olana kadar eski görsel
+  /// ekranda kalır (gri zemin + yeniden yükleme görünmez). Detayda küçük
+  /// önizlemeden büyük görsele geçişte "baştan yükleniyor" etkisini önler.
+  final bool gapless;
+
   const NetImage(this.url,
-      {super.key, this.fit = BoxFit.cover, this.placeholderUrl});
+      {super.key,
+      this.fit = BoxFit.cover,
+      this.placeholderUrl,
+      this.gapless = false});
 
   static const Color _bg = Color(0xFFEDEDF3);
 
@@ -73,6 +81,7 @@ class NetImage extends StatelessWidget {
         imageUrl: url,
         fit: fit,
         memCacheWidth: cw,
+        useOldImageOnUrlChange: gapless,
         // Kısa solma: önbellekten gelen görseller beklemiş gibi görünmesin.
         fadeInDuration: const Duration(milliseconds: 120),
         fadeOutDuration: const Duration(milliseconds: 80),

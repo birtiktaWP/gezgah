@@ -227,6 +227,16 @@ class _DetailScreenState extends State<DetailScreen> {
         if (g.url.isNotEmpty && !g.isVideo) imgs.add(g.url);
       }
       if (imgs.isEmpty && d.image.isNotEmpty) imgs.add(d.image);
+      // Öne çıkan görsel (listede gösterilenin büyüğü) ilk sırada olsun:
+      // önizlemeden büyüğe geçişte FARKLI bir fotoğrafa atlanmasın, aynı
+      // fotoğraf netleşsin.
+      final featured = <String>{
+        for (final g in d.galeri)
+          if (g.isFeatured && !g.isVideo) g.url,
+        if (d.image.isNotEmpty) d.image,
+      };
+      final i = imgs.indexWhere(featured.contains);
+      if (i > 0) imgs.insert(0, imgs.removeAt(i));
     }
     // Detay gelene kadar listenin KÜÇÜK görseli (zaten önbellekte, ~35 KB):
     // eskiden orijinal `image` (1,4 MB'a kadar PNG) indiriliyor, detay gelince
@@ -308,7 +318,7 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   /// Sunucu mesafesi gelmediyse (istekte konum yoktu) yedek tahmin:
-  /// "≈ 3,4 km" (kuş uçuşu × 1,3, MESAFE-MOBIL.md §7). Konum izni yoksa ''.
+  /// "3,4 km" (kuş uçuşu × 1,3, MESAFE-MOBIL.md §7). Konum izni yoksa ''.
   String _estimateKm = '';
 
   Future<void> _resolveEstimate(PlaceDetail d) async {
@@ -530,7 +540,10 @@ class _DetailScreenState extends State<DetailScreen> {
                 onTap: _openGalleryGrid,
                 // İlk görsel yüklenirken listenin küçük görseli gösterilir;
                 // gri boşluk yerine anında bir görüntü olur.
+                // İlk görselde önizleme → büyük görsel geçişi kesintisiz:
+                // büyük görsel hazır olana kadar küçük olan ekranda kalır.
                 child: NetImage(images[i],
+                    gapless: i == 0,
                     placeholderUrl: i == 0 && images[i] != _previewThumb
                         ? _previewThumb
                         : null),

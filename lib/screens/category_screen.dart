@@ -105,7 +105,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
   /// Mesafe önceliği (MESAFE-MOBIL.md):
   ///  1. Sunucunun tahmini yol mesafesi (`mesafe_m`, istekte konum gidiyor;
   ///     sunucu bu uçlara eklediğinde otomatik kullanılır).
-  ///  2. Yoksa §7 yedeği: kuş uçuşu × 1,3, başında "≈".
+  ///  2. Yoksa §7 yedeği: kuş uçuşu × 1,3.
   ///  3. Konum izni yoksa (ya da mekanın koordinatı yoksa) km yazılmaz.
   void _applyLabels(List<Place> list) {
     final label = switch (widget.type) {
@@ -170,6 +170,14 @@ class _CategoryScreenState extends State<CategoryScreen> {
     // fix'i saniyeler sürebildiğinden, önce konumu beklemek ekranı gereksiz
     // yere 4-5 sn döndürüyordu. Veri gelir gelmez gösterilir; konum gelince
     // mesafe + sıralama uygulanır.
+    // Konum zaten biliniyorsa (ana sayfa açılışta çözüyor) liste İLK çizimde
+    // sıralı gelir. Eskiden konum 1-2 sn sonra gelince liste yeniden
+    // sıralanıyor, aynı satıra başka mekanın görseli yüklenip "resim baştan
+    // yükleniyor" gibi görünüyordu.
+    final known = LocationService.lastReal;
+    if (known != null && _loc == null) {
+      _loc = (lat: known.lat, lng: known.lng, real: true);
+    }
     final locFuture = _ensureLoc();
 
     // Type modu: kategori değil post type listesi (GET /yerler?type=).
@@ -245,10 +253,13 @@ class _CategoryScreenState extends State<CategoryScreen> {
   /// Etiketleri hemen uygular; konum (paralel) çözülünce listeyi yakınlığa
   /// göre yeniden sıralar. Konum gelene kadar sunucu sırası görünür.
   Future<void> _applyLocationWhenReady(Future<_Loc> locFuture) async {
+    final hadLoc = _loc != null;
     setState(() {
       _applyLabels(_places);
       if (_pinned != null) _applyLabels([_pinned!]);
+      if (hadLoc) _sortPlaces(); // bilinen konumla ilk çizimde sıralı
     });
+    if (hadLoc) return; // konum zaten uygulandı; ikinci kez sıralama yok
     await locFuture;
     if (!mounted) return;
     setState(() {
@@ -511,6 +522,17 @@ class _CategoryScreenState extends State<CategoryScreen> {
             // sonda durum/footer. Mekan kartları ve görselleri yalnızca ekrana
             // geldikçe oluşturulur.
             itemCount: _loading ? 1 : 2 + _visiblePlaces.length,
+            // Kartlar mekan id'siyle anahtarlı: liste yeniden sıralanınca
+            // (ilk kez konum gelince, sıralama değişince) kart görseliyle
+            // birlikte yer değiştirir, görsel yeniden yüklenmez.
+            findChildIndexCallback: (key) {
+              if (key is! ValueKey<String>) return null;
+              final v = key.value;
+              if (!v.startsWith('cat-tile-')) return null;
+              final id = int.tryParse(v.substring(9));
+              final i = _visiblePlaces.indexWhere((p) => p.id == id);
+              return i < 0 ? null : i + 1;
+            },
             itemBuilder: (context, index) {
               if (index == 0) {
                 return Column(
@@ -570,6 +592,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                 final p = _visiblePlaces[i];
                 final tag = p.id > 0 ? 'cat-${p.id}' : null;
                 return TrackImpression(
+                  key: p.id > 0 ? ValueKey('cat-tile-${p.id}') : null,
                   scope: _impressions,
                   placeId: p.id,
                   position: i,
