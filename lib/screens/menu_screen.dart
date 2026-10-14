@@ -11,7 +11,12 @@ import '../widgets/common.dart';
 class MenuScreen extends StatefulWidget {
   final String title; // mekan adı
   final List<MenuKategori> menu;
-  const MenuScreen({super.key, required this.title, required this.menu});
+
+  /// Menünün son güncellenme zamanı (`menu_guncelleme`). null ise tarih bandı
+  /// gösterilmez (MENU_GUNCELLEME.md).
+  final DateTime? guncelleme;
+  const MenuScreen(
+      {super.key, required this.title, required this.menu, this.guncelleme});
 
   @override
   State<MenuScreen> createState() => _MenuScreenState();
@@ -43,6 +48,11 @@ class _MenuScreenState extends State<MenuScreen> {
   bool _tapScrolling =
       false; // pill dokunuşuyla scroll sürerken oto-seçim kapalı
 
+  // Menü içi arama (ürün adı, açıklama, içindekiler; Türkçe harf duyarsız).
+  final TextEditingController _search = TextEditingController();
+  String _query = '';
+  bool get _searching => _query.isNotEmpty;
+
   @override
   void initState() {
     super.initState();
@@ -54,12 +64,78 @@ class _MenuScreenState extends State<MenuScreen> {
     _list.removeListener(_onScroll);
     _list.dispose();
     _pills.dispose();
+    _search.dispose();
     super.dispose();
+  }
+
+  /// Arama için metni sadeleştirir: küçük harf + Türkçe karakterler
+  /// (İ/ı/ş/ç/ğ/ö/ü, şapkalı harfler) Latin karşılığına → "Çorba" = "corba".
+  static String _fold(String s) {
+    final b = StringBuffer();
+    for (final r in s.replaceAll('İ', 'i').replaceAll('I', 'ı').runes) {
+      final c = String.fromCharCode(r).toLowerCase();
+      b.write(switch (c) {
+        'ı' || 'î' => 'i',
+        'ş' => 's',
+        'ç' => 'c',
+        'ğ' => 'g',
+        'ö' => 'o',
+        'ü' || 'û' => 'u',
+        'â' => 'a',
+        _ => c,
+      });
+    }
+    return b.toString();
+  }
+
+  void _onSearch(String v) {
+    final q = _fold(v.trim());
+    if (q == _query) return;
+    setState(() => _query = q);
+    if (_list.hasClients) _list.jumpTo(0);
+  }
+
+  void _clearSearch() {
+    _search.clear();
+    _onSearch('');
+    dismissKeyboard();
+  }
+
+  bool _matches(MenuUrun u) =>
+      _fold(u.ad).contains(_query) ||
+      _fold(u.aciklama).contains(_query) ||
+      _fold(u.icindekiler).contains(_query);
+
+  /// Aramada: yalnız eşleşen ürünleri olan kategoriler, eşleşen ürünleriyle.
+  /// Kategori adı eşleşirse o kategorinin tüm ürünleri gösterilir.
+  List<MenuKategori> get _results => [
+        for (final c in _sections)
+          if (_fold(c.kategori).contains(_query))
+            c
+          else if (c.urunler.any(_matches))
+            MenuKategori(
+                id: c.id,
+                kategori: c.kategori,
+                urunler: c.urunler.where(_matches).toList()),
+      ];
+
+  static const List<String> _aylar = [
+    '', 'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', //
+    'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
+  ];
+
+  /// "12 Ekim 2026, 14:30" (saat 00:00 ise yalnız tarih).
+  static String _formatDate(DateTime d) {
+    final t = d.isUtc ? d.toLocal() : d;
+    final date = '${t.day} ${_aylar[t.month]} ${t.year}';
+    if (t.hour == 0 && t.minute == 0) return date;
+    String p(int n) => n.toString().padLeft(2, '0');
+    return '$date, ${p(t.hour)}:${p(t.minute)}';
   }
 
   /// Scroll konumuna göre aktif bölümü bul ve pill barı ona kaydır.
   void _onScroll() {
-    if (_tapScrolling || _sections.isEmpty) return;
+    if (_tapScrolling || _sections.isEmpty || _searching) return;
     final listCtx = _listKey.currentContext;
     if (listCtx == null) return;
     final listBox = listCtx.findRenderObject() as RenderBox?;
@@ -136,7 +212,9 @@ class _MenuScreenState extends State<MenuScreen> {
               ),
             )
           else ...[
-            _pillBar(),
+            _searchBar(),
+            // Aramada kategori sekmeleri gizlenir (sonuçlar süzülmüş liste).
+            if (!_searching) _pillBar(),
             const Divider(height: 1, thickness: 1, color: AppColors.line),
             // Not: tembel `ListView` yerine tüm bölümleri oluşturan
             // `SingleChildScrollView` kullanılıyor. Aksi halde ekran dışına
@@ -146,14 +224,18 @@ class _MenuScreenState extends State<MenuScreen> {
               child: SingleChildScrollView(
                 key: _listKey,
                 controller: _list,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 48),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (var i = 0; i < _sections.length; i++)
-                      ..._section(i, _sections[i]),
-                    _footerNote(),
-                  ],
+                  children: _searching
+                      ? _searchResults()
+                      : [
+                          for (var i = 0; i < _sections.length; i++)
+                            ..._section(i, _sections[i]),
+                          _footerNote(),
+                        ],
                 ),
               ),
             ),
@@ -206,6 +288,10 @@ class _MenuScreenState extends State<MenuScreen> {
                         color: Colors.white.withValues(alpha: 0.8),
                       ),
                     ),
+                  if (widget.guncelleme != null) ...[
+                    const SizedBox(height: 8),
+                    _updatedBadge(widget.guncelleme!),
+                  ],
                 ],
               ),
             ),
@@ -213,6 +299,118 @@ class _MenuScreenState extends State<MenuScreen> {
         ),
       ),
     );
+  }
+
+  /// "Son güncelleme: 12 Ekim 2026, 14:30" rozeti (başlıkta, en üstte).
+  Widget _updatedBadge(DateTime d) {
+    final text = 'Son güncelleme: ${_formatDate(d)}';
+    return Semantics(
+      label: 'Menü son güncelleme tarihi ${_formatDate(d)}',
+      excludeSemantics: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.update, size: 14, color: Colors.white),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Menü içi arama kutusu (kategori sekmelerinin üstünde).
+  Widget _searchBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+      child: Container(
+        height: 46,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: AppColors.primarySoft,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.search, size: 20, color: AppColors.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: _search,
+                onChanged: _onSearch,
+                textInputAction: TextInputAction.search,
+                onSubmitted: (_) => dismissKeyboard(),
+                style: const TextStyle(fontSize: 14.5, color: AppColors.ink),
+                decoration: const InputDecoration(
+                  hintText: 'Menüde ara (ürün, içerik…)',
+                  hintStyle: TextStyle(color: AppColors.muted),
+                  border: InputBorder.none,
+                  isCollapsed: true,
+                ),
+              ),
+            ),
+            if (_search.text.isNotEmpty)
+              Semantics(
+                button: true,
+                label: 'Aramayı temizle',
+                child: GestureDetector(
+                  onTap: _clearSearch,
+                  behavior: HitTestBehavior.opaque,
+                  child: const Padding(
+                    padding: EdgeInsets.all(4),
+                    child: Icon(Icons.cancel, size: 19, color: AppColors.muted),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Arama sonuçları: eşleşen ürünler kategorileri altında; hiç yoksa mesaj.
+  List<Widget> _searchResults() {
+    final res = _results;
+    if (res.isEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 48),
+          child: Text(
+            '"${_search.text.trim()}" için menüde sonuç bulunamadı.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 14, color: AppColors.muted),
+          ),
+        ),
+      ];
+    }
+    final count = res.fold<int>(0, (n, c) => n + c.urunler.length);
+    return [
+      Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text('$count ürün bulundu',
+            style: const TextStyle(fontSize: 13, color: AppColors.muted)),
+      ),
+      for (var i = 0; i < res.length; i++)
+        ..._section(i, res[i], keyed: false),
+      _footerNote(),
+    ];
   }
 
   /// Yatay kaydırmalı kategori pill barı (cat-pill: navy-06 bg / navy metin;
@@ -265,10 +463,12 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  List<Widget> _section(int i, MenuKategori cat) {
+  /// [keyed] false ise (arama sonuçları) bölüm GlobalKey'i verilmez; sekme
+  /// kaydırması yalnız tam menüde kullanılır.
+  List<Widget> _section(int i, MenuKategori cat, {bool keyed = true}) {
     return [
       Padding(
-        key: _sectionKeys[i],
+        key: keyed ? _sectionKeys[i] : null,
         padding: EdgeInsets.only(top: i == 0 ? 8 : 26, bottom: 8),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,

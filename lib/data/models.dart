@@ -25,6 +25,7 @@ class Place {
   final String date; // eklenme tarihi (ISO "2026-06-20"); sıralama için
   final List<int> filterIds; // aktif filtre id'leri (filtre_{id}=1)
   final List<int> ozellikIds; // mekanın özellik id'leri (restoran_ozellik)
+  final int? mesafeM; // sunucunun tahmini yol mesafesi (m); gelmezse null
   bool favorite;
 
   // Önceden üretilmiş thumbnail'ler (thumbnail-update.md). Öne çıkan görseli
@@ -52,6 +53,7 @@ class Place {
     this.date = '',
     this.filterIds = const [],
     this.ozellikIds = const [],
+    this.mesafeM,
     this.favorite = false,
     this.thumbnail,
     this.thumbSquare,
@@ -1263,6 +1265,9 @@ class PlaceDetail {
   final List<Filter> filtreler; // mekanda aktif filtreler (type='filtre')
   final List<GaleriItem> galeri;
   final List<MenuKategori> menu;
+  // QR menünün son güncellenme zamanı (`menu_guncelleme`, MENU_GUNCELLEME.md).
+  // Alan gelmezse null → menü ekranında tarih bandı gösterilmez.
+  final DateTime? menuGuncelleme;
   final List<Etkinlik> etkinlikler; // mekana ait aktif etkinlikler
   final List<MekanVideo> videolar; // ERP'den yüklenen videolar (MEKAN_VIDEO.md)
   final int? mesafeM; // tahmini yol mesafesi (m); yalnız konumlu istekte
@@ -1290,6 +1295,7 @@ class PlaceDetail {
     this.filtreler = const [],
     this.galeri = const [],
     this.menu = const [],
+    this.menuGuncelleme,
     this.etkinlikler = const [],
     this.videolar = const [],
     this.mesafeM,
@@ -1361,6 +1367,9 @@ class PlaceDetail {
       filtreler: parseList(j['filtreler'], Filter.fromJson),
       galeri: parseList(j['galeri'], (m) => GaleriItem.fromJson(m, host: host)),
       menu: parseList(j['menu'], MenuKategori.fromJson),
+      // "2026-10-12 14:30:00" (Europe/Istanbul) ya da ISO-8601.
+      menuGuncelleme:
+          DateTime.tryParse('${j['menu_guncelleme'] ?? ''}'.trim()),
       etkinlikler:
           parseList(j['etkinlikler'], (m) => Etkinlik.fromJson(m, host: host)),
       videolar: parseList(

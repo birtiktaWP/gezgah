@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'app_secrets.dart';
 import 'device_service.dart';
+import 'location_service.dart';
 import 'models.dart';
 import 'place_flags.dart';
 
@@ -1312,7 +1313,7 @@ class HomeRepository {
     try {
       final res = await _dio.get(
         '/kategoriler/$id',
-        queryParameters: {'page': page, 'limit': limit},
+        queryParameters: {'page': page, 'limit': limit, ..._locQuery()},
       );
       final body = res.data as Map<String, dynamic>;
       if (body['success'] == true && body['data'] is Map<String, dynamic>) {
@@ -1379,7 +1380,7 @@ class HomeRepository {
   }) async {
     final res = await _dio.get(
       '/kategoriler/$id/mekanlar',
-      queryParameters: {'page': page, 'limit': limit},
+      queryParameters: {'page': page, 'limit': limit, ..._locQuery()},
     );
     final body = res.data as Map<String, dynamic>;
     if (body['success'] != true) {
@@ -1441,6 +1442,7 @@ class HomeRepository {
               .map((e) => e.toInt())
               .toList() ??
           const [],
+      mesafeM: ap.mesafeM,
       thumbnail: ap.thumbnail,
       thumbSquare: ap.thumbSquare,
       thumbCard: ap.thumbCard,
@@ -1700,6 +1702,7 @@ class HomeRepository {
           'page': page,
           'limit': limit,
           if (fq.isNotEmpty) 'filtreler': fq,
+          ..._locQuery(),
         },
       );
       final body = res.data;
@@ -1751,11 +1754,20 @@ class HomeRepository {
     verified: ap.verified,
     filterIds: ap.filterIds,
     ozellikIds: ap.ozellikIds,
+    mesafeM: ap.mesafeM,
     thumbnail: ap.thumbnail,
     thumbSquare: ap.thumbSquare,
     thumbCard: ap.thumbCard,
     thumbWide: ap.thumbWide,
   );
+
+  /// Bilinen gerçek konumu (beklemeden) sorgu parametresine çevirir. Sunucu
+  /// `mesafe_m` eklerse kartlar onu gösterir (MESAFE-MOBIL.md); eklemezse yok
+  /// sayılır. Konum izni yoksa hiçbir şey gönderilmez.
+  Map<String, dynamic> _locQuery() {
+    final me = LocationService.lastReal;
+    return me == null ? const {} : {'lat': me.lat, 'lng': me.lng};
+  }
 
   /// `GET /mekanlar` — restoran listesi (yeni → eski sıralı gelir).
   Future<List<ApiPlace>> mekanlar({

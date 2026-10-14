@@ -116,11 +116,16 @@ class _DetailScreenState extends State<DetailScreen> {
   Future<void> _fetch() async {
     // Detay + kategori parent eşlemesini birlikte çek (parent eşlemesi cache'li
     // olduğu için başlık üstü kategoriler ilk çizimde doğru süzülür).
-    // Mesafe için gerçek konum (en fazla 3 sn beklenir; izin yoksa/gelmezse
-    // konumsuz istenir ve mesafe gösterilmez — MESAFE-MOBIL.md §1, §6).
+    // Mesafe için bilinen gerçek konum BEKLEMEDEN eklenir (ana sayfa açılışta
+    // konumu çözüyor). Eskiden GPS 3 sn'ye kadar bekleniyordu; galeri
+    // adresleri bu yanıtla geldiği için görseller de o kadar geç başlıyordu.
+    // Konum yoksa istek konumsuz gider; konum sonradan gelirse yedek tahmin
+    // gösterilir (bkz. _resolveEstimate). İkinci detay isteği atılmaz, çünkü
+    // her `/mekanlar/{id}` çağrısı sunucuda `tiklama` sayacını artırıyor.
+    final me = LocationService.lastReal;
     final results = await Future.wait([
-      LocationService.realLocation().then((me) => HomeRepository.instance
-          .mekanDetay(widget.place.id, lat: me?.lat, lng: me?.lng)),
+      HomeRepository.instance
+          .mekanDetay(widget.place.id, lat: me?.lat, lng: me?.lng),
       HomeRepository.instance.ustDuzeyKategoriIdleri(),
     ]);
     if (!mounted) return;
@@ -130,6 +135,7 @@ class _DetailScreenState extends State<DetailScreen> {
       _topIds = results[1] as Set<int>;
       _loading = false;
     });
+    if (d != null && d.mesafeM == null) _resolveEstimate(d);
     _playIntro(d);
     _fetchSimilar(d);
     _fetchRezervasyon();
@@ -222,11 +228,15 @@ class _DetailScreenState extends State<DetailScreen> {
       }
       if (imgs.isEmpty && d.image.isNotEmpty) imgs.add(d.image);
     }
-    if (imgs.isEmpty && widget.place.image.isNotEmpty) {
-      imgs.add(widget.place.image);
-    }
+    // Detay gelene kadar listenin KÜÇÜK görseli (zaten önbellekte, ~35 KB):
+    // eskiden orijinal `image` (1,4 MB'a kadar PNG) indiriliyor, detay gelince
+    // galerinin ilk görseli için ikinci bir indirme başlıyordu.
+    if (imgs.isEmpty && _previewThumb.isNotEmpty) imgs.add(_previewThumb);
     return imgs;
   }
+
+  /// Listeden gelen önizleme görseli (küçük boyut önce, yoksa orijinal).
+  String get _previewThumb => widget.place.thumb(ThumbSize.wide);
 
   /// Mekan videoları: `videolar[]` (MEKAN_VIDEO.md) + eski yoldan `galeri[]`
   /// içinde `video/*` olarak gelenler (URL'e göre tekilleştirilir). iOS
@@ -291,9 +301,23 @@ class _DetailScreenState extends State<DetailScreen> {
   /// Konum izni yoksa ya da mekanın koordinatı yoksa mesafe gösterilmez.
   String get _locationLine {
     final loc = _location;
-    final km = LocationService.formatM(_detail?.mesafeM);
+    final srv = LocationService.formatM(_detail?.mesafeM);
+    final km = srv.isNotEmpty ? srv : _estimateKm;
     if (km.isEmpty || loc == km || loc.contains(km)) return loc;
     return loc.isEmpty ? km : '$loc · $km';
+  }
+
+  /// Sunucu mesafesi gelmediyse (istekte konum yoktu) yedek tahmin:
+  /// "≈ 3,4 km" (kuş uçuşu × 1,3, MESAFE-MOBIL.md §7). Konum izni yoksa ''.
+  String _estimateKm = '';
+
+  Future<void> _resolveEstimate(PlaceDetail d) async {
+    final lat = d.lat, lng = d.lng;
+    if (lat == null || lng == null) return;
+    final me = await LocationService.realLocation();
+    if (!mounted || me == null) return;
+    final s = LocationService.formatEstimate(me.lat, me.lng, lat, lng);
+    if (s != _estimateKm) setState(() => _estimateKm = s);
   }
 
   /// Çalışma saatleri özeti: tüm günler aynı ve açıksa "Her gün X",
@@ -504,7 +528,12 @@ class _DetailScreenState extends State<DetailScreen> {
               onPageChanged: (i) => setState(() => _photo = i),
               itemBuilder: (_, i) => GestureDetector(
                 onTap: _openGalleryGrid,
-                child: NetImage(images[i]),
+                // İlk görsel yüklenirken listenin küçük görseli gösterilir;
+                // gri boşluk yerine anında bir görüntü olur.
+                child: NetImage(images[i],
+                    placeholderUrl: i == 0 && images[i] != _previewThumb
+                        ? _previewThumb
+                        : null),
               ),
             ),
           if (images.length > 1)
@@ -1616,7 +1645,9 @@ class _DetailScreenState extends State<DetailScreen> {
     ViewTracker.instance.qr(widget.place.id); // Pro: QR Tıklama
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => MenuScreen(title: _name, menu: d.menu)),
+      MaterialPageRoute(
+          builder: (_) => MenuScreen(
+              title: _name, menu: d.menu, guncelleme: d.menuGuncelleme)),
     );
   }
 

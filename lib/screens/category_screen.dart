@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../data/api.dart';
-import '../data/home_config.dart';
 import '../data/location_service.dart';
 import '../data/mock_data.dart';
 import '../data/models.dart';
@@ -97,11 +96,17 @@ class _CategoryScreenState extends State<CategoryScreen> {
     return r;
   }
 
-  /// Kart alt yazısı: tür etiketi; konum satırı (pin): İl · İlçe.
+  // Kartın asıl "İl · İlçe" metni ([Place.distance] km eklenerek değiştiği
+  // için bir kez saklanır; etiketler tekrar uygulanınca km çoğalmasın).
+  final Expando<String> _baseLoc = Expando<String>();
+
+  /// Kart alt yazısı: tür etiketi. Konum satırı (pin): "İl · İlçe · 3,4 km".
   ///
-  /// Mesafe (km) bu listede gösterilmez: `/kategoriler/{id}` ve `/yerler`
-  /// sunucu mesafesi döndürmüyor, uygulamanın kuş uçuşu hesabı da detaydaki
-  /// yol mesafesiyle çelişiyordu (MESAFE-MOBIL.md §7: "mesafeyi gösterme").
+  /// Mesafe önceliği (MESAFE-MOBIL.md):
+  ///  1. Sunucunun tahmini yol mesafesi (`mesafe_m`, istekte konum gidiyor;
+  ///     sunucu bu uçlara eklediğinde otomatik kullanılır).
+  ///  2. Yoksa §7 yedeği: kuş uçuşu × 1,3, başında "≈".
+  ///  3. Konum izni yoksa (ya da mekanın koordinatı yoksa) km yazılmaz.
   void _applyLabels(List<Place> list) {
     final label = switch (widget.type) {
       'plaj' => 'Plaj',
@@ -110,16 +115,30 @@ class _CategoryScreenState extends State<CategoryScreen> {
       'muze' => 'Müze',
       _ => 'Restoran',
     };
+    final loc = _loc;
     for (final p in list) {
       p.subtitle = label;
-      if (p.distance.isEmpty) p.distance = 'Konum bilgisi yok';
+      final base = _baseLoc[p] ??= p.distance;
+      final km = _kmLabel(p, loc);
+      final parts = [base, km].where((s) => s.isNotEmpty).toList();
+      p.distance = parts.isEmpty ? 'Konum bilgisi yok' : parts.join(' · ');
     }
   }
 
-  /// Kuş uçuşu mesafe — yalnız "Yakınlık" sıralaması için, ekranda gösterilmez.
+  String _kmLabel(Place p, _Loc? loc) {
+    final srv = LocationService.formatM(p.mesafeM);
+    if (srv.isNotEmpty) return srv;
+    if (loc == null || !loc.real || p.lat.isNaN || p.lng.isNaN) return '';
+    return LocationService.formatEstimate(loc.lat, loc.lng, p.lat, p.lng);
+  }
+
+  /// "Yakınlık" sıralaması: sunucu mesafesi varsa o, yoksa kuş uçuşu.
   double _distMeters(Place p, _Loc loc) {
+    final m = p.mesafeM;
+    if (m != null) return m.toDouble();
     if (p.lat.isNaN || p.lng.isNaN) return double.infinity;
-    return LocationService.distanceMeters(loc.lat, loc.lng, p.lat, p.lng);
+    return LocationService.distanceMeters(loc.lat, loc.lng, p.lat, p.lng) *
+        1.3;
   }
 
   void _sortPlaces() {
@@ -232,7 +251,12 @@ class _CategoryScreenState extends State<CategoryScreen> {
     });
     await locFuture;
     if (!mounted) return;
-    setState(_sortPlaces);
+    setState(() {
+      // Konum geldi: km'yi ekle (sunucu mesafesi yoksa yedek tahmin).
+      _applyLabels(_places);
+      if (_pinned != null) _applyLabels([_pinned!]);
+      _sortPlaces();
+    });
   }
 
   void _useFallback() {
@@ -694,8 +718,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
         separatorBuilder: (_, __) => const SizedBox(width: 10),
         itemBuilder: (_, i) {
           final c = items[i];
-          return CategoryPill(
-            icon: HomeConfig.iconFor(c.id),
+          // Gerçek (API) ikon; yoksa ikonsuz hap — uydurma ikon gösterilmez.
+          return CategoryPill.fromApi(
+            apiIcon: c.icon,
             label: c.name,
             active: i == 0,
             onTap: () {

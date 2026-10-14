@@ -12,6 +12,7 @@ import 'data/user_service.dart';
 import 'screens/main_shell.dart';
 import 'screens/welcome_screen.dart';
 import 'theme/app_theme.dart';
+import 'widgets/common.dart';
 
 /// İlk açılış (Welcome) gösterildi mi?
 const _kWelcomeSeenKey = 'welcome_seen';
@@ -105,9 +106,12 @@ class GezgahApp extends StatelessWidget {
       // üstteki başlık/arama sabit kalsın (clamping = sınırda durur).
       scrollBehavior: const _NoBounceScrollBehavior(),
       // Uygulama genelinde: herhangi bir boşluğa dokununca klavyeyi kapat.
+      // Yalnız giriş alanı odaktaysa (bkz. dismissKeyboard): sayfa kapsamının
+      // odağını bırakmak alttaki arama modalının alanını odaklayıp klavyeyi
+      // açıyordu.
       builder: (context, child) => GestureDetector(
         behavior: HitTestBehavior.translucent,
-        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        onTap: dismissKeyboard,
         child: child,
       ),
       home: _PhoneFrame(child: _Root(seenWelcome: seenWelcome)),

@@ -520,10 +520,18 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  /// Seçili mekan kartındaki konum metni. `/harita` sunucu mesafesi
-  /// döndürmediği için km gösterilmez, İl · İlçe yazılır (MESAFE-MOBIL.md:
-  /// ekranda yalnız sunucunun yol mesafesi; kuş uçuşu gösterilmez).
-  String _distanceText(ApiPlace p) => p.cityDistrict;
+  /// Seçili mekan kartındaki mesafe ("≈ 3,4 km") ya da ''. Önce sunucu yol
+  /// mesafesi (`mesafe_m`); `/harita` bunu vermediği için yoksa kategori
+  /// listesindeki yedek tahmin (kuş uçuşu × 1,3, MESAFE-MOBIL.md §7).
+  /// Konum izni yoksa ''. (Eskiden burada İl · İlçe yazıyordu ve kartta
+  /// konum satırıyla aynı metin iki kez görünüyordu.)
+  String _distanceText(ApiPlace p) {
+    final srv = LocationService.formatM(p.mesafeM);
+    if (srv.isNotEmpty) return srv;
+    final loc = _loc;
+    if (loc == null || !loc.real || !p.hasCoord) return '';
+    return LocationService.formatEstimate(loc.lat, loc.lng, p.lat!, p.lng!);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -684,11 +692,18 @@ class _MapScreenState extends State<MapScreen> {
     final loc = [p.sehir, p.ilce].where((s) => s.trim().isNotEmpty).join(' · ');
     // Android sistem/gezinme çubuğunun üstünde kalsın.
     final safeBottom = MediaQuery.of(context).padding.bottom;
+    final km = _distanceText(p);
     return Positioned(
       left: 16,
       right: 16,
       bottom: 26 + safeBottom,
-      child: Container(
+      child: Semantics(
+        button: true,
+        label: '${p.name} detayını aç',
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _openDetail(p, loc),
+          child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
@@ -742,51 +757,40 @@ class _MapScreenState extends State<MapScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(_distanceText(p),
-                            style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.primary)),
-                        GestureDetector(
-                          onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (_) => DetailScreen(
-                                      place: p.toPlace(
-                                          subtitle:
-                                              loc.isNotEmpty ? loc : 'Konum'),
-                                      type: _type == _MapType.mekan
-                                          ? null
-                                          : _type.slug,
-                                      heroTag:
-                                          p.id > 0 ? 'map-${p.id}' : null))),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 9),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Text('Detayı Gör',
-                                style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white)),
-                          ),
-                        ),
-                      ],
-                    ),
+                    if (km.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(km,
+                          style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary)),
+                    ],
                   ],
                 ),
               ),
             ),
+            // Kartın tamamı tıklanabilir; ayrıca ok ikonu ipucu verir.
+            const Padding(
+              padding: EdgeInsets.only(right: 12),
+              child: Icon(Icons.chevron_right,
+                  size: 24, color: AppColors.muted),
+            ),
           ],
         ),
       ),
+      ),
+      ),
     );
+  }
+
+  /// Seçili mekanın detay sayfasını açar (alt kartın tamamına dokununca).
+  void _openDetail(ApiPlace p, String loc) {
+    Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => DetailScreen(
+                place: p.toPlace(subtitle: loc.isNotEmpty ? loc : 'Konum'),
+                type: _type == _MapType.mekan ? null : _type.slug,
+                heroTag: p.id > 0 ? 'map-${p.id}' : null)));
   }
 }

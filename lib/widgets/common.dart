@@ -7,33 +7,92 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../data/home_config.dart';
 import '../theme/app_theme.dart';
 
+/// Klavyeyi kapatır: yalnız odakta bir giriş alanı (TextField vb.) varsa
+/// onun odağını bırakır.
+///
+/// Odak bir **sayfa kapsamındayken** `primaryFocus.unfocus()` çağrılmaz;
+/// kapsamın odağını bırakmak odağı Navigator'daki başka bir sayfaya geri
+/// verebilir (alttaki arama modalının alanı odaklanıp klavye açılabilir).
+void dismissKeyboard() {
+  final f = FocusManager.instance.primaryFocus;
+  if (f != null && f is! FocusScopeNode) f.unfocus();
+}
+
 /// Ağ görseli için tutarlı placeholder/error davranışı olan sarmalayıcı.
+///
+/// Görsel, kutunun ekrandaki boyutuna göre **küçültülerek** belleğe açılır
+/// (`memCacheWidth`). Sunucudan 1440×1920 gelen bir fotoğraf tam boyutta
+/// ~11 MB yer tutuyor, açılması uzuyor ve bellek önbelleğini hızla
+/// dolduruyordu (geri dönünce görseller yeniden açılıyordu).
 class NetImage extends StatelessWidget {
   final String url;
   final BoxFit fit;
-  const NetImage(this.url, {super.key, this.fit = BoxFit.cover});
+
+  /// Yüklenirken gri zemin yerine gösterilecek (genelde önbellekteki küçük)
+  /// görsel. Örn. detayda listenin küçük görseli.
+  final String? placeholderUrl;
+
+  const NetImage(this.url,
+      {super.key, this.fit = BoxFit.cover, this.placeholderUrl});
+
+  static const Color _bg = Color(0xFFEDEDF3);
+
+  /// Belleğe açılacak genişlik (piksel). `cover`da görsel kutuyu iki yönde de
+  /// doldurmalı; en-boy oranı bilinmediği için yatay görseller (≤ 4:3) bulanık
+  /// kalmasın diye yükseklik × 1,34 de hesaba katılır. 100'e yuvarlanır ki aynı
+  /// boyuttaki kartlar aynı önbellek kaydını paylaşsın. Görsel bu genişlikten
+  /// küçükse büyütülmez. `contain` (yakınlaştırılabilen tam ekran
+  /// görüntüleyici) küçültülmez.
+  @visibleForTesting
+  int? cacheWidthFor(BoxConstraints c, double dpr) => _cacheWidth(c, dpr);
+
+  int? _cacheWidth(BoxConstraints c, double dpr) {
+    if (fit != BoxFit.cover) return null;
+    final w = c.hasBoundedWidth ? c.maxWidth : 0.0;
+    final h = c.hasBoundedHeight ? c.maxHeight * 1.34 : 0.0;
+    final target = (w > h ? w : h) * dpr;
+    if (target <= 0) return null;
+    return ((target / 100).ceil() * 100).clamp(100, 2400);
+  }
 
   @override
   Widget build(BuildContext context) {
     // Boş/geçersiz URL (API'de image: null olabilir) → doğrudan placeholder.
     if (url.trim().isEmpty) {
       return Container(
-        color: const Color(0xFFEDEDF3),
+        color: _bg,
         child: const Icon(Icons.image_not_supported_outlined,
             color: AppColors.muted),
       );
     }
-    return CachedNetworkImage(
-      imageUrl: url,
-      fit: fit,
-      fadeInDuration: const Duration(milliseconds: 250),
-      placeholder: (c, _) => Container(color: const Color(0xFFEDEDF3)),
-      errorWidget: (c, _, __) => Container(
-        color: const Color(0xFFEDEDF3),
-        child: const Icon(Icons.image_not_supported_outlined,
-            color: AppColors.muted),
-      ),
-    );
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    return LayoutBuilder(builder: (context, c) {
+      final cw = _cacheWidth(c, dpr);
+      final ph = placeholderUrl?.trim() ?? '';
+      return CachedNetworkImage(
+        imageUrl: url,
+        fit: fit,
+        memCacheWidth: cw,
+        // Kısa solma: önbellekten gelen görseller beklemiş gibi görünmesin.
+        fadeInDuration: const Duration(milliseconds: 120),
+        fadeOutDuration: const Duration(milliseconds: 80),
+        placeholder: (c, _) => ph.isEmpty
+            ? Container(color: _bg)
+            : CachedNetworkImage(
+                imageUrl: ph,
+                fit: fit,
+                memCacheWidth: cw,
+                fadeInDuration: Duration.zero,
+                placeholder: (c, _) => Container(color: _bg),
+                errorWidget: (c, _, __) => Container(color: _bg),
+              ),
+        errorWidget: (c, _, __) => Container(
+          color: _bg,
+          child: const Icon(Icons.image_not_supported_outlined,
+              color: AppColors.muted),
+        ),
+      );
+    });
   }
 }
 
@@ -259,30 +318,73 @@ class CategoryPill extends StatelessWidget {
   /// Verilirse [icon] yerine bu SVG çizilir (renk [active]'e göre uygulanır).
   final String? svg;
 
+  /// true ise ikon dairesi hiç çizilmez, yalnız metin (gerçek ikon yoksa).
+  final bool noIcon;
+
   const CategoryPill({
     super.key,
-    required this.icon,
+    this.icon = Icons.circle,
     required this.label,
     this.active = false,
     this.onTap,
     this.iconWidget,
     this.svg,
+    this.noIcon = false,
   });
+
+  /// API kategori ikonundan (SVG ya da emoji) hap üretir; ikon yoksa ya da
+  /// çizilemiyorsa uydurma ikon yerine ikonsuz hap döner.
+  factory CategoryPill.fromApi({
+    Key? key,
+    required String? apiIcon,
+    required String label,
+    bool active = false,
+    VoidCallback? onTap,
+  }) {
+    final raw = apiIcon?.trim() ?? '';
+    if (raw.contains('<svg')) {
+      final svg = CategoryIcon.sanitizeSvg(raw);
+      if (svg != null) {
+        return CategoryPill(
+            key: key, label: label, active: active, onTap: onTap, svg: svg);
+      }
+    } else if (raw.isNotEmpty && raw.length <= 4) {
+      // Emoji ikon.
+      return CategoryPill(
+          key: key,
+          label: label,
+          active: active,
+          onTap: onTap,
+          iconWidget: Text(raw, style: const TextStyle(fontSize: 13)));
+    }
+    return CategoryPill(
+        key: key, label: label, active: active, onTap: onTap, noIcon: true);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final text = Text(label,
+        style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: active ? Colors.white : AppColors.ink));
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.fromLTRB(9, 8, 14, 8),
+        // İkonsuz hapın yüksekliği ikonlu haplarla aynı kalsın (26 + 2×8).
+        padding: noIcon
+            ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
+            : const EdgeInsets.fromLTRB(9, 8, 14, 8),
         decoration: BoxDecoration(
           color: active ? AppColors.primary : Colors.white,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
               color: active ? AppColors.primary : AppColors.line),
         ),
-        child: Row(
+        child: noIcon
+            ? text
+            : Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
@@ -310,11 +412,7 @@ class CategoryPill extends StatelessWidget {
                           color: active ? Colors.white : AppColors.primary)),
             ),
             const SizedBox(width: 7),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: active ? Colors.white : AppColors.ink)),
+            text,
           ],
         ),
       ),

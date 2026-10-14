@@ -614,7 +614,7 @@ class _SearchModalState extends State<_SearchModal>
       backgroundColor: AppColors.bg,
       body: GestureDetector(
         // Boş bir yere dokununca klavyeyi kapat.
-        onTap: () => FocusScope.of(context).unfocus(),
+        onTap: dismissKeyboard,
         behavior: HitTestBehavior.translucent,
         child: SafeArea(
           child: Column(
@@ -1091,7 +1091,10 @@ class _SearchModalState extends State<_SearchModal>
     return GestureDetector(
       onTap: () {
         // Arama modalı kapatılmaz: detay üstüne açılır, geri dönünce kullanıcı
-        // sonuç listesine (ve terimine) geri döner.
+        // sonuç listesine (ve terimine) geri döner. Arama alanının odağı önce
+        // bırakılır; yoksa modal onu "son odak" olarak hatırlar ve detaydayken
+        // odak geri döndüğünde klavye kendiliğinden açılır.
+        dismissKeyboard();
         _commitHistory(_query);
         widget.onOpenDetail?.call(p);
       },
@@ -1201,6 +1204,7 @@ class _SearchModalState extends State<_SearchModal>
     return GestureDetector(
       onTap: () {
         // Modal açık kalır (bkz. yemek sonucu) → geri dönünce sonuçlar durur.
+        dismissKeyboard(); // bkz. _foodTile: arama alanı odağı hatırlanmasın
         _commitHistory(_query);
         widget.onOpenDetail
             ?.call(p.toPlace(subtitle: loc.isNotEmpty ? loc : 'Restoran'));
@@ -1340,6 +1344,11 @@ class _SearchModalState extends State<_SearchModal>
                   child: TextField(
                     controller: _controller,
                     autofocus: true,
+                    // Modal üstüne detay (ya da başka sayfa) açıkken bu alan
+                    // odak alamaz. Aksi halde altta kalan alana gelen bir odak
+                    // isteği detay sayfasının üstünde klavyeyi açıyordu.
+                    // Modal tekrar en üstte olunca alan normal çalışır.
+                    canRequestFocus: ModalRoute.isCurrentOf(context) ?? true,
                     textInputAction: TextInputAction.search,
                     onChanged: _onQueryChanged,
                     onSubmitted: _commitHistory,

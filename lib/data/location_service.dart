@@ -92,6 +92,18 @@ class LocationService {
   /// En son alınan gerçek cihaz konumu (TTL'siz; yalnız [realLocation] yedeği).
   static ({double lat, double lng})? _lastReal;
 
+  /// Beklemeden bilinen son gerçek konum (yoksa null). İsteklere konum
+  /// eklemek için; ağ isteğini GPS'e bekletmez.
+  static ({double lat, double lng})? get lastReal => _lastReal;
+
+  /// Sunucu mesafesi yokken yedek tahmin (MESAFE-MOBIL.md §7, seçenek 2):
+  /// kuş uçuşu × 1,3, başında "≈". Yalnız gerçek konumla çağrılmalı.
+  static String formatEstimate(
+      double lat1, double lng1, double lat2, double lng2) {
+    final s = format(distanceMeters(lat1, lng1, lat2, lng2) * 1.3);
+    return s.isEmpty ? '' : '≈ $s';
+  }
+
   /// İki koordinat arasındaki kuş uçuşu mesafe (metre). Yalnız **sıralama**
   /// için kullanılır; ekranda gösterilmez (MESAFE-MOBIL.md: ekranda yalnız
   /// sunucunun tahmini yol mesafesi).
