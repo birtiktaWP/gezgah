@@ -1409,13 +1409,20 @@ class GaleriItem {
   final String thumbnail;
   final bool isFeatured;
   final String mimeType; // "image/jpeg", "video/mp4"… — yoksa ''
+  /// Üst görsel için ortadan kare kırpılmış hafif sürüm (`kare`, 1080×1080
+  /// WebP; GALERI_KARE_GORSEL.md). Gelmezse '' → orijinal `url` kullanılır.
+  final String kare;
   const GaleriItem({
     required this.id,
     this.url = '',
     this.thumbnail = '',
     this.isFeatured = false,
     this.mimeType = '',
+    this.kare = '',
   });
+
+  /// Üst görsel kadrajında gösterilecek adres: `kare` varsa o, yoksa orijinal.
+  String get heroUrl => kare.isNotEmpty ? kare : url;
 
   static final RegExp _videoExt =
       RegExp(r'\.(mp4|m4v|mov|webm|3gp|mkv|m3u8)(\?.*)?$', caseSensitive: false);
@@ -1443,6 +1450,7 @@ class GaleriItem {
       thumbnail: thumb.isNotEmpty ? thumb : url,
       isFeatured: j['is_featured'] == true,
       mimeType: (j['mime_type'] as String?)?.trim() ?? '',
+      kare: _absUrl(j['kare'], host),
     );
   }
 }

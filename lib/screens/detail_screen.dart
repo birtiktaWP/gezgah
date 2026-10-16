@@ -251,6 +251,19 @@ class _DetailScreenState extends State<DetailScreen> {
     return imgs;
   }
 
+  /// Üst görsel şeridi için adresler: [_images] ile aynı sıra, ama her
+  /// fotoğrafın hafif kare sürümü (`galeri[].kare`) varsa o kullanılır.
+  /// Tam ekran görüntüleyici ve ızgara orijinali ([_images]) kullanmaya devam
+  /// eder.
+  List<String> get _heroImages {
+    final d = _detail;
+    final kare = <String, String>{
+      for (final g in d?.galeri ?? const <GaleriItem>[])
+        if (g.kare.isNotEmpty) g.url: g.kare,
+    };
+    return [for (final u in _images) kare[u] ?? u];
+  }
+
   /// Listeden gelen önizleme görseli. KARE küçük görsel seçilir: üst görsel
   /// alanı neredeyse kare (≈390×350) olduğu için büyük fotoğrafla aynı
   /// kadrajı verir; liste kartı da kareyi kullandığı için zaten önbellekte.
@@ -261,16 +274,20 @@ class _DetailScreenState extends State<DetailScreen> {
   /// Üst görselin ilk karesi: altta önizleme (anında görünür), üstte büyük
   /// görsel. Büyük görsel indirilip açılınca 350 ms'de yumuşakça belirir;
   /// önizleme hiç kaldırılmaz, bu yüzden "pıt" diye yeniden yükleme ve gri
-  /// boşluk olmaz. Katmanlar aynı fit/hizalamayla çizildiği için kadraj aynı
-  /// kalır (yatay fotoğraflarda kare önizlemeyle küçük bir fark kalabilir;
-  /// geçiş yumuşak olduğu için netleşme gibi görünür).
+  /// boşluk olmaz.
+  ///
+  /// Kadraj: kare küçük görsel sunucuda orijinalin TAM ORTASINDAN kare
+  /// kırpılıyor (ölçüldü). Büyük görsel de [_heroSquare] ile aynı şekilde
+  /// ortadan kare kadrajda çizilir; böylece yatay/dikey her fotoğrafta iki
+  /// katman piksel piksel aynı alanı gösterir, geçişte zoom/kayma olmaz,
+  /// yalnızca netleşme görülür.
   Widget _heroFirst(String url) {
     final pv = _previewThumb;
-    if (pv.isEmpty) return NetImage(url);
+    if (pv.isEmpty) return _heroSquare(NetImage(url));
     // Detay gelmeden önce de aynı Stack yapısı kullanılır (anahtarlı), böylece
     // detay gelince önizleme katmanı yeniden oluşturulmaz, yalnız üste büyük
     // görsel eklenir.
-    return Stack(
+    return _heroSquare(Stack(
       fit: StackFit.expand,
       children: [
         NetImage(pv, key: const ValueKey('hero-preview'), fadeIn: Duration.zero),
@@ -280,7 +297,27 @@ class _DetailScreenState extends State<DetailScreen> {
               transparentPlaceholder: true,
               fadeIn: const Duration(milliseconds: 350)),
       ],
-    );
+    ));
+  }
+
+  /// Görseli kutunun uzun kenarı kadar bir KARE içinde (BoxFit.cover =
+  /// ortadan kare kırpım) çizer, kutuya ortalar ve taşanı kırpar. Sunucunun
+  /// kare küçük görseliyle aynı kadraj; tüm üst görsel sayfalarında kullanılır
+  /// ki kaydırırken de kadraj tutarlı olsun.
+  Widget _heroSquare(Widget child) {
+    return LayoutBuilder(builder: (context, c) {
+      final side = c.maxWidth > c.maxHeight ? c.maxWidth : c.maxHeight;
+      return ClipRect(
+        child: OverflowBox(
+          minWidth: side,
+          maxWidth: side,
+          minHeight: side,
+          maxHeight: side,
+          alignment: Alignment.center,
+          child: SizedBox(width: side, height: side, child: child),
+        ),
+      );
+    });
   }
 
   /// Mekan videoları: `videolar[]` (MEKAN_VIDEO.md) + eski yoldan `galeri[]`
@@ -549,7 +586,7 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   Widget _heroContent() {
-    final images = _images;
+    final images = _heroImages;
     return SizedBox(
       height: 350,
       child: Stack(
@@ -573,7 +610,9 @@ class _DetailScreenState extends State<DetailScreen> {
               onPageChanged: (i) => setState(() => _photo = i),
               itemBuilder: (_, i) => GestureDetector(
                 onTap: _openGalleryGrid,
-                child: i == 0 ? _heroFirst(images[0]) : NetImage(images[i]),
+                child: i == 0
+                    ? _heroFirst(images[0])
+                    : _heroSquare(NetImage(images[i])),
               ),
             ),
           if (images.length > 1)
