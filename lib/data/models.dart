@@ -366,6 +366,9 @@ class AppUser {
   final String ilce; // çözülmüş ilçe adı (yanıttan)
   final String avatar; // avatar tam URL (Plus'a özel); yoksa ''
   final PlusInfo plus; // Gezgah Plus durumu
+  // Üyenin yaptığı mekan değerlendirmesi sayısı (`/uye/me` →
+  // `degerlendirme_sayisi`). Sunucu henüz göndermiyor → null ("–").
+  final int? degerlendirmeSayisi;
 
   const AppUser({
     required this.id,
@@ -381,6 +384,7 @@ class AppUser {
     this.ilce = '',
     this.avatar = '',
     this.plus = const PlusInfo(),
+    this.degerlendirmeSayisi,
   });
 
   bool get isPlus => plus.aktif;
@@ -407,6 +411,7 @@ class AppUser {
       plus: j['plus'] is Map<String, dynamic>
           ? PlusInfo.fromJson(j['plus'] as Map<String, dynamic>)
           : const PlusInfo(),
+      degerlendirmeSayisi: (j['degerlendirme_sayisi'] as num?)?.toInt(),
     );
   }
 
@@ -424,6 +429,7 @@ class AppUser {
         'ilce': ilce,
         'avatar': avatar,
         'plus': plus.toJson(),
+        'degerlendirme_sayisi': degerlendirmeSayisi,
       };
 
   AppUser copyWith({
@@ -453,6 +459,7 @@ class AppUser {
         ilce: ilce ?? this.ilce,
         avatar: avatar ?? this.avatar,
         plus: plus ?? this.plus,
+        degerlendirmeSayisi: degerlendirmeSayisi,
       );
 }
 

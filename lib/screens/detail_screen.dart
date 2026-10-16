@@ -9,7 +9,6 @@ import 'package:video_player/video_player.dart';
 import '../data/api.dart';
 import '../data/auth_service.dart';
 import '../data/favorites_service.dart';
-import '../data/home_config.dart';
 import '../data/location_service.dart';
 import '../data/models.dart';
 import '../data/view_tracker.dart';
@@ -79,6 +78,8 @@ class _DetailScreenState extends State<DetailScreen> {
   // Üst düzey (parent == 0) kategori id'leri (`/kategoriler`). Başlık üstünde
   // yalnızca bu kümedeki kategoriler gösterilir.
   Set<int> _topIds = const {};
+  // Aynı kategorilerin ikonlu kaydı: detaydaki `kategoriler[]` ikon taşımıyor.
+  Map<int, Category> _topCats = const {};
 
   static const List<(String, String)> _days = [
     ('pazartesi', 'Pazartesi'),
@@ -126,13 +127,15 @@ class _DetailScreenState extends State<DetailScreen> {
     final results = await Future.wait([
       HomeRepository.instance
           .mekanDetay(widget.place.id, lat: me?.lat, lng: me?.lng),
-      HomeRepository.instance.ustDuzeyKategoriIdleri(),
+      HomeRepository.instance.ustDuzeyKategoriler(),
     ]);
     if (!mounted) return;
     final d = results[0] as PlaceDetail?;
+    final top = results[1] as Map<int, Category>;
     setState(() {
       _detail = d;
-      _topIds = results[1] as Set<int>;
+      _topIds = top.keys.toSet();
+      _topCats = top;
       _loading = false;
     });
     if (d != null && d.mesafeM == null) _resolveEstimate(d);
@@ -201,9 +204,12 @@ class _DetailScreenState extends State<DetailScreen> {
 
   /// Başlık üstünde gösterilecek kategoriler: yalnızca üst düzey (parent == 0)
   /// olanlar. Üst düzey kümesi alınamazsa (boş) tüm kategoriler gösterilir.
+  /// Hiçbiri üst düzey kümede değilse de mekanın kendi kategorileri gösterilir;
+  /// tip etiketine ("Mesire", "Plaj") yalnız mekanın hiç kategorisi yoksa düşülür.
   List<Category> _visibleCategories(PlaceDetail d) {
     if (_topIds.isEmpty) return d.kategoriler;
-    return d.kategoriler.where((c) => _topIds.contains(c.id)).toList();
+    final top = d.kategoriler.where((c) => _topIds.contains(c.id)).toList();
+    return top.isNotEmpty ? top : d.kategoriler;
   }
 
   /// Mekanın ilk kategorisinden benzer mekanları çeker (mevcut mekan hariç).
@@ -836,20 +842,36 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   /// Başlık üstündeki kategori rozetleri (`kategoriler`). Birden fazlaysa hepsi
-  /// gösterilir; kategori ikonu id'ye göre (HomeConfig) belirlenir.
+  /// gösterilir. İkon kategorinin gerçek (API) ikonudur (`/kategoriler`
+  /// kaydındaki `icon` SVG'si); yoksa rozet ikonsuz gösterilir. Eskiden id'ye
+  /// göre uygulama içi varsayılan ikon (hep çatal-bıçak vb.) çiziliyordu.
   Widget _categoryBadges(List<Category> cats) {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
-        for (final c in cats) _badge(HomeConfig.iconFor(c.id), c.name),
+        for (final c in cats)
+          _badge(null, c.name, svg: _topCats[c.id]?.icon ?? c.icon),
       ],
     );
   }
 
-  Widget _badge(IconData icon, String text) {
+  /// Rozet. [svg] (API ikonu) çizilebilirse o, değilse [icon]; ikisi de yoksa
+  /// ikonsuz.
+  Widget _badge(IconData? icon, String text, {String? svg}) {
+    final raw = svg?.trim() ?? '';
+    final safe = raw.contains('<svg') ? CategoryIcon.sanitizeSvg(raw) : null;
+    final Widget? lead = safe != null
+        ? SvgPicture.string(safe,
+            width: 14,
+            height: 14,
+            colorFilter:
+                const ColorFilter.mode(AppColors.primary, BlendMode.srcIn))
+        : (icon != null
+            ? Icon(icon, size: 14, color: AppColors.primary)
+            : null);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+      padding: EdgeInsets.symmetric(horizontal: lead == null ? 13 : 11, vertical: 5),
       decoration: BoxDecoration(
         color: AppColors.primarySoft,
         borderRadius: BorderRadius.circular(999),
@@ -857,8 +879,7 @@ class _DetailScreenState extends State<DetailScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: AppColors.primary),
-          const SizedBox(width: 6),
+          if (lead != null) ...[lead, const SizedBox(width: 6)],
           Text(text,
               style: const TextStyle(
                   fontSize: 12,

@@ -1519,6 +1519,31 @@ class HomeRepository {
     }
   }
 
+  /// Üst düzey (parent == 0) kategoriler id → kategori (ikon dahil), TÜM
+  /// tipler için (restoran, mesire, plaj…). Mekan detayındaki `kategoriler[]`
+  /// ikon ve parent taşımadığı için ikon + "üst düzey mi" bilgisi buradan
+  /// alınır.
+  ///
+  /// Kaynak `/kategoriler/agac` (tüm tiplerin kökleri). Eskiden yalnız
+  /// ana sayfanın öne çıkan 8 restoran kategorisi kullanılıyordu; bu yüzden
+  /// mesire/plaj kategorileri (ör. "Mesire & Piknik Alanı") süzülüp detayda
+  /// kategori yerine tip ("Mesire") yazıyordu. Öne çıkan liste yedek olarak
+  /// eklenir. Hata → boş (çağıran tüm kategorileri gösterir).
+  Future<Map<int, Category>> ustDuzeyKategoriler() async {
+    final out = <int, Category>{};
+    try {
+      for (final c in await kategorilerAgac()) {
+        if (c.isTopLevel) out[c.id] = c;
+      }
+    } catch (_) {}
+    try {
+      for (final c in await kategoriler()) {
+        if (c.isTopLevel) out.putIfAbsent(c.id, () => c);
+      }
+    } catch (_) {}
+    return out;
+  }
+
   /// Verilen id'lere ait kategorileri, [ids] sırasını koruyarak döner.
   Future<List<Category>> kategorilerByIds(List<int> ids) async {
     final all = await kategoriler();

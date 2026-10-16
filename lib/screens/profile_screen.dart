@@ -9,6 +9,7 @@ import 'package:intl_phone_number_input/intl_phone_number_input.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../data/api.dart';
 import '../data/auth_service.dart';
+import '../data/favorites_service.dart';
 import '../data/legal_texts.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
@@ -51,6 +52,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _loadSozlesmeler();
+    _loadRotaSayisi();
+    AuthService.instance.user.addListener(_onUserChanged);
+  }
+
+  @override
+  void dispose() {
+    AuthService.instance.user.removeListener(_onUserChanged);
+    super.dispose();
   }
 
   Future<void> _loadSozlesmeler() async {
@@ -359,7 +368,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Gerçek sayılar (eskiden sabit 24 / 12 / 340 yazıyordu):
+  ///  - Favori: uygulamanın tuttuğu favori kümesi (canlı güncellenir).
+  ///  - Değerlendirme: `/uye/me` → `degerlendirme_sayisi`; gelmezse "–".
+  ///  - Gezi Rotası: `/uye/rotalar` liste uzunluğu (Puan yerine).
+  /// Giriş yoksa hepsi "–".
   Widget _stats() {
+    final girisli = _user != null;
+    String n(int? v) => (!girisli || v == null) ? '–' : '$v';
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 22),
       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -370,14 +386,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       child: Row(
         children: [
-          _stat('24', 'Favori'),
+          ValueListenableBuilder<Set<int>>(
+            valueListenable: FavoritesService.instance.ids,
+            builder: (_, ids, __) => _stat(n(ids.length), 'Favori'),
+          ),
           _statDivider(),
-          _stat('12', 'Değerlendirme'),
+          _stat(n(_user?.degerlendirmeSayisi), 'Değerlendirme'),
           _statDivider(),
-          _stat('340', 'Puan'),
+          _stat(n(_rotaSayisi), 'Gezi Rotası'),
         ],
       ),
     );
+  }
+
+  /// Üyenin gezi rotası sayısı (`/uye/rotalar`); yüklenene kadar null.
+  int? _rotaSayisi;
+  int? _rotaUyeId; // sayının ait olduğu üye (çıkış/hesap değişimi için)
+
+  Future<void> _loadRotaSayisi() async {
+    final id = _user?.id;
+    if (id == null) {
+      if (_rotaSayisi != null && mounted) setState(() => _rotaSayisi = null);
+      _rotaUyeId = null;
+      return;
+    }
+    _rotaUyeId = id;
+    final list = await RotaRepository.instance.rotalar();
+    if (!mounted || _user?.id != id) return;
+    setState(() => _rotaSayisi = list.length);
+  }
+
+  void _onUserChanged() {
+    if (_user?.id != _rotaUyeId) _loadRotaSayisi();
   }
 
   Widget _stat(String value, String label) {

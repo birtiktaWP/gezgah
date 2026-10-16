@@ -47,6 +47,14 @@ extension _SearchTypeX on _SearchType {
 
   /// Yemek (QR menü) araması yalnız `mekan` tipinde geçerlidir.
   bool get yemekVar => this == _SearchType.mekan;
+
+  /// Arama kutusunun ipucu metni (seçili sekmeye göre).
+  String get hint => switch (this) {
+        _SearchType.mekan => 'Mekan ve yemek ara…',
+        _SearchType.mesire => 'Mesire alanı, park ara…',
+        _SearchType.otopark => 'Otopark ara…',
+        _SearchType.plaj => 'Plaj ara…',
+      };
 }
 
 /// Gelişmiş arama — tam ekran açılan modal.
@@ -122,6 +130,24 @@ class _SearchModalState extends State<_SearchModal>
   _SearchType _type = _SearchType.mekan;
   final ScrollController _typeScroll = ScrollController();
   bool _typeAtEnd = false; // tip listesi sonuna kaydırıldı mı (fade'i kaldır)
+  // Seçilen hapı yatay listede ortalamak için (yarım/silik görünmesin).
+  final Map<_SearchType, GlobalKey> _typeKeys = {
+    for (final t in _SearchType.values) t: GlobalKey(),
+  };
+
+  /// Seçili tip hapını yatay listede ortalar (kenardaki silik alanda kalmasın).
+  void _revealType(_SearchType t) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _typeKeys[t]?.currentContext;
+      if (!mounted || ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
 
   String? _userId; // arama geçmişi kaydı için (varsa gerçek, yoksa anonim)
   List<String> _popular = MockData.popularSearches; // API gelene kadar fallback
@@ -735,6 +761,7 @@ class _SearchModalState extends State<_SearchModal>
               final t = _SearchType.values[i];
               final active = t == _type;
               return GestureDetector(
+                key: _typeKeys[t],
                 onTap: () => _changeType(t),
                 child: Container(
                   alignment: Alignment.center,
@@ -772,6 +799,7 @@ class _SearchModalState extends State<_SearchModal>
   void _changeType(_SearchType t) {
     if (t == _type) return;
     HapticFeedback.selectionClick();
+    _revealType(t);
     setState(() {
       _type = t;
       _placeFilters.clear();
@@ -1352,9 +1380,9 @@ class _SearchModalState extends State<_SearchModal>
                     textInputAction: TextInputAction.search,
                     onChanged: _onQueryChanged,
                     onSubmitted: _commitHistory,
-                    decoration: const InputDecoration(
-                      hintText: 'Mekan ve yemek ara…',
-                      hintStyle: TextStyle(color: AppColors.muted),
+                    decoration: InputDecoration(
+                      hintText: _type.hint,
+                      hintStyle: const TextStyle(color: AppColors.muted),
                       border: InputBorder.none,
                       isCollapsed: true,
                     ),
