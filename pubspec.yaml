@@ -35,6 +35,7 @@ dependencies:
     sdk: flutter
   video_player: 2.14.0 # mekan galerisindeki videolar (Videolar sekmesi)
   visibility_detector: 0.4.0+2 # listede ekranda görünen mekanlar (GORUNTULENME.md)
+  speech_to_text: 7.5.0 # ana sayfa aramasında sesli arama (mikrofon)
 
 dev_dependencies:
   flutter_test:

@@ -19,10 +19,14 @@ class HomeScreen extends StatefulWidget {
   final VoidCallback onOpenSearch;
   final VoidCallback onOpenNotifications;
 
+  /// Arama kutusundaki mikrofon butonu (sesli arama).
+  final VoidCallback? onVoiceSearch;
+
   const HomeScreen({
     super.key,
     required this.onOpenSearch,
     required this.onOpenNotifications,
+    this.onVoiceSearch,
   });
 
   @override
@@ -379,14 +383,25 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             Container(width: 1, height: 24, color: AppColors.line),
             const SizedBox(width: 12),
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(12),
+            // Sesli arama: dokununca mikrofon izni istenir ve dinlenir
+            // (kutunun geri kalanı yazılı aramayı açar).
+            Semantics(
+              button: true,
+              label: 'Sesli arama',
+              child: GestureDetector(
+                onTap: widget.onVoiceSearch,
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child:
+                      const Icon(Icons.mic_none, color: Colors.white, size: 18),
+                ),
               ),
-              child: const Icon(Icons.mic_none, color: Colors.white, size: 18),
             ),
           ],
         ),

@@ -32,6 +32,13 @@ class NetImage extends StatelessWidget {
   /// görsel. Örn. detayda listenin küçük görseli.
   final String? placeholderUrl;
 
+  /// true ise yüklenirken hiçbir şey çizilmez (altındaki katman görünür).
+  /// Üst üste iki katmanla yumuşak geçiş (crossfade) için.
+  final bool transparentPlaceholder;
+
+  /// Görsel yüklenince belirme süresi.
+  final Duration fadeIn;
+
   /// true ise [url] değiştiğinde yeni görsel hazır olana kadar eski görsel
   /// ekranda kalır (gri zemin + yeniden yükleme görünmez). Detayda küçük
   /// önizlemeden büyük görsele geçişte "baştan yükleniyor" etkisini önler.
@@ -41,7 +48,9 @@ class NetImage extends StatelessWidget {
       {super.key,
       this.fit = BoxFit.cover,
       this.placeholderUrl,
-      this.gapless = false});
+      this.gapless = false,
+      this.transparentPlaceholder = false,
+      this.fadeIn = const Duration(milliseconds: 120)});
 
   static const Color _bg = Color(0xFFEDEDF3);
 
@@ -83,9 +92,11 @@ class NetImage extends StatelessWidget {
         memCacheWidth: cw,
         useOldImageOnUrlChange: gapless,
         // Kısa solma: önbellekten gelen görseller beklemiş gibi görünmesin.
-        fadeInDuration: const Duration(milliseconds: 120),
+        fadeInDuration: fadeIn,
         fadeOutDuration: const Duration(milliseconds: 80),
-        placeholder: (c, _) => ph.isEmpty
+        placeholder: (c, _) => transparentPlaceholder
+            ? const SizedBox.expand()
+            : ph.isEmpty
             ? Container(color: _bg)
             : CachedNetworkImage(
                 imageUrl: ph,

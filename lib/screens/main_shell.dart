@@ -12,6 +12,7 @@ import '../widgets/kedy_chat.dart';
 import '../widgets/notifications_modal.dart';
 import '../widgets/search_modal.dart';
 import '../widgets/tabbar.dart';
+import '../widgets/voice_search_sheet.dart';
 import 'category_screen.dart';
 import 'detail_screen.dart';
 import 'events_screen.dart';
@@ -157,6 +158,13 @@ class _MainShellState extends State<MainShell> {
   /// Ana sayfadaki arama kutusu için gelişmiş arama modalı.
   void _openSearch() => showSearchModal(context, onOpenDetail: _openDetail);
 
+  /// Mikrofon: izin + dinleme paneli; tanınan metinle arama sonuçlarını açar.
+  Future<void> _openVoiceSearch() async {
+    final q = await showVoiceSearch(context);
+    if (!mounted || q == null || q.trim().isEmpty) return;
+    showSearchModal(context, onOpenDetail: _openDetail, initialQuery: q);
+  }
+
   void _openDetail(Place p) {
     Navigator.push(
         context, MaterialPageRoute(builder: (_) => DetailScreen(place: p)));
@@ -172,6 +180,7 @@ class _MainShellState extends State<MainShell> {
         // artık "Kategori"; arama yalnızca ana sayfa kutusundan tetiklenir).
         onOpenSearch: _openSearch,
         onOpenNotifications: _openNotifications,
+        onVoiceSearch: _openVoiceSearch,
       ),
       const SizedBox.shrink(), // 1: Ara (modal)
       const SizedBox.shrink(), // 2: Kedy (modal)

@@ -58,14 +58,18 @@ extension _SearchTypeX on _SearchType {
 }
 
 /// Gelişmiş arama — tam ekran açılan modal.
+///
+/// [initialQuery] verilirse (ör. sesli arama sonucu) kutu bu metinle dolu
+/// açılır ve arama hemen çalışır.
 void showSearchModal(BuildContext context,
-    {void Function(Place place)? onOpenDetail}) {
+    {void Function(Place place)? onOpenDetail, String? initialQuery}) {
   Navigator.of(context).push(
     PageRouteBuilder(
       opaque: false,
       barrierColor: Colors.black26,
       transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (_, __, ___) => _SearchModal(onOpenDetail: onOpenDetail),
+      pageBuilder: (_, __, ___) => _SearchModal(
+          onOpenDetail: onOpenDetail, initialQuery: initialQuery),
       transitionsBuilder: (_, anim, __, child) {
         return SlideTransition(
           position: Tween<Offset>(
@@ -80,7 +84,8 @@ void showSearchModal(BuildContext context,
 
 class _SearchModal extends StatefulWidget {
   final void Function(Place place)? onOpenDetail;
-  const _SearchModal({this.onOpenDetail});
+  final String? initialQuery;
+  const _SearchModal({this.onOpenDetail, this.initialQuery});
 
   @override
   State<_SearchModal> createState() => _SearchModalState();
@@ -176,6 +181,16 @@ class _SearchModalState extends State<_SearchModal>
     });
     _loadInitial();
     _resolveLoc();
+    // Sesli aramadan gelen metin: kutuya yaz, aramayı başlat, geçmişe ekle.
+    final q = widget.initialQuery?.trim() ?? '';
+    if (q.isNotEmpty) {
+      _controller.text = q;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _onQueryChanged(q);
+        _commitHistory(q);
+      });
+    }
   }
 
   /// Konumu (mesafe sıralaması için) çözer. Gerçek konum varsa mekan/yemek
@@ -1542,7 +1557,9 @@ class _SearchModalState extends State<_SearchModal>
                 Expanded(
                   child: TextField(
                     controller: _controller,
-                    autofocus: true,
+                    // Sesli aramadan gelindiyse klavye açılmasın (sonuçlar
+                    // tam ekranda görünsün); kutuya dokununca açılır.
+                    autofocus: (widget.initialQuery ?? '').trim().isEmpty,
                     // Modal üstüne detay (ya da başka sayfa) açıkken bu alan
                     // odak alamaz. Aksi halde altta kalan alana gelen bir odak
                     // isteği detay sayfasının üstünde klavyeyi açıyordu.

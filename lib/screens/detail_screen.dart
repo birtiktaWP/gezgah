@@ -251,8 +251,37 @@ class _DetailScreenState extends State<DetailScreen> {
     return imgs;
   }
 
-  /// Listeden gelen önizleme görseli (küçük boyut önce, yoksa orijinal).
-  String get _previewThumb => widget.place.thumb(ThumbSize.wide);
+  /// Listeden gelen önizleme görseli. KARE küçük görsel seçilir: üst görsel
+  /// alanı neredeyse kare (≈390×350) olduğu için büyük fotoğrafla aynı
+  /// kadrajı verir; liste kartı da kareyi kullandığı için zaten önbellekte.
+  /// (Eskiden `wide` 1080×500 kullanılıyordu; kenarlardan kırpılmış olduğu
+  /// için büyük görsele geçişte kadraj/zoom sıçraması oluyordu.)
+  String get _previewThumb => widget.place.thumb(ThumbSize.square);
+
+  /// Üst görselin ilk karesi: altta önizleme (anında görünür), üstte büyük
+  /// görsel. Büyük görsel indirilip açılınca 350 ms'de yumuşakça belirir;
+  /// önizleme hiç kaldırılmaz, bu yüzden "pıt" diye yeniden yükleme ve gri
+  /// boşluk olmaz. Katmanlar aynı fit/hizalamayla çizildiği için kadraj aynı
+  /// kalır (yatay fotoğraflarda kare önizlemeyle küçük bir fark kalabilir;
+  /// geçiş yumuşak olduğu için netleşme gibi görünür).
+  Widget _heroFirst(String url) {
+    final pv = _previewThumb;
+    if (pv.isEmpty) return NetImage(url);
+    // Detay gelmeden önce de aynı Stack yapısı kullanılır (anahtarlı), böylece
+    // detay gelince önizleme katmanı yeniden oluşturulmaz, yalnız üste büyük
+    // görsel eklenir.
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        NetImage(pv, key: const ValueKey('hero-preview'), fadeIn: Duration.zero),
+        if (url != pv)
+          NetImage(url,
+              key: const ValueKey('hero-full'),
+              transparentPlaceholder: true,
+              fadeIn: const Duration(milliseconds: 350)),
+      ],
+    );
+  }
 
   /// Mekan videoları: `videolar[]` (MEKAN_VIDEO.md) + eski yoldan `galeri[]`
   /// içinde `video/*` olarak gelenler (URL'e göre tekilleştirilir). iOS
@@ -544,15 +573,7 @@ class _DetailScreenState extends State<DetailScreen> {
               onPageChanged: (i) => setState(() => _photo = i),
               itemBuilder: (_, i) => GestureDetector(
                 onTap: _openGalleryGrid,
-                // İlk görsel yüklenirken listenin küçük görseli gösterilir;
-                // gri boşluk yerine anında bir görüntü olur.
-                // İlk görselde önizleme → büyük görsel geçişi kesintisiz:
-                // büyük görsel hazır olana kadar küçük olan ekranda kalır.
-                child: NetImage(images[i],
-                    gapless: i == 0,
-                    placeholderUrl: i == 0 && images[i] != _previewThumb
-                        ? _previewThumb
-                        : null),
+                child: i == 0 ? _heroFirst(images[0]) : NetImage(images[i]),
               ),
             ),
           if (images.length > 1)
