@@ -601,31 +601,6 @@ class UyeRepository {
     return AppUser.fromJson(uye);
   }
 
-  /// `POST /uye/sifre-degistir` — giriş yapmış üyenin parolasını değiştirir.
-  /// Mevcut parola doğrulanır; yeni parola ≥6 olmalı. Başarılıysa sunucu
-  /// token'ı yeniler → yeni token saklanır. Hatalıysa [AuthException].
-  Future<void> sifreDegistir(String eskiParola, String yeniParola) async {
-    final token = await Api.instance.uyeToken;
-    final res = await _guard(
-      () => _dio.post(
-        '/uye/sifre-degistir',
-        data: {'eski_parola': eskiParola, 'yeni_parola': yeniParola},
-        options: (token != null && token.isNotEmpty)
-            ? Options(headers: {'Authorization': 'Bearer $token'})
-            : null,
-      ),
-    );
-    final body = res.data;
-    if (body is! Map || body['success'] != true) {
-      throw AuthException(_errorMessage(body) ?? 'Parola değiştirilemedi.');
-    }
-    final data = body['data'];
-    final newToken = data is Map ? data['token'] as String? : null;
-    if (newToken != null && newToken.isNotEmpty) {
-      await Api.instance.saveUyeToken(newToken);
-    }
-  }
-
   /// `POST /uye/avatar` — Plus üyesinin avatarını yükler (UYELIK_PLUS.md §5).
   /// [base64] çıplak base64 veya `data:image/...;base64,...` olabilir; sunucu
   /// 512×512 merkez-kare JPEG'e dönüştürür. Yeni avatar tam URL'ini döner.

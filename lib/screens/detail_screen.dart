@@ -140,6 +140,8 @@ class _DetailScreenState extends State<DetailScreen> {
       _loading = false;
     });
     if (d != null && d.mesafeM == null) _resolveEstimate(d);
+    // Galeri adresleri geldi: ilk kaydırmada sıradaki fotoğraflar hazır olsun.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _precacheHero(_photo));
     _playIntro(d);
     _fetchSimilar(d);
     _fetchRezervasyon();
@@ -300,6 +302,23 @@ class _DetailScreenState extends State<DetailScreen> {
       ],
     ));
   }
+
+  /// Üst görsel şeridinde [i]'nin yanındaki sayfaları (i+1, i+2, i-1) ekrandaki
+  /// kare kadraj boyutunda önceden yükler. Kaydırınca sıradaki fotoğraf hazır
+  /// gelir; açık gri yer tutucu (beyaz parlama) görünmez.
+  void _precacheHero(int i) {
+    if (!mounted) return;
+    final images = _heroImages;
+    if (images.length < 2) return;
+    final w = MediaQuery.sizeOf(context).width.clamp(0.0, 440.0); // _PhoneFrame
+    final side = w > _heroHeight ? w : _heroHeight;
+    for (final j in [i + 1, i + 2, i - 1]) {
+      if (j < 0 || j >= images.length || j == 0) continue; // 0: önizlemeli
+      NetImage.precache(context, images[j], Size(side, side));
+    }
+  }
+
+  static const double _heroHeight = 350;
 
   /// Görseli kutunun uzun kenarı kadar bir KARE içinde (BoxFit.cover =
   /// ortadan kare kırpım) çizer, kutuya ortalar ve taşanı kırpar. Sunucunun
@@ -551,7 +570,7 @@ class _DetailScreenState extends State<DetailScreen> {
   Widget _heroContent() {
     final images = _heroImages;
     return SizedBox(
-      height: 350,
+      height: _heroHeight,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -570,12 +589,18 @@ class _DetailScreenState extends State<DetailScreen> {
             PageView.builder(
               controller: _gallery,
               itemCount: images.length,
-              onPageChanged: (i) => setState(() => _photo = i),
+              onPageChanged: (i) {
+                setState(() => _photo = i);
+                _precacheHero(i);
+              },
               itemBuilder: (_, i) => GestureDetector(
                 onTap: _openGalleryGrid,
                 child: i == 0
                     ? _heroFirst(images[0])
-                    : _heroSquare(NetImage(images[i])),
+                    : _heroSquare(NetImage(images[i],
+                        // Önceden yüklendiği için çoğu zaman anında gelir;
+                        // gelmezse açık gri yerine marka zemini.
+                        loading: const ColoredBox(color: AppColors.primarySoft))),
               ),
             ),
           if (images.length > 1)

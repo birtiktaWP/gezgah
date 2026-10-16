@@ -127,10 +127,6 @@ class AuthService {
     return u;
   }
 
-  /// Giriş yapmış üyenin parolasını değiştirir (`/uye/sifre-degistir`).
-  /// Başarılıysa üye token'ı yenilenir. Başarısızsa [AuthException].
-  Future<void> sifreDegistir(String eskiParola, String yeniParola) =>
-      UyeRepository.instance.sifreDegistir(eskiParola, yeniParola);
 
   /// Sunucudan güncel profili (`/uye/me`) çeker ve yerel oturumu yeniler
   /// (Plus/avatar değişimlerinden sonra çağrılır). Token yoksa/geçersizse

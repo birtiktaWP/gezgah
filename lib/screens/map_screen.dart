@@ -399,17 +399,6 @@ class _MapScreenState extends State<MapScreen> {
     setState(() => _markers = markers);
   }
 
-  /// Kategori çipi ikonu. Otopark tipinde alt tipe göre (Açık/Kapalı/Katlı/
-  /// İSPARK…) ortak eşleme kullanılır; diğerlerinde id bazlı eşleme.
-  IconData _catIcon(Category c) {
-    if (_type == _MapType.otopark) {
-      final ic = HomeConfig.otoparkIconFor('${c.name} ${c.slug}');
-      if (ic != null) return ic;
-      return Icons.local_parking;
-    }
-    return HomeConfig.iconFor(c.id);
-  }
-
   /// Mekanın harita ikonunu belirler.
   /// 1) API'den gelen işletmeye özel `custom_ikon` doluysa onu,
   /// 2) otopark tipinde mekanın kategorisine göre otopark alt tip ikonunu,
@@ -666,21 +655,28 @@ class _MapScreenState extends State<MapScreen> {
           itemCount: count,
           separatorBuilder: (_, __) => const SizedBox(width: 10),
           itemBuilder: (_, i) {
-            final label = i == 0 ? 'Tümü' : _cats[i - 1].name;
-            final icon = i == 0
-                ? Icons.explore_outlined
-                : _catIcon(_cats[i - 1]);
-            final svg = i == 0 ? null : HomeConfig.svgFor(_cats[i - 1].id);
-            return CategoryPill(
-              icon: icon,
-              svg: svg,
-              label: label,
+            void onTap() {
+              if (_activeCat == i) return;
+              setState(() => _activeCat = i);
+              _loadPlaces();
+            }
+
+            if (i == 0) {
+              return CategoryPill(
+                icon: Icons.explore_outlined,
+                label: 'Tümü',
+                active: _activeCat == 0,
+                onTap: onTap,
+              );
+            }
+            // Kategorinin gerçek (API) ikonu; yoksa ikonsuz hap. Eskiden id'ye
+            // göre uygulama içi varsayılan ikon çiziliyordu (hep çatal-bıçak).
+            final c = _cats[i - 1];
+            return CategoryPill.fromApi(
+              apiIcon: c.icon,
+              label: c.name,
               active: _activeCat == i,
-              onTap: () {
-                if (_activeCat == i) return;
-                setState(() => _activeCat = i);
-                _loadPlaces();
-              },
+              onTap: onTap,
             );
           },
         ),

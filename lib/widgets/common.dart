@@ -69,6 +69,19 @@ class NetImage extends StatelessWidget {
   @visibleForTesting
   int? cacheWidthFor(BoxConstraints c, double dpr) => _cacheWidth(c, dpr);
 
+  /// [url]'yi, [box] boyutundaki bir `NetImage` (cover) ile **aynı önbellek
+  /// anahtarıyla** önceden indirip belleğe açar. Kaydırmalı görsel
+  /// şeritlerinde sıradaki sayfa hazır gelsin, açık gri yer tutucu (beyaz
+  /// parlama) görünmesin diye.
+  static Future<void> precache(BuildContext context, String url, Size box) {
+    if (url.trim().isEmpty) return Future.value();
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final cw = NetImage(url)._cacheWidth(BoxConstraints.tight(box), dpr);
+    final provider = ResizeImage.resizeIfNeeded(
+        cw, null, CachedNetworkImageProvider(url));
+    return precacheImage(provider, context).catchError((Object _) {});
+  }
+
   int? _cacheWidth(BoxConstraints c, double dpr) {
     if (fit != BoxFit.cover) return null;
     final w = c.hasBoundedWidth ? c.maxWidth : 0.0;
