@@ -1055,6 +1055,15 @@ class ApiPlace {
   );
 }
 
+/// Çoklu sıralama (ARAMA_COKLU_SIRALAMA.md): öncelik sırası KORUNARAK virgüllü
+/// (`distance,likes`). Yalnız 2+ kriter seçiliyse gönderilir; tek kriterde
+/// mevcut `sort=` yeterli olduğu için '' döner.
+String siralarCsv(List<String>? s) {
+  if (s == null) return '';
+  final list = s.where((e) => e.trim().isNotEmpty).toList();
+  return list.length < 2 ? '' : list.join(',');
+}
+
 /// Id listesini API'nin beklediği biçime çevirir: sıralı, virgüllü
 /// (`3,12,40`). Boş/null → '' (parametre hiç gönderilmez).
 String idsCsv(Iterable<int>? ids) {
@@ -1867,6 +1876,7 @@ class HomeRepository {
     double? lat,
     double? lng,
     String? sort,
+    List<String>? siralar,
     List<int>? filtreler,
     List<int>? ozellikler,
     String? type,
@@ -1882,8 +1892,9 @@ class HomeRepository {
 
     final fq = idsCsv(filtreler);
     final oq = idsCsv(ozellikler);
+    final sq = siralarCsv(siralar);
     final key =
-        '$term|$page|$limit|${sort ?? ''}|$fq|$oq|${_coordKey(lat, lng)}|${type ?? ''}';
+        '$term|$page|$limit|${sort ?? ''}|$sq|$fq|$oq|${_coordKey(lat, lng)}|${type ?? ''}';
     final c = _mekanCache[key];
     if (c != null && DateTime.now().difference(c.at) < _searchTtl) {
       return (
@@ -1905,6 +1916,7 @@ class HomeRepository {
         if (lat != null && lng != null) 'lat': lat,
         if (lat != null && lng != null) 'lng': lng,
         if (sort != null && sort.isNotEmpty) 'sort': sort,
+        if (sq.isNotEmpty) 'siralar': sq,
         if (fq.isNotEmpty) 'filtreler': fq,
         if (oq.isNotEmpty) 'ozellikler': oq,
         if (userId != null && userId.isNotEmpty) 'user_id': userId,
@@ -1973,6 +1985,7 @@ class HomeRepository {
     double? lat,
     double? lng,
     String? sort,
+    List<String>? siralar,
     List<int>? filtreler,
     List<int>? ozellikler,
   }) async {
@@ -1987,8 +2000,9 @@ class HomeRepository {
 
     final fq = idsCsv(filtreler);
     final oq = idsCsv(ozellikler);
+    final sq = siralarCsv(siralar);
     final key =
-        '$term|$page|$limit|${sort ?? ''}|$fq|$oq|${_coordKey(lat, lng)}';
+        '$term|$page|$limit|${sort ?? ''}|$sq|$fq|$oq|${_coordKey(lat, lng)}';
     final c = _yemekCache[key];
     if (c != null && DateTime.now().difference(c.at) < _searchTtl) {
       return (
@@ -2009,6 +2023,7 @@ class HomeRepository {
         if (lat != null && lng != null) 'lat': lat,
         if (lat != null && lng != null) 'lng': lng,
         if (sort != null && sort.isNotEmpty) 'sort': sort,
+        if (sq.isNotEmpty) 'siralar': sq,
         if (fq.isNotEmpty) 'filtreler': fq,
         if (oq.isNotEmpty) 'ozellikler': oq,
         if (userId != null && userId.isNotEmpty) 'user_id': userId,

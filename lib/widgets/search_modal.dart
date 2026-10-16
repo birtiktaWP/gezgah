@@ -117,7 +117,10 @@ class _SearchModalState extends State<_SearchModal>
   double? _lat;
   double? _lng;
   bool _hasCoord = false;
-  String _foodSort = 'likes'; // konum gelince 'distance' olur
+  // Çoklu sıralama (ARAMA_COKLU_SIRALAMA.md): kullanıcının seçtiği kriterler,
+  // seçim sırası = öncelik. Boşsa varsayılan kullanılır (bkz. getter'lar).
+  List<String> _foodSorts = const [];
+  List<String> _placeSorts = const [];
   final Set<int> _foodFilters = {}; // seçili filtre id'leri (yemek)
   final Set<int> _placeFilters = {}; // seçili filtre id'leri (mekan)
   List<Filter> _allFilters = const []; // /filtreler (filtre sheet için)
@@ -184,8 +187,8 @@ class _SearchModalState extends State<_SearchModal>
       _lat = loc.lat;
       _lng = loc.lng;
       _hasCoord = true;
-      // Kullanıcı elle bir sıralama seçmediyse mesafeyi varsayılan yap.
-      if (_foodSort == 'likes') _foodSort = 'distance';
+      // Kullanıcı elle sıralama seçmediyse varsayılan kendiliğinden mesafeye
+      // döner (bkz. _foodSortsEff / _placeSortsEff).
     });
     // Konum geç geldiyse ve arama aktifse mesafeye göre yenile.
     final term = _query.trim();
@@ -195,8 +198,56 @@ class _SearchModalState extends State<_SearchModal>
     }
   }
 
-  /// Mekan sekmesi için etkin sıralama (konum varsa mesafe, yoksa alaka).
-  String? get _mekanSort => _hasCoord ? 'distance' : null;
+  /// Etkin sıralama kriterleri (öncelik sırasıyla). Seçim yoksa varsayılan:
+  /// konum varsa mesafe, yoksa yemekte beğeni / mekanda ilgi düzeyi.
+  List<String> get _foodSortsEff => _foodSorts.isNotEmpty
+      ? _foodSorts
+      : [_hasCoord ? 'distance' : 'likes'];
+  List<String> get _placeSortsEff => _placeSorts.isNotEmpty
+      ? _placeSorts
+      : [_hasCoord ? 'distance' : 'relevance'];
+
+  /// Birincil kriter `sort=` ile gider (bugünkü sunucu yalnız bunu tanıyor);
+  /// tamamı öncelik sırasıyla `siralar=` ile.
+  String get _foodSort => _foodSortsEff.first;
+  String? get _mekanSort {
+    final s = _placeSortsEff.first;
+    return s == 'relevance' ? null : s; // ilgi = sunucu varsayılanı
+  }
+
+  /// Sıralama seçenekleri (değer, tam etiket, kısa etiket, dışlayan grup).
+  /// Aynı gruptakiler birlikte seçilemez (fiyat artan/azalan).
+  List<({String v, String label, String short, String? group})>
+      get _foodSortOptions => [
+            if (_hasCoord)
+              (v: 'distance', label: 'Yakınlığa göre', short: 'Yakınlık', group: null),
+            (v: 'likes', label: 'Beğeniye göre', short: 'Beğeni', group: null),
+            (v: 'price_asc', label: 'Fiyat: Artan', short: 'Fiyat ↑', group: 'fiyat'),
+            (v: 'price_desc', label: 'Fiyat: Azalan', short: 'Fiyat ↓', group: 'fiyat'),
+          ];
+  List<({String v, String label, String short, String? group})>
+      get _placeSortOptions => [
+            if (_hasCoord)
+              (v: 'distance', label: 'Yakınlığa göre', short: 'Yakınlık', group: null),
+            (v: 'relevance', label: 'İlgi düzeyine göre', short: 'İlgi', group: null),
+          ];
+
+  /// "Yakınlık · Beğeni" gibi kısa özet (araç çubuğunda).
+  String _sortSummary(List<String> sorts,
+      List<({String v, String label, String short, String? group})> opts) {
+    if (sorts.length == 1) {
+      return opts
+          .firstWhere((o) => o.v == sorts.first,
+              orElse: () => (v: '', label: 'Sıralama', short: '', group: null))
+          .label;
+    }
+    return sorts
+        .map((s) => opts
+            .firstWhere((o) => o.v == s,
+                orElse: () => (v: s, label: s, short: s, group: null))
+            .short)
+        .join(' · ');
+  }
 
   /// Metre → "1.2 km" (yoksa boş).
   String _km(int? m) => m == null ? '' : LocationService.format(m.toDouble());
@@ -297,6 +348,7 @@ class _SearchModalState extends State<_SearchModal>
         lat: _lat,
         lng: _lng,
         sort: _mekanSort,
+        siralar: _placeSortsEff,
         filtreler: _placeFilters.toList(),
         ozellikler: _placeOzellikler.toList(),
         type: _type.slug,
@@ -343,6 +395,7 @@ class _SearchModalState extends State<_SearchModal>
         lat: _lat,
         lng: _lng,
         sort: _foodSort,
+        siralar: _foodSortsEff,
         filtreler: _foodFilters.toList(),
         ozellikler: _foodOzellikler.toList(),
       );
@@ -386,6 +439,7 @@ class _SearchModalState extends State<_SearchModal>
         lat: _lat,
         lng: _lng,
         sort: _mekanSort,
+        siralar: _placeSortsEff,
         filtreler: _placeFilters.toList(),
         ozellikler: _placeOzellikler.toList(),
         type: _type.slug,
@@ -417,6 +471,7 @@ class _SearchModalState extends State<_SearchModal>
         lat: _lat,
         lng: _lng,
         sort: _foodSort,
+        siralar: _foodSortsEff,
         filtreler: _foodFilters.toList(),
         ozellikler: _foodOzellikler.toList(),
       );
@@ -479,74 +534,189 @@ class _SearchModalState extends State<_SearchModal>
     setState(() => _history = const []);
   }
 
-  /// Yemekler sekmesi sıralama seçimi (bottom sheet).
-  void _openFoodSort() {
-    final options = <(String, String)>[
-      if (_hasCoord) ('distance', 'Yakınlığa göre'),
-      ('price_asc', 'Fiyat: Artan'),
-      ('price_desc', 'Fiyat: Azalan'),
-      ('likes', 'Beğeniye göre'),
-    ];
-    showModalBottomSheet(
+  /// Yemekler sekmesi sıralama (çoklu seçim).
+  Future<void> _openFoodSort() async {
+    final r = await _showSortSheet(_foodSortOptions, _foodSortsEff);
+    if (r == null || !mounted || _sameList(r, _foodSortsEff)) return;
+    setState(() => _foodSorts = r);
+    final term = _query.trim();
+    if (term.length >= 2) _runFood(term);
+  }
+
+  /// Mekanlar sekmesi sıralama (çoklu seçim).
+  Future<void> _openPlaceSort() async {
+    final r = await _showSortSheet(_placeSortOptions, _placeSortsEff);
+    if (r == null || !mounted || _sameList(r, _placeSortsEff)) return;
+    setState(() => _placeSorts = r);
+    final term = _query.trim();
+    if (term.length >= 2) _runMekan(term);
+  }
+
+  static bool _sameList(List<String> a, List<String> b) =>
+      a.length == b.length &&
+      Iterable.generate(a.length).every((i) => a[i] == b[i]);
+
+  /// Çoklu sıralama paneli (filtre paneli gibi): birden fazla kriter seçilir,
+  /// seçim sırası öncelik olur (1, 2, 3 rozetleri). Aynı gruptaki kriterler
+  /// (fiyat artan/azalan) birbirini değiştirir. "Uygula" ile döner; boş seçim
+  /// = varsayılan (boş liste döner). Kapatılırsa null.
+  Future<List<String>?> _showSortSheet(
+    List<({String v, String label, String short, String? group})> options,
+    List<String> current,
+  ) {
+    final valid = options.map((o) => o.v).toSet();
+    var sel = current.where(valid.contains).toList();
+    return showModalBottomSheet<List<String>>(
       context: context,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
-      builder: (ctx) => SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(22, 18, 22, 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Sırala',
-                    style: TextStyle(
-                        fontSize: 17, fontWeight: FontWeight.w600)),
-              ),
-            ),
-            for (final o in options)
-              InkWell(
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _applyFoodSort(o.$1);
-                },
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          void toggle(({String v, String label, String short, String? group}) o) {
+            HapticFeedback.selectionClick();
+            setSheet(() {
+              if (sel.contains(o.v)) {
+                sel = [...sel]..remove(o.v);
+                return;
+              }
+              // Aynı gruptaki (ör. fiyat artan/azalan) seçimin yerine geçer.
+              final g = o.group;
+              final i = g == null
+                  ? -1
+                  : sel.indexWhere((s) =>
+                      options.any((x) => x.v == s && x.group == g));
+              sel = [...sel];
+              if (i >= 0) {
+                sel[i] = o.v;
+              } else {
+                sel.add(o.v);
+              }
+            });
+          }
+
+          return SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 18, 12, 2),
                   child: Row(
                     children: [
-                      Expanded(
-                        child: Text(o.$2,
+                      const Expanded(
+                        child: Text('Sırala',
                             style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: _foodSort == o.$1
-                                    ? FontWeight.w600
-                                    : FontWeight.w500,
-                                color: _foodSort == o.$1
-                                    ? AppColors.primary
-                                    : AppColors.ink)),
+                                fontSize: 17, fontWeight: FontWeight.w600)),
                       ),
-                      if (_foodSort == o.$1)
-                        const Icon(Icons.check, color: AppColors.primary),
+                      if (sel.isNotEmpty)
+                        TextButton(
+                          onPressed: () => setSheet(() => sel = []),
+                          child: const Text('Temizle',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primary)),
+                        ),
                     ],
                   ),
                 ),
-              ),
-            const SizedBox(height: 8),
-          ],
-        ),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(22, 0, 22, 6),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                        'Birden fazla seçebilirsin; seçim sırası önceliği belirler.',
+                        style: TextStyle(fontSize: 12.5, color: AppColors.muted)),
+                  ),
+                ),
+                for (final o in options)
+                  Semantics(
+                    button: true,
+                    selected: sel.contains(o.v),
+                    label: sel.contains(o.v)
+                        ? '${o.label}, ${sel.indexOf(o.v) + 1}. öncelik'
+                        : o.label,
+                    excludeSemantics: true,
+                    child: InkWell(
+                      onTap: () => toggle(o),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 22, vertical: 13),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(o.label,
+                                  style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: sel.contains(o.v)
+                                          ? FontWeight.w600
+                                          : FontWeight.w500,
+                                      color: sel.contains(o.v)
+                                          ? AppColors.primary
+                                          : AppColors.ink)),
+                            ),
+                            _sortCheck(
+                                sel.contains(o.v) ? sel.indexOf(o.v) + 1 : 0,
+                                showNumber: sel.length > 1),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 10, 22, 12),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx, sel),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: const Text('Uygula',
+                          style: TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 
-  void _applyFoodSort(String s) {
-    if (s == _foodSort) return;
-    setState(() => _foodSort = s);
-    final term = _query.trim();
-    if (term.length >= 2) _runFood(term);
+  /// Seçim göstergesi: seçili değilse boş kutu; tek seçimde ✓, çoklu
+  /// seçimde öncelik numarası.
+  Widget _sortCheck(int order, {required bool showNumber}) {
+    final on = order > 0;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      width: 24,
+      height: 24,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: on ? AppColors.primary : Colors.white,
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(
+            color: on ? AppColors.primary : AppColors.line, width: 1.5),
+      ),
+      child: !on
+          ? null
+          : showNumber
+              ? Text('$order',
+                  style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white))
+              : const Icon(Icons.check, size: 16, color: Colors.white),
+    );
   }
 
   /// Yemekler sekmesi filtre seçimi (bottom sheet, /filtreler).
@@ -972,12 +1142,16 @@ class _SearchModalState extends State<_SearchModal>
       child: Row(
         children: [
           Expanded(
-            child: Text(_hasCoord ? 'Yakınlığa göre' : 'İlgi düzeyine göre',
+            child: Text(_sortSummary(_placeSortsEff, _placeSortOptions),
                 style: const TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                     color: AppColors.muted)),
           ),
+          GestureDetector(
+              onTap: _openPlaceSort,
+              child: _sfBtn(Icons.swap_vert, active: _placeSorts.length > 1)),
+          const SizedBox(width: 8),
           GestureDetector(
             onTap: _openPlaceFilter,
             child: _sfBtn(Icons.filter_list,
@@ -1062,12 +1236,7 @@ class _SearchModalState extends State<_SearchModal>
     );
   }
 
-  String get _foodSortLabel => switch (_foodSort) {
-        'distance' => 'Yakınlığa göre',
-        'price_asc' => 'Fiyat: Artan',
-        'price_desc' => 'Fiyat: Azalan',
-        _ => 'Beğeniye göre',
-      };
+  String get _foodSortLabel => _sortSummary(_foodSortsEff, _foodSortOptions);
 
   Widget _foodToolbar() {
     return Padding(
@@ -1081,7 +1250,9 @@ class _SearchModalState extends State<_SearchModal>
                     fontWeight: FontWeight.w600,
                     color: AppColors.muted)),
           ),
-          GestureDetector(onTap: _openFoodSort, child: _sfBtn(Icons.swap_vert)),
+          GestureDetector(
+              onTap: _openFoodSort,
+              child: _sfBtn(Icons.swap_vert, active: _foodSorts.length > 1)),
           const SizedBox(width: 8),
           GestureDetector(
             onTap: _openFoodFilter,
