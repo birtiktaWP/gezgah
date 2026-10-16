@@ -290,17 +290,9 @@ class ListTileCard extends StatelessWidget {
               SizedBox(
                 width: 108,
                 height: 108,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    heroImage(heroTag, place.thumb(ThumbSize.square)),
-                    Positioned(
-                      left: 8,
-                      top: 8,
-                      child: OpenDot(open: place.state != OpenState.closing),
-                    ),
-                  ],
-                ),
+                // Açık/kapalı rozeti artık görselin üstünde değil, ad
+                // altındaki satırda (bkz. _OpenStatusLine).
+                child: heroImage(heroTag, place.thumb(ThumbSize.square)),
               ),
             Expanded(
               child: Padding(
@@ -332,10 +324,13 @@ class ListTileCard extends StatelessWidget {
                         FavHeart(postId: place.id, circle: false, size: 20),
                       ],
                     ),
-                    const SizedBox(height: 6),
-                    Text(place.subtitle,
-                        style: const TextStyle(
-                            fontSize: 11.5, color: AppColors.muted)),
+                    // "Restoran / Plaj…" tür yazısı yerine gerçek açık/kapalı
+                    // durumu (çalışma saatlerinden). Saat bilgisi yoksa satır
+                    // gösterilmez; uydurma "Açık" yazılmaz.
+                    if (place.acikDurum != null) ...[
+                      const SizedBox(height: 6),
+                      OpenStatusLine(status: place.acikDurum!),
+                    ],
                     const SizedBox(height: 10),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -386,11 +381,6 @@ class ListTileCard extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   heroImage(heroTag, place.thumb(ThumbSize.wide)),
-                  Positioned(
-                    left: 8,
-                    top: 8,
-                    child: OpenDot(open: place.state != OpenState.closing),
-                  ),
                 ],
               ),
             ),
@@ -416,10 +406,10 @@ class ListTileCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  Text(place.subtitle,
-                      style: const TextStyle(
-                          fontSize: 11.5, color: AppColors.muted)),
+                  if (place.acikDurum != null) ...[
+                    const SizedBox(height: 6),
+                    OpenStatusLine(status: place.acikDurum!),
+                  ],
                   const SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,

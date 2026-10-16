@@ -39,6 +39,11 @@ class NetImage extends StatelessWidget {
   /// Görsel yüklenince belirme süresi.
   final Duration fadeIn;
 
+  /// Verilirse yüklenirken ve hata durumunda açık gri kutu yerine bu çizilir.
+  /// Koyu zeminli tam ekran galeri için (gri kutu orada beyaz parlama gibi
+  /// görünüyordu).
+  final Widget? loading;
+
   /// true ise [url] değiştiğinde yeni görsel hazır olana kadar eski görsel
   /// ekranda kalır (gri zemin + yeniden yükleme görünmez). Detayda küçük
   /// önizlemeden büyük görsele geçişte "baştan yükleniyor" etkisini önler.
@@ -50,7 +55,8 @@ class NetImage extends StatelessWidget {
       this.placeholderUrl,
       this.gapless = false,
       this.transparentPlaceholder = false,
-      this.fadeIn = const Duration(milliseconds: 120)});
+      this.fadeIn = const Duration(milliseconds: 120),
+      this.loading});
 
   static const Color _bg = Color(0xFFEDEDF3);
 
@@ -94,7 +100,9 @@ class NetImage extends StatelessWidget {
         // Kısa solma: önbellekten gelen görseller beklemiş gibi görünmesin.
         fadeInDuration: fadeIn,
         fadeOutDuration: const Duration(milliseconds: 80),
-        placeholder: (c, _) => transparentPlaceholder
+        placeholder: (c, _) => loading != null
+            ? loading!
+            : transparentPlaceholder
             ? const SizedBox.expand()
             : ph.isEmpty
             ? Container(color: _bg)
@@ -106,11 +114,15 @@ class NetImage extends StatelessWidget {
                 placeholder: (c, _) => Container(color: _bg),
                 errorWidget: (c, _, __) => Container(color: _bg),
               ),
-        errorWidget: (c, _, __) => Container(
-          color: _bg,
-          child: const Icon(Icons.image_not_supported_outlined,
-              color: AppColors.muted),
-        ),
+        errorWidget: (c, _, __) => loading != null
+            ? const Center(
+                child: Icon(Icons.image_not_supported_outlined,
+                    color: Colors.white54, size: 40))
+            : Container(
+                color: _bg,
+                child: const Icon(Icons.image_not_supported_outlined,
+                    color: AppColors.muted),
+              ),
       );
     });
   }
@@ -491,6 +503,47 @@ class OpenDot extends StatelessWidget {
           Text(open ? 'Açık' : 'Kapanıyor',
               style: TextStyle(
                   fontSize: 10.5, fontWeight: FontWeight.w600, color: color)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Liste kartındaki açık/kapalı satırı (çalışma saatlerinden hesaplanır):
+/// "● Açık · 02:00'a kadar" (yeşil) ya da "● Kapalı" (kırmızı).
+class OpenStatusLine extends StatelessWidget {
+  final ({bool open, String? until}) status;
+  const OpenStatusLine({super.key, required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final open = status.open;
+    final color = open ? AppColors.open : AppColors.closing;
+    final label = open ? 'Açık' : 'Kapalı';
+    final until = open && status.until != null ? "${status.until}'a kadar" : '';
+    return Semantics(
+      label: until.isEmpty ? 'Şu an $label' : 'Şu an $label, $until',
+      excludeSemantics: true,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 5),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 11.5, fontWeight: FontWeight.w600, color: color)),
+          if (until.isNotEmpty)
+            Flexible(
+              child: Text(' · $until',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 11.5, color: AppColors.muted)),
+            ),
         ],
       ),
     );

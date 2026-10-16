@@ -960,6 +960,10 @@ class ApiPlace {
   /// (`/mekanlar/yakindakiler`, `/arama`); diske cache'lenmez (MESAFE-MOBIL.md).
   final int? mesafeM;
 
+  /// Gün → çalışma saati (`calisma_saatleri`). Liste uçları gönderirse dolu
+  /// (ACIK_KAPALI_LISTE.md); bugün göndermiyor → boş.
+  final Map<String, String> calismaSaatleri;
+
   const ApiPlace({
     required this.id,
     required this.name,
@@ -979,6 +983,7 @@ class ApiPlace {
     this.thumbCard,
     this.thumbWide,
     this.mesafeM,
+    this.calismaSaatleri = const {},
   });
 
   /// Ekran alanına göre en uygun görsel: istenen boyut → `thumbnail` → `image`.
@@ -1452,6 +1457,7 @@ class HomeRepository {
               .toList() ??
           const [],
       mesafeM: ap.mesafeM,
+      calismaSaatleri: ap.calismaSaatleri,
       thumbnail: ap.thumbnail,
       thumbSquare: ap.thumbSquare,
       thumbCard: ap.thumbCard,
@@ -1789,6 +1795,7 @@ class HomeRepository {
     filterIds: ap.filterIds,
     ozellikIds: ap.ozellikIds,
     mesafeM: ap.mesafeM,
+    calismaSaatleri: ap.calismaSaatleri,
     thumbnail: ap.thumbnail,
     thumbSquare: ap.thumbSquare,
     thumbCard: ap.thumbCard,
@@ -2403,6 +2410,7 @@ class HomeRepository {
       thumbCard: thumbs.card,
       thumbWide: thumbs.wide,
       mesafeM: parseMesafeM(j),
+      calismaSaatleri: parseCalismaSaatleri(j['calisma_saatleri']),
     );
   }
 

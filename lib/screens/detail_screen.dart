@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -432,47 +433,9 @@ class _DetailScreenState extends State<DetailScreen> {
 
   /// Çalışma saatlerine göre şu an açık mı? Açıksa kapanış saatini de döner.
   /// Gece yarısını aşan aralıklar (ör. 18:00–01:00) desteklenir.
-  ({bool open, String? until}) _openStatus(PlaceDetail d) {
-    final cs = d.calismaSaatleri;
-    final now = DateTime.now();
-    final nowMin = now.hour * 60 + now.minute;
-
-    (int, int)? parse(String? v) {
-      if (v == null || v.isEmpty) return null;
-      final m = RegExp(r'(\d{1,2}):(\d{2})\D+(\d{1,2}):(\d{2})').firstMatch(v);
-      if (m == null) return null;
-      final s = int.parse(m.group(1)!) * 60 + int.parse(m.group(2)!);
-      final e = int.parse(m.group(3)!) * 60 + int.parse(m.group(4)!);
-      return (s, e);
-    }
-
-    String fmtEnd(int end) {
-      final h = (end ~/ 60) % 24;
-      final mm = end % 60;
-      return '${h.toString().padLeft(2, '0')}:${mm.toString().padLeft(2, '0')}';
-    }
-
-    final todayKey = _days[now.weekday - 1].$1;
-    final today = parse(cs[todayKey]);
-    if (today != null) {
-      final (s, e) = today;
-      if (e > s) {
-        if (nowMin >= s && nowMin < e) return (open: true, until: fmtEnd(e));
-      } else if (nowMin >= s) {
-        // Gece yarısını aşan aralık: başlangıçtan sonra açık (ertesi güne dek).
-        return (open: true, until: fmtEnd(e));
-      }
-    }
-
-    // Dünden devam eden gece aralığı (ör. dün 18:00–01:00, şu an 00:30).
-    final yesterday = parse(cs[_days[(now.weekday - 2 + 7) % 7].$1]);
-    if (yesterday != null) {
-      final (s, e) = yesterday;
-      if (e <= s && nowMin < e) return (open: true, until: fmtEnd(e));
-    }
-
-    return (open: false, until: null);
-  }
+  /// Hesaplama liste kartlarıyla ortak (`acikDurumu`, models.dart).
+  ({bool open, String? until}) _openStatus(PlaceDetail d) =>
+      acikDurumu(d.calismaSaatleri) ?? (open: false, until: null);
 
   /// "Şu an açık · kapanış'a kadar" (yeşil) veya "Şu an kapalı" (kırmızı).
   Widget _statusStrip(PlaceDetail d) {
@@ -1826,6 +1789,28 @@ class _GalleryViewerState extends State<_GalleryViewer> {
       PageController(initialPage: widget.initialIndex);
   late int _index = widget.initialIndex;
 
+  bool _precached = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_precached) return;
+    _precached = true;
+    _precacheAround(_index);
+  }
+
+  /// Komşu fotoğrafları önceden indirip açar: kaydırınca yeni sayfa hazır
+  /// gelsin, yükleniyor aşaması hiç görünmesin.
+  void _precacheAround(int i) {
+    for (final j in [i - 1, i + 1, i + 2]) {
+      if (j < 0 || j >= widget.images.length) continue;
+      final u = widget.images[j];
+      if (u.trim().isEmpty) continue;
+      precacheImage(CachedNetworkImageProvider(u), context)
+          .catchError((Object _) {});
+    }
+  }
+
   @override
   void dispose() {
     _pc.dispose();
@@ -1834,21 +1819,42 @@ class _GalleryViewerState extends State<_GalleryViewer> {
 
   @override
   Widget build(BuildContext context) {
+    // Opak siyah zemin: sayfalar arası boşlukta / yüklenirken arkadaki detay
+    // sayfası ya da açık gri yer tutucu görünmesin (beyaz parlama buydu).
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: Colors.black,
       body: Stack(
         children: [
           PageView.builder(
             controller: _pc,
             itemCount: widget.images.length,
-            onPageChanged: (i) => setState(() => _index = i),
+            onPageChanged: (i) {
+              setState(() => _index = i);
+              _precacheAround(i);
+            },
             itemBuilder: (_, i) => GestureDetector(
               onTap: () => Navigator.pop(context),
-              child: InteractiveViewer(
-                minScale: 1,
-                maxScale: 4,
-                child: Center(
-                  child: NetImage(widget.images[i], fit: BoxFit.contain),
+              child: ColoredBox(
+                color: Colors.black,
+                child: InteractiveViewer(
+                  minScale: 1,
+                  maxScale: 4,
+                  child: Center(
+                    child: NetImage(
+                      widget.images[i],
+                      fit: BoxFit.contain,
+                      fadeIn: const Duration(milliseconds: 150),
+                      // Yüklenirken açık gri kutu yerine koyu zeminde gösterge.
+                      loading: const Center(
+                        child: SizedBox(
+                          width: 26,
+                          height: 26,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2.2, color: Colors.white70),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -2288,8 +2294,9 @@ void openVideoPlayer(BuildContext context, MekanVideo video) {
 void openGalleryViewer(BuildContext context, List<String> images, int index) {
   if (images.isEmpty) return;
   Navigator.of(context).push(PageRouteBuilder(
-    opaque: false,
-    barrierColor: Colors.black,
+    // Opak rota: açıldıktan sonra arkadaki (beyaz) detay sayfası hiç
+    // çizilmez; kaydırma sırasında sayfa kenarında beyaz görünmez.
+    opaque: true,
     transitionDuration: const Duration(milliseconds: 220),
     pageBuilder: (_, __, ___) =>
         _GalleryViewer(images: images, initialIndex: index),

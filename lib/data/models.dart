@@ -26,7 +26,13 @@ class Place {
   final List<int> filterIds; // aktif filtre id'leri (filtre_{id}=1)
   final List<int> ozellikIds; // mekanın özellik id'leri (restoran_ozellik)
   final int? mesafeM; // sunucunun tahmini yol mesafesi (m); gelmezse null
+  // Gün → "07:30 - 02:00" (`calisma_saatleri`). Liste uçları gönderirse dolu;
+  // boşsa açık/kapalı bilinmez ve kartta gösterilmez (ACIK_KAPALI_LISTE.md).
+  final Map<String, String> calismaSaatleri;
   bool favorite;
+
+  /// Şu an açık mı (çalışma saatlerinden). Bilinmiyorsa null.
+  ({bool open, String? until})? get acikDurum => acikDurumu(calismaSaatleri);
 
   // Önceden üretilmiş thumbnail'ler (thumbnail-update.md). Öne çıkan görseli
   // olmayan mekanlarda null olabilir → `image`'a düşülür.
@@ -54,6 +60,7 @@ class Place {
     this.filterIds = const [],
     this.ozellikIds = const [],
     this.mesafeM,
+    this.calismaSaatleri = const {},
     this.favorite = false,
     this.thumbnail,
     this.thumbSquare,
@@ -1564,6 +1571,70 @@ class MenuUrun {
       icindekiler: (j['icindekiler'] as String?)?.trim() ?? '',
     );
   }
+}
+
+/// Gün anahtarları (`calisma_saatleri` sözlüğü), Pazartesi = 1 sırasıyla.
+const List<String> kGunAnahtarlari = [
+  'pazartesi', 'sali', 'carsamba', 'persembe', 'cuma', 'cumartesi', 'pazar',
+];
+
+/// `calisma_saatleri` ham değerini gün → "18:00 - 01:00" sözlüğüne çevirir.
+/// Boş / "Kapalı" günler atlanır. Alan yoksa boş sözlük.
+Map<String, String> parseCalismaSaatleri(dynamic raw) {
+  final out = <String, String>{};
+  if (raw is! Map) return out;
+  raw.forEach((k, v) {
+    final s = v?.toString().trim() ?? '';
+    if (s.isNotEmpty && s.toLowerCase() != 'kapalı' && s.toLowerCase() != 'kapali') {
+      out[k.toString().toLowerCase()] = s;
+    }
+  });
+  return out;
+}
+
+/// Çalışma saatlerine göre şu an açık mı? Açıksa kapanış saati ("02:00").
+/// Gece yarısını aşan aralıklar (ör. 18:00–01:00) desteklenir.
+/// Saat bilgisi hiç yoksa `null` (bilinmiyor) döner.
+({bool open, String? until})? acikDurumu(Map<String, String> cs,
+    {DateTime? now}) {
+  if (cs.isEmpty) return null;
+  final t = now ?? DateTime.now();
+  final nowMin = t.hour * 60 + t.minute;
+
+  (int, int)? parse(String? v) {
+    if (v == null || v.isEmpty) return null;
+    final m = RegExp(r'(\d{1,2}):(\d{2})\D+(\d{1,2}):(\d{2})').firstMatch(v);
+    if (m == null) return null;
+    final s = int.parse(m.group(1)!) * 60 + int.parse(m.group(2)!);
+    final e = int.parse(m.group(3)!) * 60 + int.parse(m.group(4)!);
+    return (s, e);
+  }
+
+  String fmtEnd(int end) {
+    final h = (end ~/ 60) % 24;
+    final mm = end % 60;
+    return '${h.toString().padLeft(2, '0')}:${mm.toString().padLeft(2, '0')}';
+  }
+
+  final today = parse(cs[kGunAnahtarlari[t.weekday - 1]]);
+  if (today != null) {
+    final (s, e) = today;
+    if (s == e) return (open: true, until: null); // 24 saat (00:00 - 00:00)
+    if (e > s) {
+      if (nowMin >= s && nowMin < e) return (open: true, until: fmtEnd(e));
+    } else if (nowMin >= s) {
+      // Gece yarısını aşan aralık: başlangıçtan sonra açık (ertesi güne dek).
+      return (open: true, until: fmtEnd(e));
+    }
+  }
+
+  // Dünden devam eden gece aralığı (ör. dün 18:00–01:00, şu an 00:30).
+  final yesterday = parse(cs[kGunAnahtarlari[(t.weekday - 2 + 7) % 7]]);
+  if (yesterday != null) {
+    final (s, e) = yesterday;
+    if (e < s && nowMin < e) return (open: true, until: fmtEnd(e));
+  }
+  return (open: false, until: null);
 }
 
 /// Sunucunun tahmini yol mesafesi (metre): önce `mesafe_m`, yoksa
