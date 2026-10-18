@@ -45,3 +45,6 @@ app.*.map.json
 
 # Yerel dokümantasyon (repoya gönderilmez)
 .readme/
+.agents/
+# Hiçbir markdown dosyası repoya gönderilmez (yerelde kalır).
+*.md
