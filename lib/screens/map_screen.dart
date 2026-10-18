@@ -136,10 +136,14 @@ class _MapScreenState extends State<MapScreen> {
     if (wantId != null) {
       var idx = _cats.indexWhere((c) => c.id == wantId);
       // Listede yoksa (alt kategori / mekan sayısı 0), tam listeden bulup öne
-      // ekle ki sekme her zaman mevcut ve seçili gelsin.
+      // ekle ki sekme her zaman mevcut ve seçili gelsin. Kaynak tüm ağaç
+      // (`/kategoriler/agac`): `kategoriler()` yalnız kök/öne çıkanları
+      // döndüğü için alt kategoriler (ör. Kahvaltı > Gözleme & Pişi)
+      // bulunamıyor, harita "Tümü" ile açılıyordu. `/harita?kategori=` alt
+      // kategori id'siyle doğru süzüyor.
       if (idx == -1) {
         try {
-          final all = await HomeRepository.instance.kategoriler();
+          final all = await HomeRepository.instance.kategorilerAgac();
           final found = all.where((c) => c.id == wantId).toList();
           if (found.isNotEmpty) {
             _cats = [found.first, ..._cats];
@@ -817,7 +821,7 @@ class _MapScreenState extends State<MapScreen> {
   void _openDetail(ApiPlace p, String loc) {
     Navigator.push(
         context,
-        MaterialPageRoute(
+        detailRoute(
             builder: (_) => DetailScreen(
                 place: p.toPlace(subtitle: loc.isNotEmpty ? loc : 'Konum'),
                 type: _type == _MapType.mekan ? null : _type.slug,

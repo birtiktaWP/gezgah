@@ -570,9 +570,20 @@ class UyeRepository {
     return AuthException(msg ?? _dioMessage(e));
   }
 
-  /// `GET /ilceler` — üye formundaki ilçe seçimi (hepsi İstanbul). Hata/boşsa
-  /// boş liste döner (form ilçesiz de çalışır).
+  /// `GET /ilceler` — üye formundaki ilçe seçimi ve liste ekranlarındaki
+  /// bölge filtresi (hepsi İstanbul). Başarılı yanıt oturum boyunca bellekte
+  /// tutulur (liste sabit). Hata/boşsa boş liste döner.
   Future<List<Ilce>> ilceler() async {
+    final cached = _ilceCache;
+    if (cached != null) return cached;
+    final list = await _fetchIlceler();
+    if (list.isNotEmpty) _ilceCache = list;
+    return list;
+  }
+
+  List<Ilce>? _ilceCache;
+
+  Future<List<Ilce>> _fetchIlceler() async {
     try {
       final res = await _dio.get('/ilceler');
       final body = res.data;
@@ -584,7 +595,7 @@ class UyeRepository {
           .map(Ilce.fromJson)
           .where((i) => i.id > 0 && i.ad.isNotEmpty)
           .toList();
-      list.sort((a, b) => a.ad.toLowerCase().compareTo(b.ad.toLowerCase()));
+      list.sort((a, b) => trCompare(a.ad, b.ad));
       return list;
     } catch (_) {
       return const [];
@@ -1015,6 +1026,9 @@ class ApiPlace {
   /// için; gelmezse boş.
   final String date;
 
+  /// İlçe id'si (`bolge`; `/ilceler` id'leriyle aynı). Bölge filtresi için.
+  final int? bolgeId;
+
   const ApiPlace({
     required this.id,
     required this.name,
@@ -1036,6 +1050,7 @@ class ApiPlace {
     this.mesafeM,
     this.calismaSaatleri = const {},
     this.date = '',
+    this.bolgeId,
   });
 
   /// Ekran alanına göre en uygun görsel: istenen boyut → `thumbnail` → `image`.
@@ -1119,6 +1134,27 @@ String siralarCsv(List<String>? s) {
   if (s == null) return '';
   final list = s.where((e) => e.trim().isNotEmpty).toList();
   return list.length < 2 ? '' : list.join(',');
+}
+
+/// Türkçe alfabe sırasıyla karşılaştırma (a b c ç d … ö p … ş t u ü …).
+/// Düz `compareTo` Ç/Ö/Ş/Ü/İ ile başlayanları listenin sonuna atıyordu
+/// (ör. "Çatalca", "Şile", "Üsküdar" en altta).
+int trCompare(String a, String b) {
+  const order = 'aâbcçdefgğhıiîjklmnoöprsştuüûvyz';
+  int rank(int ch) {
+    final i = order.indexOf(String.fromCharCode(ch));
+    return i < 0 ? 1000 + ch : i;
+  }
+
+  String low(String s) =>
+      s.replaceAll('I', 'ı').replaceAll('İ', 'i').toLowerCase();
+  final x = low(a).runes.toList();
+  final y = low(b).runes.toList();
+  for (var i = 0; i < x.length && i < y.length; i++) {
+    final c = rank(x[i]).compareTo(rank(y[i]));
+    if (c != 0) return c;
+  }
+  return x.length.compareTo(y.length);
 }
 
 /// Id listesini API'nin beklediği biçime çevirir: sıralı, virgüllü
@@ -1510,6 +1546,7 @@ class HomeRepository {
               .toList() ??
           const [],
       mesafeM: ap.mesafeM,
+      bolgeId: ap.bolgeId,
       calismaSaatleri: ap.calismaSaatleri,
       thumbnail: ap.thumbnail,
       thumbSquare: ap.thumbSquare,
@@ -1781,12 +1818,16 @@ class HomeRepository {
   /// derinlerinde olsa bile ilk sayfada görünür.
   /// [kategori] verilirse yalnız o kategorideki yerler döner (`kategori=`,
   /// sunucuda süzülür; tipin kategorileri `kategorilerTip`'ten gelir).
+  /// [bolge] (ilçe id'si, `/ilceler`) verilirse sunucuda o ilçeye süzülür.
+  /// Sunucu şu an tek id kabul ediyor (`bolge=1,30` → 0 kayıt;
+  /// LISTE_BOLGE_FILTRE.md).
   Future<({List<Place> items, bool hasMore, int? nextPage, int total})> yerler(
     String type, {
     int page = 1,
     int limit = 20,
     List<int>? filtreler,
     int? kategori,
+    int? bolge,
   }) async {
     final fq = (filtreler == null || filtreler.isEmpty)
         ? ''
@@ -1800,6 +1841,7 @@ class HomeRepository {
           'limit': limit,
           if (fq.isNotEmpty) 'filtreler': fq,
           if (kategori != null && kategori > 0) 'kategori': kategori,
+          if (bolge != null && bolge > 0) 'bolge': bolge,
           ..._locQuery(),
         },
       );
@@ -1855,6 +1897,7 @@ class HomeRepository {
     mesafeM: ap.mesafeM,
     calismaSaatleri: ap.calismaSaatleri,
     date: ap.date,
+    bolgeId: ap.bolgeId,
     thumbnail: ap.thumbnail,
     thumbSquare: ap.thumbSquare,
     thumbCard: ap.thumbCard,
@@ -2471,6 +2514,11 @@ class HomeRepository {
       mesafeM: parseMesafeM(j),
       calismaSaatleri: parseCalismaSaatleri(j['calisma_saatleri']),
       date: (j['date'] as String?)?.trim() ?? '',
+      // `bolge` metin ("23") ya da sayı gelebilir; 0/boş = bilinmiyor.
+      bolgeId: switch (int.tryParse('${j['bolge'] ?? ''}'.trim())) {
+        final v? when v > 0 => v,
+        _ => null,
+      },
     );
   }
 

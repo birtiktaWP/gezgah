@@ -189,7 +189,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openDetail(Place p, {Object? heroTag}) {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      detailRoute(
         builder: (_) => DetailScreen(place: p, heroTag: heroTag),
       ),
     );

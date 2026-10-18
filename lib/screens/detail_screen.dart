@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/cupertino.dart' show CupertinoPageRoute;
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,10 +22,18 @@ import '../widgets/onayli_modal.dart';
 import '../widgets/confetti.dart';
 import '../widgets/kedy_chat.dart';
 import '../widgets/reservation_sheet.dart';
+import '../widgets/skeleton.dart';
 import '../widgets/tabbar.dart';
 import 'event_detail_screen.dart';
 import 'login_screen.dart';
 import 'menu_screen.dart';
+
+/// Detay sayfasının açılış geçişi: her platformda sağdan sola kayarak gelir
+/// (iOS tarzı; soldan kenar kaydırmasıyla geri dönülebilir). Android'in
+/// varsayılan büyüyerek/solarak açılma geçişi kullanılmaz. Sayfa veri
+/// beklemeden açılır, detay gelene kadar gri iskelet görünür.
+Route<T> detailRoute<T>({required WidgetBuilder builder}) =>
+    CupertinoPageRoute<T>(builder: builder);
 
 /// Mekan detay ekranı (`GET /mekanlar/{id}`, MEKAN_DETAY.md).
 ///
@@ -61,12 +70,10 @@ class _DetailScreenState extends State<DetailScreen> {
   bool _loading = true;
   PlaceDetail? _detail;
 
-  // Giriş videosu: detayda `videolar[]` doluysa ilk video, detay sayfası
-  // görünmeden önce tam ekran ve kontrolsüz oynatılır (atlanamaz), bitince
-  // kapanır. Detay gelene kadar sayfa bir örtüyle gizlenir; detay geç
-  // gelirse örtü [_introCoverMax] sonra kalkar, video yine de oynatılır.
-  bool _introCover = true;
-  static const Duration _introCoverMax = Duration(milliseconds: 1500);
+  // Giriş videosu: detayda `videolar[]` doluysa ilk video tam ekran ve
+  // kontrolsüz oynatılır (atlanamaz), bitince kapanır. Sayfa artık örtü +
+  // spinner ile gizlenmiyor: sağdan kayarak hemen açılır, detay gelene kadar
+  // gri iskelet görünür; video varsa detay gelince sayfanın üstüne açılır.
 
   // Rezervasyon seçenekleri (rezervasyon-api.md). `aktif` (Gezgah Plus) ise
   // footer'daki "Rezerve" butonu etkinleşir. Detay ile birlikte çekilir.
@@ -99,9 +106,6 @@ class _DetailScreenState extends State<DetailScreen> {
     _scroll.addListener(() {
       final show = _scroll.offset > 60;
       if (show != _showTabbar) setState(() => _showTabbar = show);
-    });
-    Future.delayed(_introCoverMax, () {
-      if (mounted && _introCover) setState(() => _introCover = false);
     });
     // Detay görüntülenmesi: sayfa her açılışta bir kez (GORUNTULENME.md).
     ViewTracker.instance.detay(widget.place.id);
@@ -146,8 +150,7 @@ class _DetailScreenState extends State<DetailScreen> {
     _fetchRezervasyon();
   }
 
-  /// `videolar[]` varsa ilk videoyu zorunlu giriş videosu olarak oynatır;
-  /// ardından (ya da video yoksa hemen) örtüyü kaldırır.
+  /// `videolar[]` varsa ilk videoyu zorunlu giriş videosu olarak oynatır.
   Future<void> _playIntro(PlaceDetail? d) async {
     // iOS WebM oynatamaz → orada ilk oynatılabilir videoya geç.
     final ios = defaultTargetPlatform == TargetPlatform.iOS;
@@ -158,20 +161,15 @@ class _DetailScreenState extends State<DetailScreen> {
                 (v.mime == 'video/webm' ||
                     v.url.toLowerCase().endsWith('.webm'))))
         .firstOrNull;
-    if (intro != null) {
-      final done = Navigator.of(context).push(PageRouteBuilder<void>(
-        transitionDuration: Duration.zero,
-        reverseTransitionDuration: Duration.zero,
-        pageBuilder: (_, __, ___) => _IntroVideoScreen(url: intro.url),
-      ));
-      // Rota çizildikten sonra (video arkasında) örtüyü kaldır.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(() => _introCover = false);
-      });
-      await done;
-      return;
-    }
-    if (mounted && _introCover) setState(() => _introCover = false);
+    if (intro == null || !mounted) return;
+    // Detay beklenirken kullanıcı başka bir sayfa/sheet açtıysa video onun
+    // üstüne açılmasın.
+    if (ModalRoute.of(context)?.isCurrent == false) return;
+    await Navigator.of(context).push(PageRouteBuilder<void>(
+      transitionDuration: Duration.zero,
+      reverseTransitionDuration: Duration.zero,
+      pageBuilder: (_, __, ___) => _IntroVideoScreen(url: intro.url),
+    ));
   }
 
   /// Rezervasyon seçeneklerini çeker (Plus mı, bölge/masa/saatler). Hata/kapalı
@@ -528,21 +526,6 @@ class _DetailScreenState extends State<DetailScreen> {
             bottom: _showTabbar ? 0 : -(160 + bottomInset),
             child: SafeArea(child: _detailTabbar()),
           ),
-          // Giriş videosu kararı verilene kadar detayı gizler.
-          if (_introCover)
-            const Positioned.fill(
-              child: ColoredBox(
-                color: AppColors.bg,
-                child: Center(
-                  child: SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2.5, color: AppColors.primary),
-                  ),
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -668,6 +651,13 @@ class _DetailScreenState extends State<DetailScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         () {
+          // Kategoriler detayla gelir; o ana kadar "Restoran" yazıp sonra
+          // değiştirmek yerine gri hap gösterilir.
+          if (_loading) {
+            return const SkeletonPulse(
+              child: SkeletonBox(width: 104, height: 28, radius: 999),
+            );
+          }
           final cats = d != null ? _visibleCategories(d) : const <Category>[];
           return cats.isNotEmpty
               ? _categoryBadges(cats)
@@ -713,22 +703,68 @@ class _DetailScreenState extends State<DetailScreen> {
         ],
         const SizedBox(height: 18),
         if (_loading)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 40),
-            child: Center(
-              child: SizedBox(
-                width: 26,
-                height: 26,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2.5, color: AppColors.primary),
-              ),
-            ),
-          )
+          _bodySkeleton()
         else if (d == null)
           _errorNote()
         else
           ..._sections(d),
       ],
+    );
+  }
+
+  /// Detay gelene kadar spinner yerine gösterilen gri taslak (Instagram
+  /// tarzı): açık/kapalı şeridi, aksiyon kartı ve "Bilgiler" satırları.
+  /// Genelde kısa sürer; yanıt gelince yerini gerçek bölümler alır.
+  Widget _bodySkeleton() {
+    Widget infoRow(double w) => Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Row(
+            children: [
+              const SkeletonBox(width: 34, height: 34, radius: 10),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SkeletonBox(width: 70, height: 10),
+                    const SizedBox(height: 7),
+                    FractionallySizedBox(
+                      widthFactor: w,
+                      child: const SkeletonBox(height: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+
+    return SkeletonPulse(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SkeletonBox(width: 190, height: 14, radius: 999),
+          const SizedBox(height: 16),
+          const SkeletonCard(height: 64),
+          const SizedBox(height: 26),
+          const SkeletonBox(width: 90, height: 16),
+          const SizedBox(height: 18),
+          infoRow(0.8),
+          infoRow(0.6),
+          infoRow(0.7),
+          const SizedBox(height: 8),
+          const SkeletonBox(width: 110, height: 16),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              for (var i = 0; i < 3; i++) ...[
+                if (i > 0) const SizedBox(width: 10),
+                const Expanded(child: SkeletonBox(height: 72, radius: 14)),
+              ],
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -803,7 +839,7 @@ class _DetailScreenState extends State<DetailScreen> {
       child: GestureDetector(
         onTap: () => Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => DetailScreen(place: p)),
+          detailRoute(builder: (_) => DetailScreen(place: p)),
         ),
         child: Container(
           decoration: BoxDecoration(

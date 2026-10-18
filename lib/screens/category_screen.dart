@@ -82,6 +82,11 @@ class _CategoryScreenState extends State<CategoryScreen> {
   final Set<int> _selectedFilters = {}; // seçili filtre id'leri
   List<Filter> _ozellikler = const []; // /filtreler → meta.ozellikler
   final Set<int> _selectedOzellikler = {}; // seçili özellik id'leri
+  // Bölge (ilçe) filtresi: `/ilceler` listesi + tek seçim (null = tümü).
+  // Tip modunda sunucuda (`/yerler?bolge=`), kategori modunda istemcide
+  // süzülür (`/kategoriler/{id}` henüz `bolge=` almıyor, LISTE_BOLGE_FILTRE.md).
+  List<Ilce> _bolgeler = const [];
+  int? _selectedBolge;
 
   @override
   void initState() {
@@ -92,6 +97,14 @@ class _CategoryScreenState extends State<CategoryScreen> {
       }
     });
     _load();
+    _loadBolgeler();
+  }
+
+  /// Filtre modalındaki "Bölge" sekmesi için ilçe listesi (oturumda cache'li).
+  Future<void> _loadBolgeler() async {
+    final list = await UyeRepository.instance.ilceler();
+    if (!mounted || list.isEmpty) return;
+    setState(() => _bolgeler = list);
   }
 
   @override
@@ -229,6 +242,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
             limit: 20,
             filtreler: _selectedFilters.toList(),
             kategori: _activeId,
+            bolge: _selectedBolge,
           ),
           HomeRepository.instance.filtreler(type: type),
           HomeRepository.instance.kategorilerTip(type),
@@ -445,6 +459,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
           limit: 20,
           filtreler: _selectedFilters.toList(),
           kategori: _activeId,
+          bolge: _selectedBolge,
         );
         if (!mounted) return;
         if (seq != _reqSeq) return; // sekme değişti; eski sekmenin sayfası
@@ -486,7 +501,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
   }
 
   bool get _hasActiveFilter =>
-      _selectedFilters.isNotEmpty || _selectedOzellikler.isNotEmpty;
+      _selectedFilters.isNotEmpty ||
+      _selectedOzellikler.isNotEmpty ||
+      _selectedBolge != null;
 
   /// Süzme sunucuda mı yapılıyor? Type modunda (`/yerler`) `filtreler=`
   /// gönderiliyor; kategori modunda (`/kategoriler/{id}`) böyle bir parametre
@@ -514,8 +531,11 @@ class _CategoryScreenState extends State<CategoryScreen> {
   bool _matchesFilters(Place p) {
     // Sunucu süzdüyse gelen kayıtlar zaten uygun.
     if (_serverFiltered || !_hasActiveFilter) return true;
-    // AND mantığı: tüm seçili filtre + tüm seçili özellik id'leri mekanda olmalı.
-    return _selectedFilters.every((id) => p.filterIds.contains(id)) &&
+    // AND mantığı: tüm seçili filtre + tüm seçili özellik id'leri mekanda
+    // olmalı; bölge seçiliyse mekan o ilçede olmalı.
+    final bolge = _selectedBolge;
+    return (bolge == null || p.bolgeId == bolge) &&
+        _selectedFilters.every((id) => p.filterIds.contains(id)) &&
         _selectedOzellikler.every((id) => p.ozellikIds.contains(id));
   }
 
@@ -530,15 +550,21 @@ class _CategoryScreenState extends State<CategoryScreen> {
     return _matchesFilters(p) ? p : null;
   }
 
-  /// Filtre bottom sheet'i (ortak `showFilterSheet`) — çoklu seçim.
+  /// Filtre modalı açılabilir mi (filtre, özellik ya da bölge listesi var).
+  bool get _canFilter =>
+      _filters.isNotEmpty || _ozellikler.isNotEmpty || _bolgeler.isNotEmpty;
+
+  /// Filtre bottom sheet'i (ortak `showFilterSheet`) — çoklu seçim + bölge.
   Future<void> _openFilterSheet() async {
-    if (_filters.isEmpty && _ozellikler.isEmpty) return;
+    if (!_canFilter) return;
     final result = await showFilterSheet(
       context,
       filters: _filters,
       selected: _selectedFilters,
       ozellikler: _ozellikler,
       selectedOzellikler: _selectedOzellikler,
+      bolgeler: _bolgeler,
+      selectedBolge: _selectedBolge,
     );
     if (result != null && mounted) {
       setState(() {
@@ -548,6 +574,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
         _selectedOzellikler
           ..clear()
           ..addAll(result.ozellikler);
+        _selectedBolge = result.bolge;
       });
       _onFilterChanged();
     }
@@ -655,7 +682,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
   void _openDetail(Place p, {Object? heroTag}) {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      detailRoute(
         builder: (_) =>
             DetailScreen(place: p, heroTag: heroTag, type: widget.type),
       ),
@@ -974,7 +1001,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                 child: _actBtn(Icons.swap_vert, svg: AppIcons.sort),
               ),
               // Bu liste için hiç filtre/özellik yoksa butonu gizle.
-              if (_filters.isNotEmpty || _ozellikler.isNotEmpty) ...[
+              if (_canFilter) ...[
                 const SizedBox(width: 8),
                 GestureDetector(
                   onTap: _openFilterSheet,
@@ -995,16 +1022,22 @@ class _CategoryScreenState extends State<CategoryScreen> {
   /// Seçili filtre/özellikleri liste başlığının altında ikonsuz badge olarak
   /// gösterir; her badge'deki × ile o filtre/özellik kaldırılır.
   Widget _selectedChips() {
-    // Seçili id'leri (filtre + özellik) ad + kaynak kümesiyle eşle.
-    final chips = <({int id, String name, bool ozellik})>[];
+    // Seçili id'leri (bölge + filtre + özellik) ad + kaynak türüyle eşle.
+    // kind: 0 = filtre, 1 = özellik, 2 = bölge.
+    final chips = <({int id, String name, int kind})>[];
+    final bolge = _selectedBolge;
+    if (bolge != null) {
+      final ad = _bolgeler.where((b) => b.id == bolge).map((b) => b.ad);
+      chips.add((id: bolge, name: ad.firstOrNull ?? 'Bölge', kind: 2));
+    }
     for (final f in _filters) {
       if (_selectedFilters.contains(f.id)) {
-        chips.add((id: f.id, name: f.name, ozellik: false));
+        chips.add((id: f.id, name: f.name, kind: 0));
       }
     }
     for (final f in _ozellikler) {
       if (_selectedOzellikler.contains(f.id)) {
-        chips.add((id: f.id, name: f.name, ozellik: true));
+        chips.add((id: f.id, name: f.name, kind: 1));
       }
     }
     if (chips.isEmpty) return const SizedBox.shrink();
@@ -1018,10 +1051,13 @@ class _CategoryScreenState extends State<CategoryScreen> {
             GestureDetector(
               onTap: () {
                 setState(() {
-                  if (c.ozellik) {
-                    _selectedOzellikler.remove(c.id);
-                  } else {
-                    _selectedFilters.remove(c.id);
+                  switch (c.kind) {
+                    case 2:
+                      _selectedBolge = null;
+                    case 1:
+                      _selectedOzellikler.remove(c.id);
+                    default:
+                      _selectedFilters.remove(c.id);
                   }
                 });
                 _onFilterChanged();

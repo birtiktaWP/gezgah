@@ -26,6 +26,7 @@ class Place {
   final List<int> filterIds; // aktif filtre id'leri (filtre_{id}=1)
   final List<int> ozellikIds; // mekanın özellik id'leri (restoran_ozellik)
   final int? mesafeM; // sunucunun tahmini yol mesafesi (m); gelmezse null
+  final int? bolgeId; // ilçe id'si (`bolge`, `/ilceler` id'si); yoksa null
   // Gün → "07:30 - 02:00" (`calisma_saatleri`). Liste uçları gönderirse dolu;
   // boşsa açık/kapalı bilinmez ve kartta gösterilmez (ACIK_KAPALI_LISTE.md).
   final Map<String, String> calismaSaatleri;
@@ -60,6 +61,7 @@ class Place {
     this.filterIds = const [],
     this.ozellikIds = const [],
     this.mesafeM,
+    this.bolgeId,
     this.calismaSaatleri = const {},
     this.favorite = false,
     this.thumbnail,
@@ -137,15 +139,20 @@ class FeaturedEvent {
   });
 
   factory FeaturedEvent.fromJson(Map<String, dynamic> j) => FeaturedEvent(
-        id: (j['id'] as num?)?.toInt() ?? 0,
-        name: (j['name'] as String?)?.trim() ?? '',
-        date: (j['date'] as String?)?.trim() ?? '',
-        time: (j['time'] as String?)?.trim() ?? '',
-        image: (j['image'] as String?)?.trim() ?? '',
-      );
+    id: (j['id'] as num?)?.toInt() ?? 0,
+    name: (j['name'] as String?)?.trim() ?? '',
+    date: (j['date'] as String?)?.trim() ?? '',
+    time: (j['time'] as String?)?.trim() ?? '',
+    image: (j['image'] as String?)?.trim() ?? '',
+  );
 
-  Map<String, dynamic> toJson() =>
-      {'id': id, 'name': name, 'date': date, 'time': time, 'image': image};
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'date': date,
+    'time': time,
+    'image': image,
+  };
 }
 
 /// Etkinlik (`GET /etkinlikler`). Alanlar repository'de host/tarih işlenerek
@@ -171,14 +178,14 @@ class Event {
 
   /// Mock [EventItem]'dan üretir (API hatasında yedek vitrin için).
   factory Event.fromItem(EventItem e) => Event(
-        id: 0,
-        title: e.title,
-        image: e.image,
-        place: e.location,
-        tag: e.tag,
-        day: e.day,
-        month: e.month,
-      );
+    id: 0,
+    title: e.title,
+    image: e.image,
+    place: e.location,
+    tag: e.tag,
+    day: e.day,
+    month: e.month,
+  );
 }
 
 /// Yasal metin / sözleşme (`GET /sozlesmeler`, SOZLESMELER.md).
@@ -209,20 +216,20 @@ class Sozlesme {
   bool get zorunlu => tip == 'zorunlu';
 
   factory Sozlesme.fromJson(Map<String, dynamic> j) => Sozlesme(
-        slug: (j['slug'] as String?)?.trim() ?? '',
-        baslik: (j['baslik'] as String?)?.trim() ?? '',
-        surum: (j['surum'] as String?)?.trim() ?? '',
-        tip: (j['tip'] as String?)?.trim().isNotEmpty == true
-            ? (j['tip'] as String).trim()
-            : 'zorunlu',
-        ozet: (j['ozet'] as String?)?.trim() ?? '',
-        format: (j['format'] as String?)?.trim().isNotEmpty == true
-            ? (j['format'] as String).trim()
-            : 'markdown',
-        icerik: (j['icerik'] as String?) ?? '',
-        yururlukTarihi: (j['yururluk_tarihi'] as String?)?.trim() ?? '',
-        guncelleme: (j['guncelleme'] as String?)?.trim() ?? '',
-      );
+    slug: (j['slug'] as String?)?.trim() ?? '',
+    baslik: (j['baslik'] as String?)?.trim() ?? '',
+    surum: (j['surum'] as String?)?.trim() ?? '',
+    tip: (j['tip'] as String?)?.trim().isNotEmpty == true
+        ? (j['tip'] as String).trim()
+        : 'zorunlu',
+    ozet: (j['ozet'] as String?)?.trim() ?? '',
+    format: (j['format'] as String?)?.trim().isNotEmpty == true
+        ? (j['format'] as String).trim()
+        : 'markdown',
+    icerik: (j['icerik'] as String?) ?? '',
+    yururlukTarihi: (j['yururluk_tarihi'] as String?)?.trim() ?? '',
+    guncelleme: (j['guncelleme'] as String?)?.trim() ?? '',
+  );
 }
 
 /// Filtre tanımı (`GET /filtreler`, FILTRELER.md).
@@ -242,14 +249,14 @@ class Filter {
   });
 
   factory Filter.fromJson(Map<String, dynamic> j) => Filter(
-        id: (j['id'] as num?)?.toInt() ?? 0,
-        name: (j['name'] as String?)?.trim().isNotEmpty == true
-            ? j['name'] as String
-            : 'Filtre',
-        slug: j['slug'] as String? ?? '',
-        type: j['type'] as String? ?? '',
-        icon: j['icon'] as String?,
-      );
+    id: (j['id'] as num?)?.toInt() ?? 0,
+    name: (j['name'] as String?)?.trim().isNotEmpty == true
+        ? j['name'] as String
+        : 'Filtre',
+    slug: j['slug'] as String? ?? '',
+    type: j['type'] as String? ?? '',
+    icon: j['icon'] as String?,
+  );
 }
 
 /// Sistem kategorisi (`GET /kategoriler`).
@@ -274,28 +281,28 @@ class Category {
   bool get isTopLevel => parent == 0;
 
   factory Category.fromJson(Map<String, dynamic> j) => Category(
-        id: (j['id'] as num?)?.toInt() ?? 0,
-        name: (j['name'] as String?)?.trim().isNotEmpty == true
-            ? j['name'] as String
-            : 'Kategori',
-        slug: j['slug'] as String? ?? '',
-        mekanSayisi: (j['mekan_sayisi'] as num?)?.toInt() ?? 0,
-        parent: (j['parent'] as num?)?.toInt() ?? 0,
-        icon: (j['icon'] as String?)?.trim().isNotEmpty == true
-            ? (j['icon'] as String).trim()
-            : null,
-        sortOrder: (j['sort_order'] as num?)?.toInt(),
-      );
+    id: (j['id'] as num?)?.toInt() ?? 0,
+    name: (j['name'] as String?)?.trim().isNotEmpty == true
+        ? j['name'] as String
+        : 'Kategori',
+    slug: j['slug'] as String? ?? '',
+    mekanSayisi: (j['mekan_sayisi'] as num?)?.toInt() ?? 0,
+    parent: (j['parent'] as num?)?.toInt() ?? 0,
+    icon: (j['icon'] as String?)?.trim().isNotEmpty == true
+        ? (j['icon'] as String).trim()
+        : null,
+    sortOrder: (j['sort_order'] as num?)?.toInt(),
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'slug': slug,
-        'mekan_sayisi': mekanSayisi,
-        'parent': parent,
-        'icon': icon,
-        'sort_order': sortOrder,
-      };
+    'id': id,
+    'name': name,
+    'slug': slug,
+    'mekan_sayisi': mekanSayisi,
+    'parent': parent,
+    'icon': icon,
+    'sort_order': sortOrder,
+  };
 }
 
 class QuickCategory {
@@ -423,21 +430,21 @@ class AppUser {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'isim': isim,
-        'soyisim': soyisim,
-        'email': email,
-        'telefon': telefon,
-        'ulke_kodu': ulkeKodu,
-        'cinsiyet': cinsiyet,
-        'dogum_gunu': dogumGunu,
-        'sehir': sehir,
-        'ilce_id': ilceId,
-        'ilce': ilce,
-        'avatar': avatar,
-        'plus': plus.toJson(),
-        'degerlendirme_sayisi': degerlendirmeSayisi,
-      };
+    'id': id,
+    'isim': isim,
+    'soyisim': soyisim,
+    'email': email,
+    'telefon': telefon,
+    'ulke_kodu': ulkeKodu,
+    'cinsiyet': cinsiyet,
+    'dogum_gunu': dogumGunu,
+    'sehir': sehir,
+    'ilce_id': ilceId,
+    'ilce': ilce,
+    'avatar': avatar,
+    'plus': plus.toJson(),
+    'degerlendirme_sayisi': degerlendirmeSayisi,
+  };
 
   AppUser copyWith({
     String? isim,
@@ -451,23 +458,22 @@ class AppUser {
     String? ilce,
     String? avatar,
     PlusInfo? plus,
-  }) =>
-      AppUser(
-        id: id,
-        isim: isim ?? this.isim,
-        soyisim: soyisim ?? this.soyisim,
-        email: email ?? this.email,
-        telefon: telefon ?? this.telefon,
-        ulkeKodu: ulkeKodu ?? this.ulkeKodu,
-        cinsiyet: cinsiyet ?? this.cinsiyet,
-        dogumGunu: dogumGunu ?? this.dogumGunu,
-        sehir: sehir,
-        ilceId: ilceId ?? this.ilceId,
-        ilce: ilce ?? this.ilce,
-        avatar: avatar ?? this.avatar,
-        plus: plus ?? this.plus,
-        degerlendirmeSayisi: degerlendirmeSayisi,
-      );
+  }) => AppUser(
+    id: id,
+    isim: isim ?? this.isim,
+    soyisim: soyisim ?? this.soyisim,
+    email: email ?? this.email,
+    telefon: telefon ?? this.telefon,
+    ulkeKodu: ulkeKodu ?? this.ulkeKodu,
+    cinsiyet: cinsiyet ?? this.cinsiyet,
+    dogumGunu: dogumGunu ?? this.dogumGunu,
+    sehir: sehir,
+    ilceId: ilceId ?? this.ilceId,
+    ilce: ilce ?? this.ilce,
+    avatar: avatar ?? this.avatar,
+    plus: plus ?? this.plus,
+    degerlendirmeSayisi: degerlendirmeSayisi,
+  );
 }
 
 /// Gezgah Plus durumu (UYELIK_PLUS.md). Üye nesnesinin `plus` alanı.
@@ -477,10 +483,8 @@ class PlusInfo {
 
   const PlusInfo({this.aktif = false, this.bitis});
 
-  factory PlusInfo.fromJson(Map<String, dynamic> j) => PlusInfo(
-        aktif: j['aktif'] == true,
-        bitis: j['bitis'] as String?,
-      );
+  factory PlusInfo.fromJson(Map<String, dynamic> j) =>
+      PlusInfo(aktif: j['aktif'] == true, bitis: j['bitis'] as String?);
 
   Map<String, dynamic> toJson() => {'aktif': aktif, 'bitis': bitis};
 }
@@ -502,12 +506,12 @@ class PlusUrun {
   });
 
   factory PlusUrun.fromJson(Map<String, dynamic> j) => PlusUrun(
-        fiyat: j['fiyat']?.toString() ?? '199.99',
-        para: (j['para'] as String?) ?? 'TRY',
-        periyot: (j['periyot'] as String?) ?? 'yillik',
-        iosId: (j['ios'] as String?) ?? 'plus',
-        androidId: (j['android'] as String?) ?? 'plus',
-      );
+    fiyat: j['fiyat']?.toString() ?? '199.99',
+    para: (j['para'] as String?) ?? 'TRY',
+    periyot: (j['periyot'] as String?) ?? 'yillik',
+    iosId: (j['ios'] as String?) ?? 'plus',
+    androidId: (j['android'] as String?) ?? 'plus',
+  );
 }
 
 /// Gezgah Plus durumu (`GET /uye/plus/durum`, UYELIK_PLUS.md §4.1).
@@ -531,19 +535,18 @@ class PlusDurum {
   });
 
   factory PlusDurum.fromJson(Map<String, dynamic> j) => PlusDurum(
-        aktif: j['aktif'] == true,
-        bitis: j['bitis'] as String?,
-        kalanGun: (j['kalan_gun'] as num?)?.toInt(),
-        platform: j['platform'] as String?,
-        productId: j['product_id'] as String?,
-        urun: j['urun'] is Map<String, dynamic>
-            ? PlusUrun.fromJson(j['urun'] as Map<String, dynamic>)
-            : const PlusUrun(),
-        ozellikler: (j['ozellikler'] as List<dynamic>?)
-                ?.whereType<String>()
-                .toList() ??
-            const ['avatar', 'gezi_rotalari', 'kedy'],
-      );
+    aktif: j['aktif'] == true,
+    bitis: j['bitis'] as String?,
+    kalanGun: (j['kalan_gun'] as num?)?.toInt(),
+    platform: j['platform'] as String?,
+    productId: j['product_id'] as String?,
+    urun: j['urun'] is Map<String, dynamic>
+        ? PlusUrun.fromJson(j['urun'] as Map<String, dynamic>)
+        : const PlusUrun(),
+    ozellikler:
+        (j['ozellikler'] as List<dynamic>?)?.whereType<String>().toList() ??
+        const ['avatar', 'gezi_rotalari', 'kedy'],
+  );
 }
 
 /// Gezi rotası (`/uye/rotalar`, UYELIK_PLUS.md §6). Sıralı mekan listesi + her
@@ -608,7 +611,9 @@ class GeziRota {
   String get fiyatLabel {
     final f = rotaFiyat;
     if (f == null || f <= 0) return '';
-    final s = f == f.roundToDouble() ? f.toInt().toString() : f.toStringAsFixed(2);
+    final s = f == f.roundToDouble()
+        ? f.toInt().toString()
+        : f.toStringAsFixed(2);
     return '₺$s';
   }
 
@@ -620,65 +625,67 @@ class GeziRota {
   }
 
   /// Beğeni sayısı/durumu güncellenmiş kopya (optimistic UI için).
-  GeziRota copyWithBegeni({required bool begendim, required int begeniSayisi}) =>
-      GeziRota(
-        id: id,
-        baslik: baslik,
-        aciklama: aciklama,
-        gorunurluk: gorunurluk,
-        durakSayisi: durakSayisi,
-        kapakGorsel: kapakGorsel,
-        sahip: sahip,
-        benim: benim,
-        begeniSayisi: begeniSayisi,
-        begendim: begendim,
-        goruntulenme: goruntulenme,
-        gosterim: gosterim,
-        rotaFiyat: rotaFiyat,
-        mesafeM: mesafeM,
-        yorumlarAcik: yorumlarAcik,
-        yorumSayisi: yorumSayisi,
-        haritaLink: haritaLink,
-        koordinatlar: koordinatlar,
-        polyline: polyline,
-        toplamMesafeM: toplamMesafeM,
-        toplamSureSn: toplamSureSn,
-        duraklar: duraklar,
-      );
+  GeziRota copyWithBegeni({
+    required bool begendim,
+    required int begeniSayisi,
+  }) => GeziRota(
+    id: id,
+    baslik: baslik,
+    aciklama: aciklama,
+    gorunurluk: gorunurluk,
+    durakSayisi: durakSayisi,
+    kapakGorsel: kapakGorsel,
+    sahip: sahip,
+    benim: benim,
+    begeniSayisi: begeniSayisi,
+    begendim: begendim,
+    goruntulenme: goruntulenme,
+    gosterim: gosterim,
+    rotaFiyat: rotaFiyat,
+    mesafeM: mesafeM,
+    yorumlarAcik: yorumlarAcik,
+    yorumSayisi: yorumSayisi,
+    haritaLink: haritaLink,
+    koordinatlar: koordinatlar,
+    polyline: polyline,
+    toplamMesafeM: toplamMesafeM,
+    toplamSureSn: toplamSureSn,
+    duraklar: duraklar,
+  );
 
   /// Yorum sayısı güncellenmiş kopya (optimistic UI için).
   GeziRota copyWithYorumSayisi(int yorumSayisi) => GeziRota(
-        id: id,
-        baslik: baslik,
-        aciklama: aciklama,
-        gorunurluk: gorunurluk,
-        durakSayisi: durakSayisi,
-        kapakGorsel: kapakGorsel,
-        sahip: sahip,
-        benim: benim,
-        begeniSayisi: begeniSayisi,
-        begendim: begendim,
-        goruntulenme: goruntulenme,
-        gosterim: gosterim,
-        rotaFiyat: rotaFiyat,
-        mesafeM: mesafeM,
-        yorumlarAcik: yorumlarAcik,
-        yorumSayisi: yorumSayisi,
-        haritaLink: haritaLink,
-        koordinatlar: koordinatlar,
-        polyline: polyline,
-        toplamMesafeM: toplamMesafeM,
-        toplamSureSn: toplamSureSn,
-        duraklar: duraklar,
-      );
+    id: id,
+    baslik: baslik,
+    aciklama: aciklama,
+    gorunurluk: gorunurluk,
+    durakSayisi: durakSayisi,
+    kapakGorsel: kapakGorsel,
+    sahip: sahip,
+    benim: benim,
+    begeniSayisi: begeniSayisi,
+    begendim: begendim,
+    goruntulenme: goruntulenme,
+    gosterim: gosterim,
+    rotaFiyat: rotaFiyat,
+    mesafeM: mesafeM,
+    yorumlarAcik: yorumlarAcik,
+    yorumSayisi: yorumSayisi,
+    haritaLink: haritaLink,
+    koordinatlar: koordinatlar,
+    polyline: polyline,
+    toplamMesafeM: toplamMesafeM,
+    toplamSureSn: toplamSureSn,
+    duraklar: duraklar,
+  );
 
   factory GeziRota.fromJson(Map<String, dynamic> j, {String host = ''}) {
     final raw = j['duraklar'] ?? j['mekanlar'];
     final duraklar = (raw is List)
         ? raw
-            .whereType<Map<String, dynamic>>()
-            .map((m) => RotaDurak.fromJson(m, host: host))
-            .toList()
+              .whereType<Map<String, dynamic>>()
+              .map((m) => RotaDurak.fromJson(m, host: host))
+              .toList()
         : <RotaDurak>[];
     return GeziRota(
       id: (j['id'] as num?)?.toInt() ?? 0,
@@ -706,10 +713,10 @@ class GeziRota {
       haritaLink: (j['harita_link'] as String?)?.trim() ?? '',
       koordinatlar: (j['koordinatlar'] is List)
           ? (j['koordinatlar'] as List)
-              .whereType<Map<String, dynamic>>()
-              .map(RotaNokta.fromJson)
-              .where((n) => n.hasCoord)
-              .toList()
+                .whereType<Map<String, dynamic>>()
+                .map(RotaNokta.fromJson)
+                .where((n) => n.hasCoord)
+                .toList()
           : const [],
       polyline: (j['polyline'] as String?)?.trim() ?? '',
       toplamMesafeM: (j['toplam_mesafe_m'] as num?)?.toInt(),
@@ -739,13 +746,13 @@ class RotaNokta {
   bool get hasCoord => lat != null && lng != null;
 
   factory RotaNokta.fromJson(Map<String, dynamic> j) => RotaNokta(
-        sira: (j['sira'] as num?)?.toInt() ?? 0,
-        durakId: (j['durak_id'] as num?)?.toInt() ?? 0,
-        postId: (j['post_id'] as num?)?.toInt() ?? 0,
-        name: (j['name'] as String?)?.trim() ?? '',
-        lat: (j['lat'] as num?)?.toDouble(),
-        lng: (j['lng'] as num?)?.toDouble(),
-      );
+    sira: (j['sira'] as num?)?.toInt() ?? 0,
+    durakId: (j['durak_id'] as num?)?.toInt() ?? 0,
+    postId: (j['post_id'] as num?)?.toInt() ?? 0,
+    name: (j['name'] as String?)?.trim() ?? '',
+    lat: (j['lat'] as num?)?.toDouble(),
+    lng: (j['lng'] as num?)?.toDouble(),
+  );
 }
 
 /// Kişi adını "Ömer Çelik" biçimine getirir: her kelimenin ilk harfi büyük,
@@ -754,20 +761,23 @@ class RotaNokta {
 String titleCaseTr(String value) {
   final s = value.trim();
   if (s.isEmpty) return s;
-  return s.split(RegExp(r'\s+')).map((w) {
-    if (w.isEmpty) return w;
-    final first = switch (w[0]) {
-      'i' => 'İ',
-      'ı' => 'I',
-      final c => c.toUpperCase(),
-    };
-    final rest = w
-        .substring(1)
-        .replaceAll('I', 'ı')
-        .replaceAll('İ', 'i')
-        .toLowerCase();
-    return '$first$rest';
-  }).join(' ');
+  return s
+      .split(RegExp(r'\s+'))
+      .map((w) {
+        if (w.isEmpty) return w;
+        final first = switch (w[0]) {
+          'i' => 'İ',
+          'ı' => 'I',
+          final c => c.toUpperCase(),
+        };
+        final rest = w
+            .substring(1)
+            .replaceAll('I', 'ı')
+            .replaceAll('İ', 'i')
+            .toLowerCase();
+        return '$first$rest';
+      })
+      .join(' ');
 }
 
 /// Rota sahibi özeti (`/rotalar` keşfet + detay `sahip`, SOSYAL_BEGENI_TAKIP.md).
@@ -786,17 +796,19 @@ class RotaSahip {
   });
 
   /// "Ömer Çelik" — baş harfler büyük (veri küçük/büyük gelse de tutarlı).
-  String get adSoyad => titleCaseTr(
-      [isim, soyisim].where((s) => s.trim().isNotEmpty).join(' '));
+  String get adSoyad =>
+      titleCaseTr([isim, soyisim].where((s) => s.trim().isNotEmpty).join(' '));
 
   factory RotaSahip.fromJson(Map<String, dynamic> j, {String host = ''}) =>
       RotaSahip(
-        uyeId: (j['uye_id'] as num?)?.toInt() ?? (j['id'] as num?)?.toInt() ?? 0,
+        uyeId:
+            (j['uye_id'] as num?)?.toInt() ?? (j['id'] as num?)?.toInt() ?? 0,
         isim: (j['isim'] as String?)?.trim() ?? '',
         soyisim: (j['soyisim'] as String?)?.trim() ?? '',
         avatar: _absUrl(j['avatar'], host),
-        takipEdiyorum:
-            j['takip_ediyorum'] is bool ? j['takip_ediyorum'] as bool : null,
+        takipEdiyorum: j['takip_ediyorum'] is bool
+            ? j['takip_ediyorum'] as bool
+            : null,
       );
 }
 
@@ -814,11 +826,11 @@ class PlaceTahmin {
   });
 
   factory PlaceTahmin.fromJson(Map<String, dynamic> j) => PlaceTahmin(
-        placeId: (j['place_id'] as String?)?.trim() ?? '',
-        ad: (j['ad'] as String?)?.trim() ?? '',
-        altBilgi: (j['alt_bilgi'] as String?)?.trim() ?? '',
-        aciklama: (j['aciklama'] as String?)?.trim() ?? '',
-      );
+    placeId: (j['place_id'] as String?)?.trim() ?? '',
+    ad: (j['ad'] as String?)?.trim() ?? '',
+    altBilgi: (j['alt_bilgi'] as String?)?.trim() ?? '',
+    aciklama: (j['aciklama'] as String?)?.trim() ?? '',
+  );
 }
 
 /// Google Places yer detayı (rota-place-arama.md §2). Konum durağı eklemek için.
@@ -837,12 +849,12 @@ class PlaceDetay {
   });
 
   factory PlaceDetay.fromJson(Map<String, dynamic> j) => PlaceDetay(
-        placeId: (j['place_id'] as String?)?.trim() ?? '',
-        ad: (j['ad'] as String?)?.trim() ?? '',
-        adres: (j['adres'] as String?)?.trim() ?? '',
-        lat: (j['lat'] as num?)?.toDouble() ?? 0,
-        lng: (j['lng'] as num?)?.toDouble() ?? 0,
-      );
+    placeId: (j['place_id'] as String?)?.trim() ?? '',
+    ad: (j['ad'] as String?)?.trim() ?? '',
+    adres: (j['adres'] as String?)?.trim() ?? '',
+    lat: (j['lat'] as num?)?.toDouble() ?? 0,
+    lng: (j['lng'] as num?)?.toDouble() ?? 0,
+  );
 }
 
 /// Rota yorumu (`/uye/rotalar/{id}/yorumlar`, rota-yorumlar.md). [silebilir]
@@ -882,21 +894,20 @@ class RotaYorum {
     int? begenmemeSayisi,
     bool? begendim,
     bool? begenmedim,
-  }) =>
-      RotaYorum(
-        id: id,
-        yorum: yorum,
-        createdAt: createdAt,
-        uye: uye,
-        benim: benim,
-        silebilir: silebilir,
-        begeniSayisi: begeniSayisi ?? this.begeniSayisi,
-        begenmemeSayisi: begenmemeSayisi ?? this.begenmemeSayisi,
-        begendim: begendim ?? this.begendim,
-        begenmedim: begenmedim ?? this.begenmedim,
-        isletme: isletme,
-        postId: postId,
-      );
+  }) => RotaYorum(
+    id: id,
+    yorum: yorum,
+    createdAt: createdAt,
+    uye: uye,
+    benim: benim,
+    silebilir: silebilir,
+    begeniSayisi: begeniSayisi ?? this.begeniSayisi,
+    begenmemeSayisi: begenmemeSayisi ?? this.begenmemeSayisi,
+    begendim: begendim ?? this.begendim,
+    begenmedim: begenmedim ?? this.begenmedim,
+    isletme: isletme,
+    postId: postId,
+  );
 
   factory RotaYorum.fromJson(Map<String, dynamic> j, {String host = ''}) {
     final u = j['uye'];
@@ -958,25 +969,27 @@ class TakipUye {
     this.takipEdiyorum,
   });
 
-  String get adSoyad => titleCaseTr(
-      [isim, soyisim].where((s) => s.trim().isNotEmpty).join(' '));
+  String get adSoyad =>
+      titleCaseTr([isim, soyisim].where((s) => s.trim().isNotEmpty).join(' '));
 
   TakipUye copyWith({bool? takipEdiyorum}) => TakipUye(
-        uyeId: uyeId,
-        isim: isim,
-        soyisim: soyisim,
-        avatar: avatar,
-        takipEdiyorum: takipEdiyorum ?? this.takipEdiyorum,
-      );
+    uyeId: uyeId,
+    isim: isim,
+    soyisim: soyisim,
+    avatar: avatar,
+    takipEdiyorum: takipEdiyorum ?? this.takipEdiyorum,
+  );
 
   factory TakipUye.fromJson(Map<String, dynamic> j, {String host = ''}) =>
       TakipUye(
-        uyeId: (j['uye_id'] as num?)?.toInt() ?? (j['id'] as num?)?.toInt() ?? 0,
+        uyeId:
+            (j['uye_id'] as num?)?.toInt() ?? (j['id'] as num?)?.toInt() ?? 0,
         isim: (j['isim'] as String?)?.trim() ?? '',
         soyisim: (j['soyisim'] as String?)?.trim() ?? '',
         avatar: _absUrl(j['avatar'], host),
-        takipEdiyorum:
-            j['takip_ediyorum'] is bool ? j['takip_ediyorum'] as bool : null,
+        takipEdiyorum: j['takip_ediyorum'] is bool
+            ? j['takip_ediyorum'] as bool
+            : null,
       );
 }
 
@@ -1016,15 +1029,18 @@ class RotaDurak {
     final silinmis =
         j['silinmis'] == true || (m is Map && m['silinmis'] == true);
     final secili = j['secili_urun'] is Map<String, dynamic>
-        ? RotaUrun.fromJson(j['secili_urun'] as Map<String, dynamic>, host: host)
+        ? RotaUrun.fromJson(
+            j['secili_urun'] as Map<String, dynamic>,
+            host: host,
+          )
         : null;
     // Çoklu ürün: `urunler[]` (rota-coklu-yemek.md); yoksa secili_urun'a düş.
     final urunler = (j['urunler'] is List)
         ? (j['urunler'] as List)
-            .whereType<Map<String, dynamic>>()
-            .map((u) => RotaUrun.fromJson(u, host: host))
-            .where((u) => u.qrId > 0)
-            .toList()
+              .whereType<Map<String, dynamic>>()
+              .map((u) => RotaUrun.fromJson(u, host: host))
+              .where((u) => u.qrId > 0)
+              .toList()
         : (secili != null ? [secili] : <RotaUrun>[]);
     return RotaDurak(
       durakId:
@@ -1040,10 +1056,10 @@ class RotaDurak {
       urunler: urunler,
       gorseller: (j['gorseller'] is List)
           ? (j['gorseller'] as List)
-              .whereType<Map<String, dynamic>>()
-              .map((g) => DurakGorsel.fromJson(g, host: host))
-              .where((g) => g.url.isNotEmpty)
-              .toList()
+                .whereType<Map<String, dynamic>>()
+                .map((g) => DurakGorsel.fromJson(g, host: host))
+                .where((g) => g.url.isNotEmpty)
+                .toList()
           : const [],
       haritaLink: (j['harita_link'] as String?)?.trim() ?? '',
     );
@@ -1084,12 +1100,12 @@ class RotaUrun {
   String get fiyatLabel => fiyat.trim().isEmpty ? '' : '$fiyat ₺';
 
   RotaUrun copyWith({String? foto}) => RotaUrun(
-        qrId: qrId,
-        ad: ad,
-        fiyat: fiyat,
-        gorsel: gorsel,
-        foto: foto ?? this.foto,
-      );
+    qrId: qrId,
+    ad: ad,
+    fiyat: fiyat,
+    gorsel: gorsel,
+    foto: foto ?? this.foto,
+  );
 
   factory RotaUrun.fromJson(Map<String, dynamic> j, {String host = ''}) =>
       RotaUrun(
@@ -1118,10 +1134,10 @@ class MekanMenuKategori {
         kategori: (j['kategori'] as String?)?.trim() ?? '',
         urunler: (j['urunler'] is List)
             ? (j['urunler'] as List)
-                .whereType<Map<String, dynamic>>()
-                .map(RotaUrun.fromJson)
-                .where((u) => u.qrId > 0)
-                .toList()
+                  .whereType<Map<String, dynamic>>()
+                  .map(RotaUrun.fromJson)
+                  .where((u) => u.qrId > 0)
+                  .toList()
             : const <RotaUrun>[],
       );
 }
@@ -1154,22 +1170,23 @@ class UyeProfil {
 
   String get adSoyad {
     final n = titleCaseTr(
-        [isim, soyisim].where((s) => s.trim().isNotEmpty).join(' '));
+      [isim, soyisim].where((s) => s.trim().isNotEmpty).join(' '),
+    );
     return n.isEmpty ? 'Üye' : n;
   }
 
   UyeProfil copyWith({bool? takipEdiyorum, int? takipciSayisi}) => UyeProfil(
-        uyeId: uyeId,
-        isim: isim,
-        soyisim: soyisim,
-        avatar: avatar,
-        rotaSayisi: rotaSayisi,
-        takipciSayisi: takipciSayisi ?? this.takipciSayisi,
-        takipEdilenSayisi: takipEdilenSayisi,
-        toplamBegeni: toplamBegeni,
-        takipEdiyorum: takipEdiyorum ?? this.takipEdiyorum,
-        benim: benim,
-      );
+    uyeId: uyeId,
+    isim: isim,
+    soyisim: soyisim,
+    avatar: avatar,
+    rotaSayisi: rotaSayisi,
+    takipciSayisi: takipciSayisi ?? this.takipciSayisi,
+    takipEdilenSayisi: takipEdilenSayisi,
+    toplamBegeni: toplamBegeni,
+    takipEdiyorum: takipEdiyorum ?? this.takipEdiyorum,
+    benim: benim,
+  );
 
   factory UyeProfil.fromJson(Map<String, dynamic> j, {String host = ''}) =>
       UyeProfil(
@@ -1181,8 +1198,9 @@ class UyeProfil {
         takipciSayisi: (j['takipci_sayisi'] as num?)?.toInt() ?? 0,
         takipEdilenSayisi: (j['takip_edilen_sayisi'] as num?)?.toInt() ?? 0,
         toplamBegeni: (j['toplam_begeni'] as num?)?.toInt() ?? 0,
-        takipEdiyorum:
-            j['takip_ediyorum'] is bool ? j['takip_ediyorum'] as bool : null,
+        takipEdiyorum: j['takip_ediyorum'] is bool
+            ? j['takip_ediyorum'] as bool
+            : null,
         benim: j['benim'] == true,
       );
 }
@@ -1213,7 +1231,10 @@ class RotaMekan {
   bool get hasCoord => lat != null && lng != null;
 
   String get cityDistrict {
-    final byRegion = [sehir, ilce].where((s) => s.trim().isNotEmpty).join(' · ');
+    final byRegion = [
+      sehir,
+      ilce,
+    ].where((s) => s.trim().isNotEmpty).join(' · ');
     return byRegion.isNotEmpty ? byRegion : adres;
   }
 
@@ -1225,10 +1246,10 @@ class RotaMekan {
       name: (j['name'] as String?)?.trim().isNotEmpty == true
           ? (j['name'] as String).trim()
           : (j['ad'] as String?)?.trim().isNotEmpty == true
-              ? (j['ad'] as String).trim()
-              : (j['konum_adi'] as String?)?.trim().isNotEmpty == true
-                  ? (j['konum_adi'] as String).trim()
-                  : (j['baslik'] as String?)?.trim() ?? '',
+          ? (j['ad'] as String).trim()
+          : (j['konum_adi'] as String?)?.trim().isNotEmpty == true
+          ? (j['konum_adi'] as String).trim()
+          : (j['baslik'] as String?)?.trim() ?? '',
       image: img,
       sehir: (j['sehir'] as String?)?.trim() ?? '',
       ilce: (j['ilce'] as String?)?.trim() ?? '',
@@ -1244,13 +1265,21 @@ class RotaMekan {
 class Ilce {
   final int id;
   final String ad;
-  const Ilce({required this.id, required this.ad});
+
+  /// Yaka: "Avrupa" | "Asya" (`kita`). Filtre modalında gruplama için;
+  /// gelmezse boş.
+  final String kita;
+  const Ilce({required this.id, required this.ad, this.kita = ''});
 
   factory Ilce.fromJson(Map<String, dynamic> j) {
     final ad = (j['ilce_ad'] ?? j['ad'] ?? j['name'] ?? j['ilce'] ?? '')
         .toString()
         .trim();
-    return Ilce(id: (j['id'] as num?)?.toInt() ?? 0, ad: ad);
+    return Ilce(
+      id: (j['id'] as num?)?.toInt() ?? 0,
+      ad: ad,
+      kita: (j['kita'] ?? '').toString().trim(),
+    );
   }
 }
 
@@ -1272,10 +1301,12 @@ class PlaceDetail {
   final int goruntulenme;
   final int tiklama;
   final bool qrSistemi;
-  final bool dogrulanmis; // ERP doğrulama (onaylı) — mavi tik (MEKAN_DOGRULAMA.md)
+  final bool
+  dogrulanmis; // ERP doğrulama (onaylı) — mavi tik (MEKAN_DOGRULAMA.md)
   final Map<String, String> calismaSaatleri; // gün → "18:00–01:00"
   final List<Category> kategoriler; // çözülmüş kategoriler {id, name, slug}
-  final List<OzellikItem> ozellikler; // nitelik/ortam etiketleri (type='ozellik')
+  final List<OzellikItem>
+  ozellikler; // nitelik/ortam etiketleri (type='ozellik')
   final List<Filter> filtreler; // mekanda aktif filtreler (type='filtre')
   final List<GaleriItem> galeri;
   final List<MenuKategori> menu;
@@ -1355,8 +1386,8 @@ class PlaceDetail {
 
     List<T> parseList<T>(dynamic v, T Function(Map<String, dynamic>) f) =>
         (v is List)
-            ? v.whereType<Map<String, dynamic>>().map(f).toList()
-            : <T>[];
+        ? v.whereType<Map<String, dynamic>>().map(f).toList()
+        : <T>[];
 
     return PlaceDetail(
       id: (j['id'] as num?)?.toInt() ?? 0,
@@ -1382,14 +1413,15 @@ class PlaceDetail {
       galeri: parseList(j['galeri'], (m) => GaleriItem.fromJson(m, host: host)),
       menu: parseList(j['menu'], MenuKategori.fromJson),
       // "2026-10-12 14:30:00" (Europe/Istanbul) ya da ISO-8601.
-      menuGuncelleme:
-          DateTime.tryParse('${j['menu_guncelleme'] ?? ''}'.trim()),
-      etkinlikler:
-          parseList(j['etkinlikler'], (m) => Etkinlik.fromJson(m, host: host)),
+      menuGuncelleme: DateTime.tryParse('${j['menu_guncelleme'] ?? ''}'.trim()),
+      etkinlikler: parseList(
+        j['etkinlikler'],
+        (m) => Etkinlik.fromJson(m, host: host),
+      ),
       videolar: parseList(
-              j['videolar'], (m) => MekanVideo.fromJson(m, host: host))
-          .where((v) => v.url.isNotEmpty)
-          .toList(),
+        j['videolar'],
+        (m) => MekanVideo.fromJson(m, host: host),
+      ).where((v) => v.url.isNotEmpty).toList(),
       mesafeM: parseMesafeM(j),
     );
   }
@@ -1402,10 +1434,10 @@ class OzellikItem {
   final String slug;
   const OzellikItem({required this.id, this.name = '', this.slug = ''});
   factory OzellikItem.fromJson(Map<String, dynamic> j) => OzellikItem(
-        id: (j['id'] as num?)?.toInt() ?? 0,
-        name: (j['name'] as String?)?.trim() ?? '',
-        slug: (j['slug'] as String?)?.trim() ?? '',
-      );
+    id: (j['id'] as num?)?.toInt() ?? 0,
+    name: (j['name'] as String?)?.trim() ?? '',
+    slug: (j['slug'] as String?)?.trim() ?? '',
+  );
 }
 
 /// Galeri öğesi (`galeri[]`). Panelden yüklenen videolar da bu listede gelir;
@@ -1431,8 +1463,10 @@ class GaleriItem {
   /// Üst görsel kadrajında gösterilecek adres: `kare` varsa o, yoksa orijinal.
   String get heroUrl => kare.isNotEmpty ? kare : url;
 
-  static final RegExp _videoExt =
-      RegExp(r'\.(mp4|m4v|mov|webm|3gp|mkv|m3u8)(\?.*)?$', caseSensitive: false);
+  static final RegExp _videoExt = RegExp(
+    r'\.(mp4|m4v|mov|webm|3gp|mkv|m3u8)(\?.*)?$',
+    caseSensitive: false,
+  );
 
   /// Video mu? Önce `mime_type`, o yoksa URL uzantısı belirler.
   bool get isVideo {
@@ -1444,9 +1478,11 @@ class GaleriItem {
   /// Video için gösterilebilir bir kapak görseli (thumbnail videonun kendisi
   /// değilse). Yoksa ''.
   String get videoPoster =>
-      (thumbnail.isNotEmpty && thumbnail != url && !_videoExt.hasMatch(thumbnail))
-          ? thumbnail
-          : '';
+      (thumbnail.isNotEmpty &&
+          thumbnail != url &&
+          !_videoExt.hasMatch(thumbnail))
+      ? thumbnail
+      : '';
 
   factory GaleriItem.fromJson(Map<String, dynamic> j, {String host = ''}) {
     final url = _absUrl(j['url'], host);
@@ -1517,10 +1553,10 @@ class MekanVideo {
 
   /// Eski yol: `galeri[]` içinde `mime_type: video/*` ile gelen öğe.
   factory MekanVideo.fromGaleri(GaleriItem g) => MekanVideo(
-        url: g.url,
-        poster: g.videoPoster,
-        mime: g.mimeType.toLowerCase(),
-      );
+    url: g.url,
+    poster: g.videoPoster,
+    mime: g.mimeType.toLowerCase(),
+  );
 }
 
 /// QR menü kategorisi (`menu[]`).
@@ -1530,15 +1566,15 @@ class MenuKategori {
   final List<MenuUrun> urunler;
   const MenuKategori({this.id, this.kategori = '', this.urunler = const []});
   factory MenuKategori.fromJson(Map<String, dynamic> j) => MenuKategori(
-        id: (j['id'] as num?)?.toInt(),
-        kategori: (j['kategori'] as String?)?.trim() ?? '',
-        urunler: (j['urunler'] is List)
-            ? (j['urunler'] as List)
-                .whereType<Map<String, dynamic>>()
-                .map(MenuUrun.fromJson)
-                .toList()
-            : const <MenuUrun>[],
-      );
+    id: (j['id'] as num?)?.toInt(),
+    kategori: (j['kategori'] as String?)?.trim() ?? '',
+    urunler: (j['urunler'] is List)
+        ? (j['urunler'] as List)
+              .whereType<Map<String, dynamic>>()
+              .map(MenuUrun.fromJson)
+              .toList()
+        : const <MenuUrun>[],
+  );
 }
 
 /// QR menü ürünü (`menu[].urunler[]`).
@@ -1575,7 +1611,13 @@ class MenuUrun {
 
 /// Gün anahtarları (`calisma_saatleri` sözlüğü), Pazartesi = 1 sırasıyla.
 const List<String> kGunAnahtarlari = [
-  'pazartesi', 'sali', 'carsamba', 'persembe', 'cuma', 'cumartesi', 'pazar',
+  'pazartesi',
+  'sali',
+  'carsamba',
+  'persembe',
+  'cuma',
+  'cumartesi',
+  'pazar',
 ];
 
 /// `calisma_saatleri` ham değerini gün → "18:00 - 01:00" sözlüğüne çevirir.
@@ -1585,7 +1627,9 @@ Map<String, String> parseCalismaSaatleri(dynamic raw) {
   if (raw is! Map) return out;
   raw.forEach((k, v) {
     final s = v?.toString().trim() ?? '';
-    if (s.isNotEmpty && s.toLowerCase() != 'kapalı' && s.toLowerCase() != 'kapali') {
+    if (s.isNotEmpty &&
+        s.toLowerCase() != 'kapalı' &&
+        s.toLowerCase() != 'kapali') {
       out[k.toString().toLowerCase()] = s;
     }
   });
@@ -1595,8 +1639,10 @@ Map<String, String> parseCalismaSaatleri(dynamic raw) {
 /// Çalışma saatlerine göre şu an açık mı? Açıksa kapanış saati ("02:00").
 /// Gece yarısını aşan aralıklar (ör. 18:00–01:00) desteklenir.
 /// Saat bilgisi hiç yoksa `null` (bilinmiyor) döner.
-({bool open, String? until})? acikDurumu(Map<String, String> cs,
-    {DateTime? now}) {
+({bool open, String? until})? acikDurumu(
+  Map<String, String> cs, {
+  DateTime? now,
+}) {
   if (cs.isEmpty) return null;
   final t = now ?? DateTime.now();
   final nowMin = t.hour * 60 + t.minute;
@@ -1662,9 +1708,9 @@ class RezervasyonBolge {
   const RezervasyonBolge({required this.id, this.isim = ''});
 
   factory RezervasyonBolge.fromJson(Map<String, dynamic> j) => RezervasyonBolge(
-        id: (j['id'] as num?)?.toInt() ?? 0,
-        isim: (j['isim'] ?? j['ad'] ?? '').toString().trim(),
-      );
+    id: (j['id'] as num?)?.toInt() ?? 0,
+    isim: (j['isim'] ?? j['ad'] ?? '').toString().trim(),
+  );
 }
 
 /// Rezervasyon seçenekleri (`GET /rezervasyon/secenekler`, rezervasyon-api.md).
@@ -1691,7 +1737,8 @@ class RezervasyonSecenekler {
   });
 
   factory RezervasyonSecenekler.fromJson(Map<String, dynamic> j) {
-    final bolgeler = (j['bolgeler'] as List<dynamic>?)
+    final bolgeler =
+        (j['bolgeler'] as List<dynamic>?)
             ?.whereType<Map<String, dynamic>>()
             .map(RezervasyonBolge.fromJson)
             .where((b) => b.id > 0)
@@ -1705,8 +1752,10 @@ class RezervasyonSecenekler {
         final id = int.tryParse(k.toString());
         if (id == null) return;
         if (v is List) {
-          masalar[id] =
-              v.map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+          masalar[id] = v
+              .map((e) => e.toString())
+              .where((s) => s.isNotEmpty)
+              .toList();
         }
       });
     }
@@ -1800,7 +1849,8 @@ class Etkinlik {
   /// "150 ₺" / boşsa "Ücretsiz".
   String get fiyatLabel => price.trim().isEmpty ? 'Ücretsiz' : '$price ₺';
 
-  factory Etkinlik.fromJson(Map<String, dynamic> j, {String host = ''}) => Etkinlik(
+  factory Etkinlik.fromJson(Map<String, dynamic> j, {String host = ''}) =>
+      Etkinlik(
         id: (j['id'] as num?)?.toInt() ?? 0,
         name: (j['name'] as String?)?.trim() ?? '',
         description: (j['description'] as String?)?.trim() ?? '',
@@ -1821,9 +1871,9 @@ class KedyMessage {
   bool get isUser => role == 'user';
 
   factory KedyMessage.fromJson(Map<String, dynamic> j) => KedyMessage(
-        role: (j['role'] ?? '').toString().trim(),
-        content: (j['content'] ?? '').toString(),
-      );
+    role: (j['role'] ?? '').toString().trim(),
+    content: (j['content'] ?? '').toString(),
+  );
 
   Map<String, String> toJson() => {'role': role, 'content': content};
 }

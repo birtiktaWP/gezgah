@@ -137,7 +137,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   void _openMekan(RotaNokta n) {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      detailRoute(
         builder: (_) => DetailScreen(
           place: Place(
             id: n.postId,

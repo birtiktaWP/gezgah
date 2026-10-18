@@ -5191,7 +5191,7 @@ class _YorumSheetState extends State<_YorumSheet> {
           onTap: (y.isletme && y.postId > 0)
               ? () => Navigator.push(
                     context,
-                    MaterialPageRoute(
+                    detailRoute(
                       builder: (_) => DetailScreen(
                         place: Place(
                           id: y.postId,
@@ -5569,7 +5569,7 @@ class _StopDetailSheet extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
+                        detailRoute(
                           builder: (_) => DetailScreen(
                             place: Place(
                               id: m.id,

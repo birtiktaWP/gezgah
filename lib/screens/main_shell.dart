@@ -167,7 +167,7 @@ class _MainShellState extends State<MainShell> {
 
   void _openDetail(Place p) {
     Navigator.push(
-        context, MaterialPageRoute(builder: (_) => DetailScreen(place: p)));
+        context, detailRoute(builder: (_) => DetailScreen(place: p)));
   }
 
   void _openNotifications() => showNotifications(context);
