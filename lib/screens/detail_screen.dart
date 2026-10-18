@@ -121,9 +121,9 @@ class _DetailScreenState extends State<DetailScreen> {
     // Mesafe için bilinen gerçek konum BEKLEMEDEN eklenir (ana sayfa açılışta
     // konumu çözüyor). Eskiden GPS 3 sn'ye kadar bekleniyordu; galeri
     // adresleri bu yanıtla geldiği için görseller de o kadar geç başlıyordu.
-    // Konum yoksa istek konumsuz gider; konum sonradan gelirse yedek tahmin
-    // gösterilir (bkz. _resolveEstimate). İkinci detay isteği atılmaz, çünkü
-    // her `/mekanlar/{id}` çağrısı sunucuda `tiklama` sayacını artırıyor.
+    // Konum henüz yoksa istek konumsuz gider ve km gösterilmez (uygulama
+    // tahmin etmez). İkinci detay isteği atılmaz, çünkü her `/mekanlar/{id}`
+    // çağrısı sunucuda `tiklama` sayacını artırıyor.
     final me = LocationService.lastReal;
     final results = await Future.wait([
       HomeRepository.instance
@@ -139,7 +139,6 @@ class _DetailScreenState extends State<DetailScreen> {
       _topCats = top;
       _loading = false;
     });
-    if (d != null && d.mesafeM == null) _resolveEstimate(d);
     // Galeri adresleri geldi: ilk kaydırmada sıradaki fotoğraflar hazır olsun.
     WidgetsBinding.instance.addPostFrameCallback((_) => _precacheHero(_photo));
     _playIntro(d);
@@ -403,23 +402,10 @@ class _DetailScreenState extends State<DetailScreen> {
   /// Konum izni yoksa ya da mekanın koordinatı yoksa mesafe gösterilmez.
   String get _locationLine {
     final loc = _location;
-    final srv = LocationService.formatM(_detail?.mesafeM);
-    final km = srv.isNotEmpty ? srv : _estimateKm;
+    // Yalnız sunucu mesafesi; uygulama tahmin etmez.
+    final km = LocationService.formatM(_detail?.mesafeM);
     if (km.isEmpty || loc == km || loc.contains(km)) return loc;
     return loc.isEmpty ? km : '$loc · $km';
-  }
-
-  /// Sunucu mesafesi gelmediyse (istekte konum yoktu) yedek tahmin:
-  /// "3,4 km" (kuş uçuşu × 1,3, MESAFE-MOBIL.md §7). Konum izni yoksa ''.
-  String _estimateKm = '';
-
-  Future<void> _resolveEstimate(PlaceDetail d) async {
-    final lat = d.lat, lng = d.lng;
-    if (lat == null || lng == null) return;
-    final me = await LocationService.realLocation();
-    if (!mounted || me == null) return;
-    final s = LocationService.formatEstimate(me.lat, me.lng, lat, lng);
-    if (s != _estimateKm) setState(() => _estimateKm = s);
   }
 
   /// Çalışma saatleri özeti: tüm günler aynı ve açıksa "Her gün X",

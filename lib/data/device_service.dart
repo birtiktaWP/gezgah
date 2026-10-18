@@ -28,7 +28,18 @@ class DeviceService {
   /// Güvenlik interceptor'ı, token gerektiren her istekten önce bunu `await`
   /// ederek isteklerin token hazır olmadan (401'e düşecek şekilde) gitmesini
   /// engeller (bkz. GUVENLIK.md §4).
-  Future<String> ensureRegistered() => _inflight ??= register();
+  ///
+  /// Kayıt beklenmedik bir hatayla biterse future bellekte tutulmaz; bir
+  /// sonraki istek kaydı yeniden dener (eskiden başarısız future oturum
+  /// boyunca saklanıyor ve her isteği bozuyordu).
+  Future<String> ensureRegistered() {
+    final f = _inflight ??= register();
+    f.catchError((Object _) {
+      if (identical(_inflight, f)) _inflight = null;
+      return '';
+    });
+    return f;
+  }
 
   /// Saklı token geçersiz sayıldığında (sunucu 401 döndürdüğünde) çağrılır:
   /// bayat token'ı siler, kayıt future'ını sıfırlar ve **yeni** bir token

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../data/api.dart';
 import '../data/location_service.dart';
@@ -21,7 +22,8 @@ class CategoryScreen extends StatefulWidget {
   final int? categoryId;
 
   /// Post type slug'ı (kategori yerine). Verilirse `/mekanlar?type=<type>` ile
-  /// listelenir (otopark | muze | mesire | plaj). Alt kategori/pin/filtre yok.
+  /// listelenir (otopark | muze | mesire | plaj). Alt sekmeler tipin
+  /// kategorileridir (`/kategoriler/tip/{type}`); ilk sekme "Tümü". Pin yok.
   final String? type;
   final String title;
   const CategoryScreen({
@@ -45,7 +47,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
   final ScrollController _scroll = ScrollController();
 
   // Ekranda görünen mekanlar bu ziyaret için bir kez sayılır (GORUNTULENME.md).
-  late final ImpressionScope _impressions = widget.type != null
+  // Alt kategori sekmesi değişince yeni kapsam açılır (kaynak_id = seçili id).
+  late ImpressionScope _impressions = widget.type != null
       ? ImpressionScope(kaynak: 'tip', kaynakId: widget.type)
       : ImpressionScope(
           kaynak: 'kategori',
@@ -54,6 +57,15 @@ class _CategoryScreenState extends State<CategoryScreen> {
 
   bool _loading = true;
   bool _loadingMore = false;
+
+  // Alt kategori sekmeleri aynı sayfada çalışır: sekmeler (_category + _subs)
+  // ilk yüklemedeki kök kategoriden gelir ve sabit kalır; seçilen sekmeye göre
+  // yalnız liste değişir. null = kök kategori seçili.
+  int? _activeId;
+  int? get _currentId => _activeId ?? widget.categoryId;
+  bool _switching = false; // sekme değişti, yeni liste yükleniyor
+  int _reqSeq = 0; // hızlı sekme değişiminde eski yanıtları yok saymak için
+  final Map<int, GlobalKey> _pillKeys = {};
 
   Category? _category;
   List<Category> _subs = const [];
@@ -102,11 +114,11 @@ class _CategoryScreenState extends State<CategoryScreen> {
 
   /// Kart alt yazısı: tür etiketi. Konum satırı (pin): "İl · İlçe · 3,4 km".
   ///
-  /// Mesafe önceliği (MESAFE-MOBIL.md):
-  ///  1. Sunucunun tahmini yol mesafesi (`mesafe_m`, istekte konum gidiyor;
-  ///     sunucu bu uçlara eklediğinde otomatik kullanılır).
-  ///  2. Yoksa §7 yedeği: kuş uçuşu × 1,3.
-  ///  3. Konum izni yoksa (ya da mekanın koordinatı yoksa) km yazılmaz.
+  /// Mesafe YALNIZ sunucudan gelir (`mesafe_m`; istekte konum gidiyor,
+  /// LISTE_MESAFE.md). Uygulama tahmin etmez: eskiden sunucu mesafesi yokken
+  /// kuş uçuşu × 1,3 gösteriliyordu ve detaydaki gerçek yol mesafesinden
+  /// (Boğaz geçişlerinde 2–3 kat) farklı çıkıyordu. Sunucu mesafesi yoksa km
+  /// yazılmaz.
   void _applyLabels(List<Place> list) {
     final label = switch (widget.type) {
       'plaj' => 'Plaj',
@@ -115,46 +127,67 @@ class _CategoryScreenState extends State<CategoryScreen> {
       'muze' => 'Müze',
       _ => 'Restoran',
     };
-    final loc = _loc;
     for (final p in list) {
       p.subtitle = label;
       final base = _baseLoc[p] ??= p.distance;
-      final km = _kmLabel(p, loc);
+      final km = LocationService.formatM(p.mesafeM);
       final parts = [base, km].where((s) => s.isNotEmpty).toList();
       p.distance = parts.isEmpty ? 'Konum bilgisi yok' : parts.join(' · ');
     }
   }
 
-  String _kmLabel(Place p, _Loc? loc) {
-    final srv = LocationService.formatM(p.mesafeM);
-    if (srv.isNotEmpty) return srv;
-    if (loc == null || !loc.real || p.lat.isNaN || p.lng.isNaN) return '';
-    return LocationService.formatEstimate(loc.lat, loc.lng, p.lat, p.lng);
-  }
-
-  /// "Yakınlık" sıralaması: sunucu mesafesi varsa o, yoksa kuş uçuşu.
+  /// "Yakınlık" sıralaması: sunucu mesafesi varsa o. Yoksa yalnız SIRALAMA
+  /// için kuş uçuşu kullanılır (ekranda gösterilmez).
   double _distMeters(Place p, _Loc loc) {
     final m = p.mesafeM;
     if (m != null) return m.toDouble();
     if (p.lat.isNaN || p.lng.isNaN) return double.infinity;
-    return LocationService.distanceMeters(loc.lat, loc.lng, p.lat, p.lng) *
-        1.3;
+    return LocationService.distanceMeters(loc.lat, loc.lng, p.lat, p.lng);
   }
 
-  void _sortPlaces() {
+  /// Sonsuz kaydırmada gelen yeni sayfayı listenin SONUNA ekler. Yalnız yeni
+  /// sayfa kendi içinde sıralanır; ekranda görülmüş kayıtların yeri değişmez.
+  ///
+  /// Eskiden yeni sayfa eklenip TÜM liste yeniden sıralanıyordu. Sunucu
+  /// listeyi mesafeye göre göndermediği için yeni kayıtlar listenin her yerine
+  /// dağılıyor, kullanıcının baktığı alt kısım daha önce gördüğü mekanlarla
+  /// doluyordu ("liste başa döndü / aynı şeyler yeniden yüklendi" etkisi).
+  /// Ayrıca zaten listede olan kayıtlar (sunucu sırası değişirse) tekrar
+  /// eklenmez.
+  void _appendPage(List<Place> page) {
+    final seen = {for (final p in _places) p.id};
+    final fresh = [
+      for (final p in page)
+        if (p.id <= 0 || seen.add(p.id)) p,
+    ];
+    _sortList(fresh);
+    _places.addAll(fresh);
+  }
+
+  /// Tüm listeyi seçili sıralamaya göre dizer (ilk yükleme / konum gelmesi /
+  /// kullanıcı sıralamayı değiştirdiğinde).
+  void _sortPlaces() => _sortList(_places);
+
+  void _sortList(List<Place> list) {
     final loc = _loc;
     switch (_sort) {
       case _SortMode.yakinlik:
         // Konum izni yoksa varsayılan merkeze göre sıralama yapılmaz;
         // sunucu sırası korunur (MESAFE-MOBIL.md §6).
         if (loc != null && loc.real) {
-          _places.sort(
+          list.sort(
             (a, b) => _distMeters(a, loc).compareTo(_distMeters(b, loc)),
           );
         }
         break;
       case _SortMode.tarih:
-        _places.sort((a, b) => b.date.compareTo(a.date)); // yeni → eski
+        // Yeni → eski. `date` yalnız gün içerir; aynı gün eklenen çok kayıt
+        // var (ör. otoparkların hepsi aynı gün), eşitlikte büyük id (sonra
+        // eklenen) önce gelir. Sunucunun varsayılan sırasıyla aynıdır.
+        list.sort((a, b) {
+          final c = b.date.compareTo(a.date);
+          return c != 0 ? c : b.id.compareTo(a.id);
+        });
         break;
     }
   }
@@ -182,19 +215,25 @@ class _CategoryScreenState extends State<CategoryScreen> {
 
     // Type modu: kategori değil post type listesi (GET /yerler?type=).
     if (type != null) {
+      final seqAtStart = _reqSeq;
       try {
         // Tipe ait filtreler paralel çekilir (FILTRELER_TIP_BAZLI.md).
         // Not: `meta.ozellikler` tipe göre süzülmediği ve restoran odaklı
         // olduğu için otopark/plaj/mesire'de özellik grubu gösterilmez.
         // Süzme sunucuda yapılır (YERLER_FILTRE_IDS.md §8).
+        // Alt sekmeler: tipin kategorileri (ör. mesire → Tabiat Parkı, Seyir
+        // Tepesi…). Seçili sekme varsa liste sunucuda `kategori=` ile süzülür.
         final results = await Future.wait([
           HomeRepository.instance.yerler(
             type,
             limit: 20,
             filtreler: _selectedFilters.toList(),
+            kategori: _activeId,
           ),
           HomeRepository.instance.filtreler(type: type),
+          HomeRepository.instance.kategorilerTip(type),
         ]);
+        if (seqAtStart != _reqSeq) return; // bu arada sekme değişti
         final r =
             results[0]
                 as ({
@@ -205,9 +244,14 @@ class _CategoryScreenState extends State<CategoryScreen> {
                 });
         final f =
             results[1] as ({List<Filter> filtreler, List<Filter> ozellikler});
+        final cats = results[2] as List<Category>;
         if (!mounted) return;
         setState(() {
           _loading = false;
+          _switching = false;
+          _loadingMore = false;
+          // Tek kategori varsa sekme anlamsız ("Tümü" ile aynı liste).
+          _subs = cats.length > 1 ? cats : const [];
           _filters = f.filtreler;
           _ozellikler = const [];
           _places = List<Place>.from(r.items);
@@ -217,7 +261,20 @@ class _CategoryScreenState extends State<CategoryScreen> {
         });
         _applyLocationWhenReady(locFuture);
       } catch (_) {
-        _useFallback();
+        if (!mounted || seqAtStart != _reqSeq) return;
+        if (_subs.isEmpty) {
+          _useFallback();
+        } else {
+          // Sekmeler duruyor: mock'a düşme, yalnız liste boş kalsın.
+          setState(() {
+            _loading = false;
+            _switching = false;
+            _places = [];
+            _total = 0;
+            _hasMore = false;
+            _nextPage = null;
+          });
+        }
       }
       return;
     }
@@ -281,17 +338,102 @@ class _CategoryScreenState extends State<CategoryScreen> {
     });
   }
 
+  /// Alt kategori sekmesine geçer: aynı sayfada kalır, sekmeler yerinde durur,
+  /// yalnız liste (ve sabit restoran) seçilen kategoriye göre yenilenir.
+  /// Seçili filtre/özellik ve sıralama korunur.
+  Future<void> _selectCategory(Category c) async {
+    final type = widget.type;
+    if (type != null) return _selectTypeCategory(type, c);
+    if (c.id == _currentId) return;
+    HapticFeedback.selectionClick();
+    final seq = ++_reqSeq;
+    setState(() {
+      _activeId = c.id == widget.categoryId ? null : c.id;
+      _switching = true;
+      _loadingMore = false;
+      _impressions = ImpressionScope(kaynak: 'kategori', kaynakId: '${c.id}');
+    });
+    _revealPill(c.id);
+    try {
+      final d = await HomeRepository.instance.kategoriDetay(c.id, limit: 20);
+      if (!mounted || seq != _reqSeq) return; // bu arada başka sekme seçildi
+      _applyLabels(d.places);
+      if (d.pinned != null) _applyLabels([d.pinned!]);
+      setState(() {
+        _switching = false;
+        _pinned = d.pinned;
+        _places = List<Place>.from(d.places);
+        _total = d.total;
+        _hasMore = d.hasMore;
+        _nextPage = d.nextPage;
+        _sortPlaces();
+      });
+      _fillFilteredResults();
+    } catch (_) {
+      if (!mounted || seq != _reqSeq) return;
+      setState(() {
+        _switching = false;
+        _pinned = null;
+        _places = [];
+        _total = 0;
+        _hasMore = false;
+        _nextPage = null;
+      });
+    }
+  }
+
+  /// Tip modunda ("Tümü" sekmesinin id'si). Gerçek kategori id'leri > 0.
+  static const int _tumuId = 0;
+
+  /// Tip ekranında (mesire/plaj/otopark) sekme değişimi: sekmeler yerinde
+  /// kalır, liste `GET /yerler?type=&kategori=` ile yeniden çekilir. Seçili
+  /// filtreler ve sıralama korunur. "Tümü" kategorisiz tüm tipi gösterir.
+  Future<void> _selectTypeCategory(String type, Category c) async {
+    final next = c.id == _tumuId ? null : c.id;
+    if (next == _activeId) return;
+    HapticFeedback.selectionClick();
+    _reqSeq++;
+    setState(() {
+      _activeId = next;
+      _switching = true;
+      _loadingMore = false;
+      _nextPage = null;
+      _hasMore = false;
+      _impressions = next == null
+          ? ImpressionScope(kaynak: 'tip', kaynakId: type)
+          : ImpressionScope(kaynak: 'kategori', kaynakId: '$next');
+    });
+    _revealPill(c.id);
+    await _load();
+  }
+
+  /// Seçilen sekmeyi yatay listede ortalar.
+  void _revealPill(int id) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _pillKeys[id]?.currentContext;
+      if (!mounted || ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
   /// Kaydırma sonuna gelince otomatik olarak sonraki 20 kaydı yükler.
   Future<void> _loadMore() async {
-    final id = widget.categoryId;
+    final id = _currentId;
     final type = widget.type;
     if ((id == null && type == null) ||
         _loadingMore ||
         _loading ||
+        _switching ||
         !_hasMore ||
         _nextPage == null) {
       return;
     }
+    final seq = _reqSeq;
     setState(() => _loadingMore = true);
 
     // Type modu: sonraki sayfayı GET /yerler?type= ile çek (filtreli).
@@ -302,15 +444,17 @@ class _CategoryScreenState extends State<CategoryScreen> {
           page: _nextPage!,
           limit: 20,
           filtreler: _selectedFilters.toList(),
+          kategori: _activeId,
         );
         if (!mounted) return;
+        if (seq != _reqSeq) return; // sekme değişti; eski sekmenin sayfası
         _applyLabels(r.items);
         setState(() {
-          _places.addAll(r.items);
-          _hasMore = r.hasMore;
-          _nextPage = r.nextPage;
+          _appendPage(r.items);
+          // Yeni kayıt gelmediyse daha fazla isteme (sonsuz boş istek olmasın).
+          _hasMore = r.hasMore && r.items.isNotEmpty;
+          _nextPage = _hasMore ? r.nextPage : null;
           _loadingMore = false;
-          _sortPlaces();
         });
       } catch (_) {
         if (mounted) setState(() => _loadingMore = false);
@@ -325,14 +469,15 @@ class _CategoryScreenState extends State<CategoryScreen> {
         limit: 20,
       );
       if (!mounted) return;
+      if (seq != _reqSeq) return; // sekme değişti; eski kategorinin sayfası
       _applyLabels(d.places);
       setState(() {
-        _places.addAll(d.places);
+        _appendPage(d.places);
         _total = d.total;
-        _hasMore = d.hasMore;
-        _nextPage = d.nextPage;
+        // Yeni kayıt gelmediyse daha fazla isteme (sonsuz boş istek olmasın).
+        _hasMore = d.hasMore && d.places.isNotEmpty;
+        _nextPage = _hasMore ? d.nextPage : null;
         _loadingMore = false;
-        _sortPlaces();
       });
     } catch (_) {
       if (!mounted) return;
@@ -413,6 +558,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
   /// kayıtlar üzerinde süzülüp gerekiyorsa sayfa doldurulur.
   void _onFilterChanged() {
     if (_serverFiltered) {
+      _reqSeq++; // süren eski istek (sekme/filtre) yanıtı yok sayılsın
       _nextPage = null;
       _hasMore = false;
       _load();
@@ -488,7 +634,14 @@ class _CategoryScreenState extends State<CategoryScreen> {
                 Icons.near_me_outlined,
                 'Yakınlığa göre',
               ),
-              option(_SortMode.tarih, Icons.schedule, 'Eklenme tarihine göre'),
+              // Otoparklarda eklenme tarihi anlamlı değil (hepsi toplu, aynı
+              // gün eklenmiş); bu seçenek gösterilmez.
+              if (widget.type != 'otopark')
+                option(
+                  _SortMode.tarih,
+                  Icons.schedule,
+                  'Eklenme tarihine göre',
+                ),
               const SizedBox(height: 8),
             ],
           ),
@@ -521,7 +674,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
             // Lazy: 0 = başlık (+ alt kategori/pin), sonra mekan kartları, en
             // sonda durum/footer. Mekan kartları ve görselleri yalnızca ekrana
             // geldikçe oluşturulur.
-            itemCount: _loading ? 1 : 2 + _visiblePlaces.length,
+            itemCount: (_loading || _switching) ? 1 : 2 + _visiblePlaces.length,
             // Kartlar mekan id'siyle anahtarlı: liste yeniden sıralanınca
             // (ilk kez konum gelince, sıralama değişince) kart görseliyle
             // birlikte yer değiştirir, görsel yeniden yüklenmez.
@@ -559,29 +712,47 @@ class _CategoryScreenState extends State<CategoryScreen> {
                         _categoryPills(),
                         const SizedBox(height: 18),
                       ],
-                      _listHead(),
-                      if (_hasActiveFilter) _selectedChips(),
-                      if (_visiblePinned != null)
-                        TrackImpression(
-                          scope: _impressions,
-                          placeId: _visiblePinned!.id,
-                          featured: true,
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
-                            child: ListTileCard(
-                              place: _visiblePinned!,
-                              heroTag: _visiblePinned!.id > 0
-                                  ? 'cat-pin-${_visiblePinned!.id}'
-                                  : null,
-                              onTap: () => _openDetail(
-                                _visiblePinned!,
-                                heroTag: _visiblePinned!.id > 0
-                                    ? 'cat-pin-${_visiblePinned!.id}'
-                                    : null,
+                      // Sekme değişirken sekmeler yerinde kalır; altında
+                      // yalnız liste yükleniyor göstergesi.
+                      if (_switching)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 60),
+                          child: Center(
+                            child: SizedBox(
+                              width: 26,
+                              height: 26,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: AppColors.primary,
                               ),
                             ),
                           ),
-                        ),
+                        )
+                      else ...[
+                        _listHead(),
+                        if (_hasActiveFilter) _selectedChips(),
+                        if (_visiblePinned != null)
+                          TrackImpression(
+                            scope: _impressions,
+                            placeId: _visiblePinned!.id,
+                            featured: true,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
+                              child: ListTileCard(
+                                place: _visiblePinned!,
+                                heroTag: _visiblePinned!.id > 0
+                                    ? 'cat-pin-${_visiblePinned!.id}'
+                                    : null,
+                                onTap: () => _openDetail(
+                                  _visiblePinned!,
+                                  heroTag: _visiblePinned!.id > 0
+                                      ? 'cat-pin-${_visiblePinned!.id}'
+                                      : null,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ],
                   ],
                 );
@@ -712,7 +883,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
                     context,
                     MaterialPageRoute(
                       builder: (_) => MapScreen(
-                        initialCategoryId: _category?.id ?? widget.categoryId,
+                        // Haritada da seçili sekmenin kategorisi açılsın.
+                        initialCategoryId:
+                            _currentId ?? _category?.id ?? widget.categoryId,
                         // Otopark/mesire/plaj listesinden geçilirse haritada da
                         // aynı tip seçili gelsin.
                         initialType: widget.type,
@@ -728,36 +901,49 @@ class _CategoryScreenState extends State<CategoryScreen> {
     );
   }
 
-  /// Kategori hapları — ilk hap mevcut kategori (aktif), sonrakiler alt
-  /// kategoriler. Tasarım (CategoryPill) korunur; veri API'den gelir.
+  /// Kategori sekmeleri — ilk sekme kök kategori, sonrakiler alt kategoriler.
+  /// Sekmeye dokununca yeni sayfa açılmaz; aynı sayfada liste değişir, seçili
+  /// sekme ortalanır. Elle kaydırmaya başlayınca hafif titreşim verilir.
+  /// Tüm sekmeler oluşturulur (sayı az) ki ekran dışındaki de ortalanabilsin.
   Widget _categoryPills() {
-    final items = <Category>[?_category, ..._subs];
+    // Tip modunda kök kategori yok; ilk sekme "Tümü" (tüm tip).
+    final isType = widget.type != null;
+    final items = <Category>[
+      if (isType) const Category(id: _tumuId, name: 'Tümü') else ?_category,
+      ..._subs,
+    ];
+    final current = isType
+        ? (_activeId ?? _tumuId)
+        : (_currentId ?? _category?.id);
     return SizedBox(
       height: 44,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 22),
-        itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 10),
-        itemBuilder: (_, i) {
-          final c = items[i];
-          // Gerçek (API) ikon; yoksa ikonsuz hap — uydurma ikon gösterilmez.
-          return CategoryPill.fromApi(
-            apiIcon: c.icon,
-            label: c.name,
-            active: i == 0,
-            onTap: () {
-              if (i == 0) return; // mevcut kategori
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      CategoryScreen(categoryId: c.id, title: c.name),
-                ),
-              );
-            },
-          );
+      child: NotificationListener<ScrollStartNotification>(
+        onNotification: (n) {
+          // Yalnız parmakla kaydırma (ortalama animasyonunda titreşim yok).
+          if (n.dragDetails != null) HapticFeedback.lightImpact();
+          return false;
         },
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 22),
+          child: Row(
+            children: [
+              for (var i = 0; i < items.length; i++) ...[
+                if (i > 0) const SizedBox(width: 10),
+                KeyedSubtree(
+                  key: _pillKeys.putIfAbsent(items[i].id, GlobalKey.new),
+                  // Gerçek (API) ikon; yoksa ikonsuz hap.
+                  child: CategoryPill.fromApi(
+                    apiIcon: items[i].icon,
+                    label: items[i].name,
+                    active: items[i].id == current,
+                    onTap: () => _selectCategory(items[i]),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

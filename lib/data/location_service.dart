@@ -96,12 +96,6 @@ class LocationService {
   /// eklemek için; ağ isteğini GPS'e bekletmez.
   static ({double lat, double lng})? get lastReal => _lastReal;
 
-  /// Sunucu mesafesi yokken yedek tahmin (MESAFE-MOBIL.md §7, seçenek 2):
-  /// kuş uçuşu × 1,3 (işaretsiz, sunucu mesafesiyle aynı biçim: "3,4 km").
-  /// Yalnız gerçek konumla çağrılmalı.
-  static String formatEstimate(
-          double lat1, double lng1, double lat2, double lng2) =>
-      format(distanceMeters(lat1, lng1, lat2, lng2) * 1.3);
 
   /// İki koordinat arasındaki kuş uçuşu mesafe (metre). Yalnız **sıralama**
   /// için kullanılır; ekranda gösterilmez (MESAFE-MOBIL.md: ekranda yalnız

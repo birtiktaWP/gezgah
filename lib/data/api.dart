@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'app_secrets.dart';
@@ -41,21 +42,70 @@ class Api {
     ),
   )..interceptors.add(_SecurityInterceptor());
 
+  // Güvenli depo (iOS Keychain / Android Keystore) bazı cihazlarda ilk
+  // kurulumda ya da yeniden kurulumda hata verebiliyor (ör. iOS -25308
+  // errSecInteractionNotAllowed, Android'de yedekten dönen ama anahtarı
+  // kaybolmuş şifreli kayıt). Eskiden bu hata istek interceptor'ına kadar
+  // çıkıyor ve TÜM API istekleri sonsuza kadar asılı kalıyordu (ilk açılışta
+  // boş ana sayfa; kapatıp açınca düzeliyordu). Artık depo hataları yutulur ve
+  // değer oturum boyunca bellekte tutulur.
+  final Map<String, String?> _mem = {};
+
+  // Depo bir kez hata/zaman aşımı verdiyse oturumun geri kalanında yalnız
+  // bellek kullanılır (her istekte 3 sn beklenmesin).
+  bool _storageBroken = false;
+
+  Future<String?> _read(String key) async {
+    if (_storageBroken) return _mem[key];
+    try {
+      // Süre sınırı: depo hiç yanıt vermezse de istekler beklemesin.
+      final v = await _storage
+          .read(key: key)
+          .timeout(const Duration(seconds: 3));
+      if (v != null && v.isNotEmpty) _mem[key] = v;
+      return v ?? _mem[key];
+    } catch (e) {
+      debugPrint('Güvenli depo okunamadı ($key): $e');
+      _storageBroken = true;
+      return _mem[key];
+    }
+  }
+
+  Future<void> _write(String key, String value) async {
+    _mem[key] = value;
+    if (_storageBroken) return;
+    try {
+      await _storage
+          .write(key: key, value: value)
+          .timeout(const Duration(seconds: 3));
+    } catch (e) {
+      debugPrint('Güvenli depoya yazılamadı ($key): $e');
+      _storageBroken = true;
+    }
+  }
+
+  Future<void> _delete(String key) async {
+    _mem.remove(key);
+    try {
+      await _storage.delete(key: key);
+    } catch (e) {
+      debugPrint('Güvenli depodan silinemedi ($key): $e');
+    }
+  }
+
   // --- Cihaz token (güvenli depo) --------------------------------------------
-  Future<String?> get deviceToken => _storage.read(key: _deviceTokenKey);
-  Future<void> saveDeviceToken(String t) =>
-      _storage.write(key: _deviceTokenKey, value: t);
-  Future<void> clearDeviceToken() => _storage.delete(key: _deviceTokenKey);
+  Future<String?> get deviceToken => _read(_deviceTokenKey);
+  Future<void> saveDeviceToken(String t) => _write(_deviceTokenKey, t);
+  Future<void> clearDeviceToken() => _delete(_deviceTokenKey);
 
   // --- Üye token'ı (güvenli depo) --------------------------------------------
   // `/uye/giris` yanıtından dönen `app_uyeler.token`. Her başarılı girişte
   // yenilenir (UYE_LOGIN.md). Yalnızca `/uye/me` ve `/uye/cikis` gibi üyeye
   // özel çağrılarda explicit gönderilir; genel Bearer olarak cihaz token'ı
   // kullanılmaya devam eder (bildirim/cihaz mantığını bozmamak için).
-  Future<String?> get uyeToken => _storage.read(key: _uyeTokenKey);
-  Future<void> saveUyeToken(String t) =>
-      _storage.write(key: _uyeTokenKey, value: t);
-  Future<void> clearUyeToken() => _storage.delete(key: _uyeTokenKey);
+  Future<String?> get uyeToken => _read(_uyeTokenKey);
+  Future<void> saveUyeToken(String t) => _write(_uyeTokenKey, t);
+  Future<void> clearUyeToken() => _delete(_uyeTokenKey);
 }
 
 /// Girişte numara kayıtlı değil (`404 kayit_gerekli`) — kayıt akışına yönlendir.
@@ -151,6 +201,16 @@ class _SecurityInterceptor extends Interceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
+    try {
+      await _prepare(options);
+    } catch (e) {
+      // Son güvence: hiçbir hata isteği asılı bırakmasın.
+      debugPrint('İstek hazırlanırken hata (${options.path}): $e');
+    }
+    handler.next(options);
+  }
+
+  Future<void> _prepare(RequestOptions options) async {
     // 1) Uygulama anahtarı (yapılandırıldıysa).
     if (AppSecrets.hasAppKey) {
       options.headers['X-App-Key'] = AppSecrets.appKey;
@@ -170,11 +230,24 @@ class _SecurityInterceptor extends Interceptor {
       // döndürür. Bu değeri doğrudan kullanıyoruz; depodan yeniden okumuyoruz.
       // Böylece register() token'ı henüz depoya yazarken interceptor'ın eski
       // değeri okuması (yarış durumu) imkânsız hale gelir (bkz. GUVENLIK.md §4).
+      //
+      // Dio bu async metodu BEKLEMEDEN çağırır: burada fırlayan bir hata
+      // `handler.next`'in hiç çağrılmamasına ve isteğin sonsuza kadar asılı
+      // kalmasına yol açar (zaman aşımı da işlemez, istek gönderilmemiştir).
+      // Bu yüzden token adımı hata yakalanarak ve süre sınırıyla yapılır;
+      // ne olursa olsun istek aşağıda serbest bırakılır.
       String? token;
-      if (!_isDeviceRegisterPath(options.path)) {
-        token = await DeviceService.instance.ensureRegistered();
-      } else {
-        token = await Api.instance.deviceToken;
+      try {
+        if (!_isDeviceRegisterPath(options.path)) {
+          token = await DeviceService.instance.ensureRegistered().timeout(
+            const Duration(seconds: 12),
+          );
+        } else {
+          token = await Api.instance.deviceToken;
+        }
+      } catch (e) {
+        debugPrint('Cihaz token hazırlanamadı, istek tokensız gidiyor: $e');
+        token = await Api.instance.deviceToken; // bellekteki değer (hatasız)
       }
       if (token != null && token.isNotEmpty) {
         options.headers['Authorization'] = 'Bearer $token';
@@ -206,8 +279,6 @@ class _SecurityInterceptor extends Interceptor {
       options.headers['X-Nonce'] = nonce;
       options.headers['X-Signature'] = sig;
     }
-
-    handler.next(options);
   }
 
   /// Yanıt token geçersizliği (401) gösteriyorsa: cihaz token'ını temizle,
@@ -245,7 +316,9 @@ class _SecurityInterceptor extends Interceptor {
         !_isDeviceRegisterPath(opts.path) &&
         !alreadyRetried) {
       try {
-        final token = await DeviceService.instance.forceReregister();
+        final token = await DeviceService.instance.forceReregister().timeout(
+          const Duration(seconds: 12),
+        );
         opts.extra['__auth_retried__'] = true;
         if (token.isNotEmpty) {
           opts.headers['Authorization'] = 'Bearer $token';
@@ -759,8 +832,7 @@ class SozlesmeRepository {
   /// `GET /sozlesmeler` — hafif liste (gövde dönmez), `sira`'ya göre sıralı.
   /// [tip] `zorunlu` | `opsiyonel` (verilmezse hepsi). Hata/boşta boş liste.
   Future<List<Sozlesme>> liste({String? tip}) async {
-    final fresh =
-        _listAt != null && DateTime.now().difference(_listAt!) < _ttl;
+    final fresh = _listAt != null && DateTime.now().difference(_listAt!) < _ttl;
     if (tip == null && _listCache != null && fresh) return _listCache!;
     try {
       final res = await _dio.get(
@@ -939,6 +1011,10 @@ class ApiPlace {
   /// (ACIK_KAPALI_LISTE.md); bugün göndermiyor → boş.
   final Map<String, String> calismaSaatleri;
 
+  /// Eklenme tarihi (`date`, "YYYY-MM-DD"). "Eklenme tarihine göre" sıralama
+  /// için; gelmezse boş.
+  final String date;
+
   const ApiPlace({
     required this.id,
     required this.name,
@@ -959,6 +1035,7 @@ class ApiPlace {
     this.thumbWide,
     this.mesafeM,
     this.calismaSaatleri = const {},
+    this.date = '',
   });
 
   /// Ekran alanına göre en uygun görsel: istenen boyut → `thumbnail` → `image`.
@@ -1161,8 +1238,9 @@ class HomeRepository {
   }
 
   /// Mekan tipinde fiilen kullanılan kategoriler (`GET /kategoriler/tip/{type}`,
-  /// KATEGORI_TIP_BAZLI.md). `mekan_sayisi` azalan sıralı gelir; plaj/mesire/muze
-  /// için boş liste döner (o tiplerde ayrım filtrelerle yapılır).
+  /// KATEGORI_TIP_BAZLI.md). `mekan_sayisi` azalan sıralı gelir. Otopark, plaj
+  /// ve mesire için dolu döner (tip liste ekranında alt sekme olarak
+  /// kullanılır); kategorisi olmayan tiplerde (ör. müze) boş liste.
   Future<List<Category>> kategorilerTip(String type) async {
     if (type.isEmpty) return const [];
     final cached = _tipCache[type];
@@ -1446,7 +1524,8 @@ class HomeRepository {
     try {
       final res = await _dio.get(
         '/harita',
-        queryParameters: {'kategori': ?kategori, 'type': ?type},
+        // Konum: sunucu `mesafe_m` eklerse harita kartı onu gösterir.
+        queryParameters: {'kategori': ?kategori, 'type': ?type, ..._locQuery()},
       );
       final body = res.data as Map<String, dynamic>;
       if (body['success'] != true) return const [];
@@ -1700,11 +1779,14 @@ class HomeRepository {
   /// [filtreler] verilirse süzme **sunucuda** (AND) yapılır; `total`/`pages`
   /// filtreli kümeye ait olur (YERLER_FILTRE_IDS.md §8). Eşleşmeler listenin
   /// derinlerinde olsa bile ilk sayfada görünür.
+  /// [kategori] verilirse yalnız o kategorideki yerler döner (`kategori=`,
+  /// sunucuda süzülür; tipin kategorileri `kategorilerTip`'ten gelir).
   Future<({List<Place> items, bool hasMore, int? nextPage, int total})> yerler(
     String type, {
     int page = 1,
     int limit = 20,
     List<int>? filtreler,
+    int? kategori,
   }) async {
     final fq = (filtreler == null || filtreler.isEmpty)
         ? ''
@@ -1717,6 +1799,7 @@ class HomeRepository {
           'page': page,
           'limit': limit,
           if (fq.isNotEmpty) 'filtreler': fq,
+          if (kategori != null && kategori > 0) 'kategori': kategori,
           ..._locQuery(),
         },
       );
@@ -1771,6 +1854,7 @@ class HomeRepository {
     ozellikIds: ap.ozellikIds,
     mesafeM: ap.mesafeM,
     calismaSaatleri: ap.calismaSaatleri,
+    date: ap.date,
     thumbnail: ap.thumbnail,
     thumbSquare: ap.thumbSquare,
     thumbCard: ap.thumbCard,
@@ -2386,6 +2470,7 @@ class HomeRepository {
       thumbWide: thumbs.wide,
       mesafeM: parseMesafeM(j),
       calismaSaatleri: parseCalismaSaatleri(j['calisma_saatleri']),
+      date: (j['date'] as String?)?.trim() ?? '',
     );
   }
 

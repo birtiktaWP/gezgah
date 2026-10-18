@@ -63,7 +63,11 @@ extension _SearchTypeX on _SearchType {
 /// açılır ve arama hemen çalışır.
 void showSearchModal(BuildContext context,
     {void Function(Place place)? onOpenDetail, String? initialQuery}) {
-  Navigator.of(context).push(
+  // Arama kutusuna art arda basılınca üst üste ikinci bir modal açılmasın.
+  if (_searchOpen) return;
+  _searchOpen = true;
+  Navigator.of(context)
+      .push(
     PageRouteBuilder(
       opaque: false,
       barrierColor: Colors.black26,
@@ -79,8 +83,12 @@ void showSearchModal(BuildContext context,
         );
       },
     ),
-  );
+  )
+      .whenComplete(() => _searchOpen = false);
 }
+
+/// Bir arama modalı açık mı (ikinci kez açılmayı engellemek için).
+bool _searchOpen = false;
 
 class _SearchModal extends StatefulWidget {
   final void Function(Place place)? onOpenDetail;
@@ -316,8 +324,58 @@ class _SearchModalState extends State<_SearchModal>
     _typeScroll.dispose();
     _placeScroll.dispose();
     _foodScroll.dispose();
+    _routeAnim?.removeStatusListener(_onRouteAnim);
+    _fieldFocus.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  // --- Arama alanı odağı ------------------------------------------------------
+
+  final FocusNode _fieldFocus = FocusNode(debugLabel: 'arama-alani');
+  Animation<double>? _routeAnim;
+  bool _autoFocused = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final anim = ModalRoute.of(context)?.animation;
+    if (anim != _routeAnim) {
+      _routeAnim?.removeStatusListener(_onRouteAnim);
+      _routeAnim = anim;
+      anim?.addStatusListener(_onRouteAnim);
+      if (anim?.status == AnimationStatus.completed) _onRouteAnim(anim!.status);
+    }
+  }
+
+  /// Modal girişi bitince (ekranda tam görünür) bir kez klavyeyi açar; modal
+  /// kapanmaya başlayınca odağı hemen bırakır.
+  void _onRouteAnim(AnimationStatus s) {
+    if (!mounted) return;
+    setState(() {}); // canRequestFocus güncellensin
+    if (s == AnimationStatus.reverse || s == AnimationStatus.dismissed) {
+      if (_fieldFocus.hasFocus) _fieldFocus.unfocus();
+      return;
+    }
+    if (s != AnimationStatus.completed || _autoFocused) return;
+    // Sesli aramadan gelindiyse klavye açılmasın (sonuçlar tam ekranda
+    // görünsün); kutuya dokununca açılır.
+    if ((widget.initialQuery ?? '').trim().isNotEmpty) return;
+    // Rota ilk karede animasyonu henüz bağlanmadan "completed" görünebiliyor;
+    // bu yüzden karar bir sonraki karede yeniden kontrol edilir ve bayrak
+    // yalnız odak gerçekten istendiğinde kalkar.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _autoFocused || !_canFocus(context)) return;
+      _autoFocused = true;
+      _fieldFocus.requestFocus();
+    });
+  }
+
+  /// Alan odak alabilir mi: modal en üstte VE giriş animasyonu bitmiş.
+  bool _canFocus(BuildContext context) {
+    final r = ModalRoute.of(context);
+    if (r == null) return true;
+    return r.isCurrent && r.animation?.status == AnimationStatus.completed;
   }
 
   void _onQueryChanged(String value) {
@@ -1557,14 +1615,17 @@ class _SearchModalState extends State<_SearchModal>
                 Expanded(
                   child: TextField(
                     controller: _controller,
-                    // Sesli aramadan gelindiyse klavye açılmasın (sonuçlar
-                    // tam ekranda görünsün); kutuya dokununca açılır.
-                    autofocus: (widget.initialQuery ?? '').trim().isEmpty,
-                    // Modal üstüne detay (ya da başka sayfa) açıkken bu alan
-                    // odak alamaz. Aksi halde altta kalan alana gelen bir odak
-                    // isteği detay sayfasının üstünde klavyeyi açıyordu.
-                    // Modal tekrar en üstte olunca alan normal çalışır.
-                    canRequestFocus: ModalRoute.isCurrentOf(context) ?? true,
+                    focusNode: _fieldFocus,
+                    // autofocus YOK: odak, modal ekrana tam yerleşince verilir
+                    // (bkz. _onRouteAnim). Eskiden autofocus ilk karede,
+                    // modal daha ekranın altındayken klavyeyi açıyordu.
+                    //
+                    // Alan yalnız modal ekranda tam görünür ve en üstteyken
+                    // odak alabilir. Detay üstte açıkken, modal açılırken ya da
+                    // kapanırken (ekran dışında, görünmez) odak alamaz; aksi
+                    // halde görünmeyen bir modalın alanı klavyeyi açıyordu
+                    // ("arama sayfası yerine klavye geldi").
+                    canRequestFocus: _canFocus(context),
                     textInputAction: TextInputAction.search,
                     onChanged: _onQueryChanged,
                     onSubmitted: _commitHistory,

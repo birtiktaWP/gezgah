@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../data/api.dart';
 import '../data/home_config.dart';
@@ -146,7 +147,12 @@ class _MapScreenState extends State<MapScreen> {
           }
         } catch (_) {}
       }
-      if (idx != -1) _activeCat = idx + 1; // 0 = Tümü
+      if (idx != -1) {
+        _activeCat = idx + 1; // 0 = Tümü
+        // Kategori sayfasından gelinen sekme açılışta ortada görünsün.
+        if (mounted) setState(() {});
+        _revealCat(_activeCat, animate: false);
+      }
     }
     await _loadPlaces();
     _updateLabel();
@@ -509,18 +515,10 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  /// Seçili mekan kartındaki mesafe ("3,4 km") ya da ''. Önce sunucu yol
-  /// mesafesi (`mesafe_m`); `/harita` bunu vermediği için yoksa kategori
-  /// listesindeki yedek tahmin (kuş uçuşu × 1,3, MESAFE-MOBIL.md §7).
-  /// Konum izni yoksa ''. (Eskiden burada İl · İlçe yazıyordu ve kartta
-  /// konum satırıyla aynı metin iki kez görünüyordu.)
-  String _distanceText(ApiPlace p) {
-    final srv = LocationService.formatM(p.mesafeM);
-    if (srv.isNotEmpty) return srv;
-    final loc = _loc;
-    if (loc == null || !loc.real || !p.hasCoord) return '';
-    return LocationService.formatEstimate(loc.lat, loc.lng, p.lat!, p.lng!);
-  }
+  /// Seçili mekan kartındaki mesafe ("3,4 km") ya da ''. YALNIZ sunucunun
+  /// yol mesafesi (`mesafe_m`, LISTE_MESAFE.md); uygulama tahmin etmez.
+  /// `/harita` mesafe döndürene kadar kartta km görünmez.
+  String _distanceText(ApiPlace p) => LocationService.formatM(p.mesafeM);
 
   @override
   Widget build(BuildContext context) {
@@ -638,6 +636,52 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  // Hap anahtarları (index → key); seçilen hapı ortalamak için.
+  final Map<int, GlobalKey> _catKeys = {};
+  GlobalKey _catKey(int i) => _catKeys.putIfAbsent(i, GlobalKey.new);
+
+  /// [i]. hapı yatay listede ortalar (kenarda yarım kalmasın).
+  void _revealCat(int i, {bool animate = true}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _catKeys[i]?.currentContext;
+      if (!mounted || ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.5,
+        duration: animate ? const Duration(milliseconds: 280) : Duration.zero,
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  Widget _catPill(int i) {
+    void onTap() {
+      if (_activeCat == i) return;
+      HapticFeedback.selectionClick();
+      setState(() => _activeCat = i);
+      _revealCat(i);
+      _loadPlaces();
+    }
+
+    if (i == 0) {
+      return CategoryPill(
+        icon: Icons.explore_outlined,
+        label: 'Tümü',
+        active: _activeCat == 0,
+        onTap: onTap,
+      );
+    }
+    // Kategorinin gerçek (API) ikonu; yoksa ikonsuz hap. Eskiden id'ye göre
+    // uygulama içi varsayılan ikon çiziliyordu (hep çatal-bıçak).
+    final c = _cats[i - 1];
+    return CategoryPill.fromApi(
+      apiIcon: c.icon,
+      label: c.name,
+      active: _activeCat == i,
+      onTap: onTap,
+    );
+  }
+
   Widget _categoryPills() {
     // Bu tipte kategori ataması yoksa (plaj/mesire) çip barını hiç gösterme.
     if (_cats.isEmpty) return const SizedBox.shrink();
@@ -649,36 +693,26 @@ class _MapScreenState extends State<MapScreen> {
       right: 0,
       child: SizedBox(
         height: 44,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          itemCount: count,
-          separatorBuilder: (_, __) => const SizedBox(width: 10),
-          itemBuilder: (_, i) {
-            void onTap() {
-              if (_activeCat == i) return;
-              setState(() => _activeCat = i);
-              _loadPlaces();
-            }
-
-            if (i == 0) {
-              return CategoryPill(
-                icon: Icons.explore_outlined,
-                label: 'Tümü',
-                active: _activeCat == 0,
-                onTap: onTap,
-              );
-            }
-            // Kategorinin gerçek (API) ikonu; yoksa ikonsuz hap. Eskiden id'ye
-            // göre uygulama içi varsayılan ikon çiziliyordu (hep çatal-bıçak).
-            final c = _cats[i - 1];
-            return CategoryPill.fromApi(
-              apiIcon: c.icon,
-              label: c.name,
-              active: _activeCat == i,
-              onTap: onTap,
-            );
+        // Tüm haplar oluşturulur (kategori sayısı az): seçilen hap ekran
+        // dışında olsa da ortaya kaydırılabilsin (bkz. _revealCat).
+        child: NotificationListener<ScrollStartNotification>(
+          onNotification: (n) {
+            // Parmakla kaydırma başlayınca hafif titreşim (ortalamada değil).
+            if (n.dragDetails != null) HapticFeedback.lightImpact();
+            return false;
           },
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                for (var i = 0; i < count; i++) ...[
+                  if (i > 0) const SizedBox(width: 10),
+                  KeyedSubtree(key: _catKey(i), child: _catPill(i)),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );

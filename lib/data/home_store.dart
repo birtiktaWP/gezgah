@@ -126,17 +126,28 @@ class HomeStore {
     List<T> Function() getCache,
     void Function(List<T>) setCache,
   ) async {
-    try {
-      final data = await run();
-      if (data.isNotEmpty) {
-        setCache(data);
-        await _save(key, data, toJson);
-        return data;
+    // İlk kurulumda disk cache boştur; ilk istek geçici olarak başarısız olursa
+    // (ağ henüz hazır değil, cihaz kaydı sürüyor, 429…) bölüm oturum boyunca
+    // boş kalıyordu (kapatıp açınca düzeliyordu). Cache boşken kısa
+    // aralıklarla iki kez daha denenir.
+    const retryDelays = [Duration(seconds: 2), Duration(seconds: 5)];
+    for (var attempt = 0;; attempt++) {
+      try {
+        final data = await run();
+        if (data.isNotEmpty) {
+          setCache(data);
+          await _save(key, data, toJson);
+          return data;
+        }
+        final cache = getCache();
+        if (cache.isNotEmpty) return cache;
+        if (attempt >= retryDelays.length) return data;
+      } catch (_) {
+        final cache = getCache();
+        if (cache.isNotEmpty) return cache;
+        if (attempt >= retryDelays.length) return cache;
       }
-      final cache = getCache();
-      return cache.isNotEmpty ? cache : data;
-    } catch (_) {
-      return getCache();
+      await Future<void>.delayed(retryDelays[attempt]);
     }
   }
 
