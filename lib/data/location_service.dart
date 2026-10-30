@@ -21,8 +21,9 @@ class LocationService {
   /// Mesafe hesabı için bir konum çözer.
   /// Sıra: (taze cache) → anlık konum → son bilinen konum → varsayılan merkez.
   /// `real`, gerçek cihaz konumu kullanılıp kullanılmadığını belirtir.
-  static Future<({double lat, double lng, bool real})> resolve(
-      {bool forceRefresh = false}) async {
+  static Future<({double lat, double lng, bool real})> resolve({
+    bool forceRefresh = false,
+  }) async {
     final c = _cached;
     if (!forceRefresh &&
         c != null &&
@@ -75,8 +76,9 @@ class LocationService {
   /// Gerçek cihaz konumu; izin yoksa ya da [timeout] içinde alınamazsa null.
   /// Mesafe isteyen uçlara yalnız bu gönderilir (MESAFE-MOBIL.md §6):
   /// varsayılan merkez (Kadıköy) asla mesafe hesabına girmez.
-  static Future<({double lat, double lng})?> realLocation(
-      {Duration timeout = const Duration(seconds: 3)}) async {
+  static Future<({double lat, double lng})?> realLocation({
+    Duration timeout = const Duration(seconds: 3),
+  }) async {
     try {
       final r = await resolve().timeout(timeout);
       if (r.real) return (lat: r.lat, lng: r.lng);
@@ -89,6 +91,56 @@ class LocationService {
     return last == null ? null : (lat: last.lat, lng: last.lng);
   }
 
+  /// Konum izni ZATEN verilmişse gerçek konum; izin yoksa izin istemeden
+  /// null. (Kedy sohbeti gibi yerlerde araya izin penceresi çıkmasın.)
+  static Future<({double lat, double lng})?> realLocationIfPermitted({
+    Duration timeout = const Duration(seconds: 3),
+  }) async {
+    final last = _lastReal;
+    if (last != null) return (lat: last.lat, lng: last.lng);
+    try {
+      final p = await Geolocator.checkPermission();
+      if (p != LocationPermission.always &&
+          p != LocationPermission.whileInUse) {
+        return null;
+      }
+    } catch (_) {
+      return null;
+    }
+    return realLocation(timeout: timeout);
+  }
+
+  // İlçe/il etiketi koordinat kovası (~1 km) başına bir kez çözülür.
+  static final Map<String, ({String il, String ilce})> _placeCache = {};
+
+  /// Koordinattan (il, ilçe) — reverse geocoding, ~1 km kovasında cache'li.
+  /// Başarısızsa boş metinler döner.
+  static Future<({String il, String ilce})> ilIlce(
+    double lat,
+    double lng,
+  ) async {
+    final key = '${lat.toStringAsFixed(2)},${lng.toStringAsFixed(2)}';
+    final hit = _placeCache[key];
+    if (hit != null) return hit;
+    try {
+      final marks = await placemarkFromCoordinates(
+        lat,
+        lng,
+      ).timeout(const Duration(seconds: 3));
+      if (marks.isEmpty) return (il: '', ilce: '');
+      final p = marks.first;
+      final il = (p.administrativeArea ?? '').trim();
+      final ilce = (p.subAdministrativeArea ?? '').trim().isNotEmpty
+          ? p.subAdministrativeArea!.trim()
+          : (p.locality ?? '').trim();
+      final r = (il: il, ilce: ilce);
+      _placeCache[key] = r;
+      return r;
+    } catch (_) {
+      return (il: '', ilce: '');
+    }
+  }
+
   /// En son alınan gerçek cihaz konumu (TTL'siz; yalnız [realLocation] yedeği).
   static ({double lat, double lng})? _lastReal;
 
@@ -96,12 +148,15 @@ class LocationService {
   /// eklemek için; ağ isteğini GPS'e bekletmez.
   static ({double lat, double lng})? get lastReal => _lastReal;
 
-
   /// İki koordinat arasındaki kuş uçuşu mesafe (metre). Yalnız **sıralama**
   /// için kullanılır; ekranda gösterilmez (MESAFE-MOBIL.md: ekranda yalnız
   /// sunucunun tahmini yol mesafesi).
   static double distanceMeters(
-      double lat1, double lng1, double lat2, double lng2) {
+    double lat1,
+    double lng1,
+    double lat2,
+    double lng2,
+  ) {
     return Geolocator.distanceBetween(lat1, lng1, lat2, lng2);
   }
 
@@ -124,8 +179,11 @@ class LocationService {
 
   /// Koordinattan "İl, İlçe" (veya [districtFirst] ile "İlçe, İl") etiketini
   /// üretir (reverse geocoding). Başarısız olursa `null` döner.
-  static Future<String?> cityDistrict(double lat, double lng,
-      {bool districtFirst = false}) async {
+  static Future<String?> cityDistrict(
+    double lat,
+    double lng, {
+    bool districtFirst = false,
+  }) async {
     try {
       final marks = await placemarkFromCoordinates(lat, lng);
       if (marks.isEmpty) return null;

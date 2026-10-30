@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/menu_item_sheet.dart';
 
 /// QR menü sayfası — mekan detayındaki "QR Menü" ile açılır (MEKAN_DETAY.md).
 /// Menü verisi (`menu`) detay yanıtından geldiği için burada yeniden istek
@@ -15,8 +16,12 @@ class MenuScreen extends StatefulWidget {
   /// Menünün son güncellenme zamanı (`menu_guncelleme`). null ise tarih bandı
   /// gösterilmez (MENU_GUNCELLEME.md).
   final DateTime? guncelleme;
-  const MenuScreen(
-      {super.key, required this.title, required this.menu, this.guncelleme});
+  const MenuScreen({
+    super.key,
+    required this.title,
+    required this.menu,
+    this.guncelleme,
+  });
 
   @override
   State<MenuScreen> createState() => _MenuScreenState();
@@ -109,15 +114,16 @@ class _MenuScreenState extends State<MenuScreen> {
   /// Aramada: yalnız eşleşen ürünleri olan kategoriler, eşleşen ürünleriyle.
   /// Kategori adı eşleşirse o kategorinin tüm ürünleri gösterilir.
   List<MenuKategori> get _results => [
-        for (final c in _sections)
-          if (_fold(c.kategori).contains(_query))
-            c
-          else if (c.urunler.any(_matches))
-            MenuKategori(
-                id: c.id,
-                kategori: c.kategori,
-                urunler: c.urunler.where(_matches).toList()),
-      ];
+    for (final c in _sections)
+      if (_fold(c.kategori).contains(_query))
+        c
+      else if (c.urunler.any(_matches))
+        MenuKategori(
+          id: c.id,
+          kategori: c.kategori,
+          urunler: c.urunler.where(_matches).toList(),
+        ),
+  ];
 
   static const List<String> _aylar = [
     '', 'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', //
@@ -404,11 +410,12 @@ class _MenuScreenState extends State<MenuScreen> {
     return [
       Padding(
         padding: const EdgeInsets.only(top: 8),
-        child: Text('$count ürün bulundu',
-            style: const TextStyle(fontSize: 13, color: AppColors.muted)),
+        child: Text(
+          '$count ürün bulundu',
+          style: const TextStyle(fontSize: 13, color: AppColors.muted),
+        ),
       ),
-      for (var i = 0; i < res.length; i++)
-        ..._section(i, res[i], keyed: false),
+      for (var i = 0; i < res.length; i++) ..._section(i, res[i], keyed: false),
       _footerNote(),
     ];
   }
@@ -524,134 +531,8 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  /// Ürün detayı — alttan açılan panel: görsel, ad, fiyat, açıklama,
-  /// içindekiler ve kalori (dolu olanlar gösterilir).
-  void _openItem(MenuUrun u) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        final bottom = MediaQuery.of(ctx).padding.bottom;
-        return Container(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(ctx).size.height * 0.7,
-          ),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 10, bottom: 8),
-                child: Container(
-                  width: 42,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.line,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-              ),
-              Flexible(
-                child: ListView(
-                  padding: EdgeInsets.fromLTRB(20, 4, 20, 20 + bottom),
-                  children: [
-                    if (u.gorsel.isNotEmpty) ...[
-                      // Panel gereksiz uzamasın: sabit ve kısa görsel şeridi.
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(14),
-                        child: SizedBox(
-                          height: 140,
-                          width: double.infinity,
-                          child: NetImage(u.gorsel),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            u.ad,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.ink,
-                            ),
-                          ),
-                        ),
-                        if (u.fiyat.isNotEmpty) ...[
-                          const SizedBox(width: 12),
-                          Text(
-                            '${u.fiyat} ₺',
-                            softWrap: false,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    if (u.aciklama.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Text(
-                        u.aciklama,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          height: 1.5,
-                          color: _descColor,
-                        ),
-                      ),
-                    ],
-                    // İçindekiler ve kalori: ayrı başlıklar yerine tek satırda
-                    // sıkıştırıldı (panel kısa kalsın).
-                    if (u.icindekiler.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Text(
-                        'İçindekiler: ${u.icindekiler}',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          height: 1.45,
-                          color: _descColor,
-                        ),
-                      ),
-                    ],
-                    if (u.kalori != null) ...[
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.local_fire_department_outlined,
-                            size: 15,
-                            color: AppColors.primary,
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            '${u.kalori} kcal',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.ink,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
+  /// Ürün detayı — ortak alttan panel (`showMenuItemSheet`, arama ile aynı).
+  void _openItem(MenuUrun u) => showMenuItemSheet(context, u);
 
   Widget _item(MenuUrun u) {
     return InkWell(

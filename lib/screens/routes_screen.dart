@@ -25,17 +25,17 @@ import 'route_map_screen.dart';
 
 /// "Gezi Rotalarım" ekranını açar (UYELIK_PLUS.md §6).
 Future<void> openRoutes(BuildContext context) {
-  return Navigator.of(context).push(
-    MaterialPageRoute(builder: (_) => const RoutesScreen()),
-  );
+  return Navigator.of(
+    context,
+  ).push(MaterialPageRoute(builder: (_) => const RoutesScreen()));
 }
 
 /// Herkese açık rotaların keşfet akışını açar (`GET /rotalar`,
 /// UYELIK_PLUS.md §6.1).
 Future<void> openDiscoverRoutes(BuildContext context) {
-  return Navigator.of(context).push(
-    MaterialPageRoute(builder: (_) => const DiscoverRoutesScreen()),
-  );
+  return Navigator.of(
+    context,
+  ).push(MaterialPageRoute(builder: (_) => const DiscoverRoutesScreen()));
 }
 
 /// Ortak Plus/giriş hata yönlendirmesi: giriş gerekiyorsa login, aksi halde
@@ -89,8 +89,10 @@ class _RoutesScreenState extends State<RoutesScreen> {
       );
       // Kapak ilk adımda seçildiyse oluşturmanın hemen ardından yükle.
       if (data.kapak != null) {
-        await RotaRepository.instance.kapakYukle(rota.id,
-            'data:image/jpeg;base64,${base64Encode(data.kapak!)}');
+        await RotaRepository.instance.kapakYukle(
+          rota.id,
+          'data:image/jpeg;base64,${base64Encode(data.kapak!)}',
+        );
       }
       await _load();
     } on PlusRequiredException catch (e) {
@@ -142,12 +144,20 @@ class _RoutesScreenState extends State<RoutesScreen> {
               width: 72,
               height: 72,
               decoration: const BoxDecoration(
-                  color: AppColors.primarySoft, shape: BoxShape.circle),
-              child: const Icon(Icons.route, size: 34, color: AppColors.primary),
+                color: AppColors.primarySoft,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.route,
+                size: 34,
+                color: AppColors.primary,
+              ),
             ),
             const SizedBox(height: 16),
-            const Text('Henüz rotan yok',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            const Text(
+              'Henüz rotan yok',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 6),
             const Text(
               'Favori duraklarını sırala, her yere notunu ekle. Yeni bir '
@@ -207,35 +217,57 @@ class _RoutesScreenState extends State<RoutesScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(r.baslik.isEmpty ? 'Adsız rota' : r.baslik,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w600)),
+                    Text(
+                      r.baslik.isEmpty ? 'Adsız rota' : r.baslik,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const SizedBox(height: 3),
                     Row(
                       children: [
-                        Text('${r.durakSayisi} durak',
-                            style: const TextStyle(
-                                fontSize: 12.5, color: AppColors.muted)),
+                        Text(
+                          '${r.durakSayisi} durak',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            color: AppColors.muted,
+                          ),
+                        ),
                         if (r.fiyatLabel.isNotEmpty) ...[
-                          const Text('  ·  ',
-                              style: TextStyle(color: AppColors.muted)),
-                          Text(r.fiyatLabel,
-                              style: const TextStyle(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.primary)),
+                          const Text(
+                            '  ·  ',
+                            style: TextStyle(color: AppColors.muted),
+                          ),
+                          Text(
+                            r.fiyatLabel,
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary,
+                            ),
+                          ),
                         ],
                         if (r.herkeseAcik) ...[
-                          const Text('  ·  ',
-                              style: TextStyle(color: AppColors.muted)),
-                          const Icon(Icons.public,
-                              size: 13, color: AppColors.muted),
+                          const Text(
+                            '  ·  ',
+                            style: TextStyle(color: AppColors.muted),
+                          ),
+                          const Icon(
+                            Icons.public,
+                            size: 13,
+                            color: AppColors.muted,
+                          ),
                           const SizedBox(width: 3),
-                          const Text('Herkese açık',
-                              style: TextStyle(
-                                  fontSize: 12.5, color: AppColors.muted)),
+                          const Text(
+                            'Herkese açık',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: AppColors.muted,
+                            ),
+                          ),
                         ],
                       ],
                     ),
@@ -243,26 +275,43 @@ class _RoutesScreenState extends State<RoutesScreen> {
                     const SizedBox(height: 3),
                     Row(
                       children: [
-                        const Icon(Icons.visibility_outlined,
-                            size: 13, color: AppColors.muted),
+                        const Icon(
+                          Icons.visibility_outlined,
+                          size: 13,
+                          color: AppColors.muted,
+                        ),
                         const SizedBox(width: 4),
-                        Text('${r.goruntulenme}',
-                            style: const TextStyle(
-                                fontSize: 12.5, color: AppColors.muted)),
+                        Text(
+                          '${r.goruntulenme}',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            color: AppColors.muted,
+                          ),
+                        ),
                         const SizedBox(width: 12),
-                        const Icon(Icons.bar_chart,
-                            size: 13, color: AppColors.muted),
+                        const Icon(
+                          Icons.bar_chart,
+                          size: 13,
+                          color: AppColors.muted,
+                        ),
                         const SizedBox(width: 4),
-                        Text('${r.gosterim}',
-                            style: const TextStyle(
-                                fontSize: 12.5, color: AppColors.muted)),
+                        Text(
+                          '${r.gosterim}',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            color: AppColors.muted,
+                          ),
+                        ),
                       ],
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right,
-                  size: 20, color: AppColors.primary),
+              const Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: AppColors.primary,
+              ),
             ],
           ),
         ),
@@ -358,14 +407,18 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
       // Yeni kapak seçildiyse güncellemeyle birlikte yükle.
       if (data.kapak != null) {
         await RotaRepository.instance.kapakYukle(
-            r.id, 'data:image/jpeg;base64,${base64Encode(data.kapak!)}');
+          r.id,
+          'data:image/jpeg;base64,${base64Encode(data.kapak!)}',
+        );
       }
     });
   }
 
   Future<void> _deleteRoute() async {
-    final ok = await _confirm('Rotayı sil',
-        'Bu rotayı ve tüm duraklarını silmek istediğine emin misin?');
+    final ok = await _confirm(
+      'Rotayı sil',
+      'Bu rotayı ve tüm duraklarını silmek istediğine emin misin?',
+    );
     if (ok != true) return;
     try {
       await RotaRepository.instance.sil(widget.rotaId);
@@ -397,7 +450,8 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
       return;
     }
     final bytes = await _cropCover(
-        action == 'camera' ? ImageSource.camera : ImageSource.gallery);
+      action == 'camera' ? ImageSource.camera : ImageSource.gallery,
+    );
     if (!mounted) return;
     if (bytes == null) {
       _showPickError(context);
@@ -420,20 +474,25 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     );
     if (res == null || !mounted) return;
     // qr_ids: durağın tüm ürün kümesini seçilenlerle değiştir (boş → temizle).
-    await _guard(() => RotaRepository.instance.durakGuncelle(
-          widget.rotaId,
-          durakId: d.durakId,
-          yorum: res.yorum,
-          qrIds: res.urunler.map((u) => u.qrId).toList(),
-        ));
+    await _guard(
+      () => RotaRepository.instance.durakGuncelle(
+        widget.rotaId,
+        durakId: d.durakId,
+        yorum: res.yorum,
+        qrIds: res.urunler.map((u) => u.qrId).toList(),
+      ),
+    );
   }
 
   Future<void> _deleteStop(RotaDurak d) async {
     final ok = await _confirm(
-        'Durağı çıkar', '${d.mekan?.name ?? 'Bu durak'} rotadan çıkarılsın mı?');
+      'Durağı çıkar',
+      '${d.mekan?.name ?? 'Bu durak'} rotadan çıkarılsın mı?',
+    );
     if (ok != true) return;
     await _guard(
-        () => RotaRepository.instance.durakSil(widget.rotaId, durakId: d.durakId));
+      () => RotaRepository.instance.durakSil(widget.rotaId, durakId: d.durakId),
+    );
   }
 
   /// [newIndex] `onReorderItem` tarafından zaten düzeltilmiş gelir (silinen
@@ -445,17 +504,21 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     final item = list.removeAt(oldIndex);
     list.insert(newIndex, item);
     // İyimser güncelleme (anında yeniden çiz), sonra sunucuya sırayı yolla.
-    setState(() => _rota = GeziRota(
-          id: r.id,
-          baslik: r.baslik,
-          aciklama: r.aciklama,
-          gorunurluk: r.gorunurluk,
-          durakSayisi: r.durakSayisi,
-          duraklar: list,
-        ));
+    setState(
+      () => _rota = GeziRota(
+        id: r.id,
+        baslik: r.baslik,
+        aciklama: r.aciklama,
+        gorunurluk: r.gorunurluk,
+        durakSayisi: r.durakSayisi,
+        duraklar: list,
+      ),
+    );
     try {
-      await RotaRepository.instance
-          .sirala(r.id, sira: list.map((d) => d.durakId).toList());
+      await RotaRepository.instance.sirala(
+        r.id,
+        sira: list.map((d) => d.durakId).toList(),
+      );
     } on PlusRequiredException catch (e) {
       if (!mounted) return;
       final ok = await _handlePlus(context, e);
@@ -476,23 +539,31 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
       if (ok != true || !mounted || !AuthService.instance.isLoggedIn) return;
     }
     final want = !r.begendim;
-    setState(() => _rota = r.copyWithBegeni(
-          begendim: want,
-          begeniSayisi: (r.begeniSayisi + (want ? 1 : -1)).clamp(0, 1 << 30),
-        ));
+    setState(
+      () => _rota = r.copyWithBegeni(
+        begendim: want,
+        begeniSayisi: (r.begeniSayisi + (want ? 1 : -1)).clamp(0, 1 << 30),
+      ),
+    );
     try {
       final res = want
           ? await RotaRepository.instance.begen(r.id)
           : await RotaRepository.instance.begeniKaldir(r.id);
       if (!mounted) return;
-      setState(() => _rota = _rota!
-          .copyWithBegeni(begendim: res.begendim, begeniSayisi: res.begeniSayisi));
+      setState(
+        () => _rota = _rota!.copyWithBegeni(
+          begendim: res.begendim,
+          begeniSayisi: res.begeniSayisi,
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _rota = r); // geri al
-      _snack(e is AuthException || e is RotaException
-          ? e.toString()
-          : 'Beğeni güncellenemedi.');
+      _snack(
+        e is AuthException || e is RotaException
+            ? e.toString()
+            : 'Beğeni güncellenemedi.',
+      );
     }
   }
 
@@ -562,13 +633,18 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
 
     // (key, svg?, icon, başlık, tehlikeli-mi) — svg varsa SVG, yoksa Material.
     final items = <(String, String?, IconData, String, bool)>[
-      if (inApp) ('map_in', AppIcons.mapPins, Icons.map_outlined, 'Haritada Aç', false),
+      if (inApp)
+        ('map_in', AppIcons.mapPins, Icons.map_outlined, 'Haritada Aç', false),
       if (harita.isNotEmpty)
-        ('map_ext', AppIcons.mapFolded, Icons.directions_outlined,
-            'Google Haritalar\u2019da Aç', false),
+        (
+          'map_ext',
+          AppIcons.mapFolded,
+          Icons.directions_outlined,
+          'Google Haritalar\u2019da Aç',
+          false,
+        ),
       ('share', AppIcons.shareUp, Icons.ios_share, 'Paylaş', false),
-      if (owner)
-        ('cover', null, Icons.image_outlined, 'Kapak Görseli', false),
+      if (owner) ('cover', null, Icons.image_outlined, 'Kapak Görseli', false),
       if (owner) ('edit', null, Icons.edit_outlined, 'Rotayı Düzenle', false),
       if (owner) ('delete', null, Icons.delete_outline, 'Rotayı Sil', true),
     ];
@@ -590,29 +666,35 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                    color: AppColors.line,
-                    borderRadius: BorderRadius.circular(2)),
+                  color: AppColors.line,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
             for (final it in items) ...[
               ListTile(
                 leading: it.$2 != null
-                    ? AppSvgIcon(it.$2!,
+                    ? AppSvgIcon(
+                        it.$2!,
                         size: 20,
-                        color: it.$5 ? AppColors.closing : AppColors.primary)
-                    : Icon(it.$3,
-                        color:
-                            it.$5 ? AppColors.closing : AppColors.primary),
-                title: Text(it.$4,
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: it.$5 ? AppColors.closing : AppColors.ink)),
+                        color: it.$5 ? AppColors.closing : AppColors.primary,
+                      )
+                    : Icon(
+                        it.$3,
+                        color: it.$5 ? AppColors.closing : AppColors.primary,
+                      ),
+                title: Text(
+                  it.$4,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: it.$5 ? AppColors.closing : AppColors.ink,
+                  ),
+                ),
                 onTap: () => Navigator.pop(ctx, it.$1),
               ),
               // Her item altında çizgi.
-              const Divider(
-                  height: 1, thickness: 1, color: AppColors.line),
+              const Divider(height: 1, thickness: 1, color: AppColors.line),
             ],
             const SizedBox(height: 8),
           ],
@@ -661,8 +743,9 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     await Share.share(
       text,
       subject: baslik,
-      sharePositionOrigin:
-          box != null ? box.localToGlobal(Offset.zero) & box.size : null,
+      sharePositionOrigin: box != null
+          ? box.localToGlobal(Offset.zero) & box.size
+          : null,
     );
   }
 
@@ -674,13 +757,18 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
         content: Text(body),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Vazgeç')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Vazgeç'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Sil',
-                style: TextStyle(
-                    color: AppColors.closing, fontWeight: FontWeight.w600)),
+            child: const Text(
+              'Sil',
+              style: TextStyle(
+                color: AppColors.closing,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
@@ -715,11 +803,13 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : r == null
-                    ? const Center(
-                        child: Text('Rota bulunamadı.',
-                            style: TextStyle(color: AppColors.muted)),
-                      )
-                    : _body(r),
+                ? const Center(
+                    child: Text(
+                      'Rota bulunamadı.',
+                      style: TextStyle(color: AppColors.muted),
+                    ),
+                  )
+                : _body(r),
           ),
         ],
       ),
@@ -759,15 +849,23 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
         else if (r.benim)
           SliverReorderableList(
             itemCount: duraklar.length,
-            itemBuilder: (_, i) => _stopTile(duraklar[i], i,
-                key: ValueKey(duraklar[i].durakId), owner: true),
+            itemBuilder: (_, i) => _stopTile(
+              duraklar[i],
+              i,
+              key: ValueKey(duraklar[i].durakId),
+              owner: true,
+            ),
             onReorderItem: _reorder,
           )
         else
           SliverList.builder(
             itemCount: duraklar.length,
-            itemBuilder: (_, i) => _stopTile(duraklar[i], i,
-                key: ValueKey(duraklar[i].durakId), owner: false),
+            itemBuilder: (_, i) => _stopTile(
+              duraklar[i],
+              i,
+              key: ValueKey(duraklar[i].durakId),
+              owner: false,
+            ),
           ),
         const SliverToBoxAdapter(child: SizedBox(height: 100)),
       ],
@@ -802,7 +900,9 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                         width: 26,
                         height: 26,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2.6, color: Colors.white),
+                          strokeWidth: 2.6,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),
@@ -810,110 +910,137 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
               ),
             )
           else if (r.kapakGorsel.isNotEmpty)
-            AspectRatio(
-              aspectRatio: 16 / 10,
-              child: NetImage(r.kapakGorsel),
-            ),
+            AspectRatio(aspectRatio: 16 / 10, child: NetImage(r.kapakGorsel)),
           Padding(
             padding: const EdgeInsets.all(18),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-          // Başkasının rotasıysa sahip — başlığın ÜSTÜNDE, sola yaslı,
-          // profiline tıklanabilir sade satır.
-          if (!r.benim && r.sahip != null) ...[
-            GestureDetector(
-              onTap: () => openMemberProfile(
-                context,
-                uyeId: r.sahip!.uyeId,
-                isim: r.sahip!.isim,
-                soyisim: r.sahip!.soyisim,
-                avatar: r.sahip!.avatar,
-                takipEdiyorum: r.sahip!.takipEdiyorum,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _ownerAvatar(r.sahip!.avatar, 22),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      r.sahip!.adSoyad.isEmpty ? 'Üye' : r.sahip!.adSoyad,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.ink),
+                // Başkasının rotasıysa sahip — başlığın ÜSTÜNDE, sola yaslı,
+                // profiline tıklanabilir sade satır.
+                if (!r.benim && r.sahip != null) ...[
+                  GestureDetector(
+                    onTap: () => openMemberProfile(
+                      context,
+                      uyeId: r.sahip!.uyeId,
+                      isim: r.sahip!.isim,
+                      soyisim: r.sahip!.soyisim,
+                      avatar: r.sahip!.avatar,
+                      takipEdiyorum: r.sahip!.takipEdiyorum,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _ownerAvatar(r.sahip!.avatar, 22),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            r.sahip!.adSoyad.isEmpty ? 'Üye' : r.sahip!.adSoyad,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                // Başlık + takip butonu (başkasının rotası) / Gizli rozeti.
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        r.baslik.isEmpty ? 'Adsız rota' : r.baslik,
+                        style: const TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    if (!r.benim && r.sahip != null)
+                      _followButtonCompact(r.sahip!)
+                    else if (!r.herkeseAcik)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primarySoft,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.lock_outline,
+                              size: 13,
+                              color: AppColors.primary,
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              'Gizli',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+                if (r.aciklama.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    r.aciklama,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      height: 1.5,
+                      color: AppColors.muted,
                     ),
                   ),
                 ],
-              ),
-            ),
-            const SizedBox(height: 10),
-          ],
-          // Başlık + takip butonu (başkasının rotası) / Gizli rozeti.
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(r.baslik.isEmpty ? 'Adsız rota' : r.baslik,
-                    style: const TextStyle(
-                        fontSize: 19, fontWeight: FontWeight.w600)),
-              ),
-              const SizedBox(width: 10),
-              if (!r.benim && r.sahip != null)
-                _followButtonCompact(r.sahip!)
-              else if (!r.herkeseAcik)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: AppColors.primarySoft,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.lock_outline,
-                          size: 13, color: AppColors.primary),
-                      SizedBox(width: 4),
-                      Text('Gizli',
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.primary)),
-                    ],
-                  ),
+                const SizedBox(height: 12),
+                // İstatistikler — sola yaslı; tutar (fiyat) en sonda.
+                Wrap(
+                  spacing: 16,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    _stat(
+                      null,
+                      '${r.duraklar.length} durak',
+                      svg: AppIcons.pin,
+                    ),
+                    // Görüntülenme herkese; gösterim (listeleme) yalnız sahibe.
+                    _stat(
+                      null,
+                      '${r.goruntulenme} görüntülenme',
+                      svg: AppIcons.eye,
+                    ),
+                    if (r.benim)
+                      _stat(Icons.bar_chart_outlined, '${r.gosterim} gösterim'),
+                    // Tutar en sonda.
+                    if (r.fiyatLabel.isNotEmpty)
+                      _stat(
+                        null,
+                        r.fiyatLabel,
+                        primary: true,
+                        svg: AppIcons.tag,
+                      ),
+                  ],
                 ),
-            ],
-          ),
-          if (r.aciklama.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(r.aciklama,
-                style: const TextStyle(
-                    fontSize: 13.5, height: 1.5, color: AppColors.muted)),
-          ],
-          const SizedBox(height: 12),
-          // İstatistikler — sola yaslı; tutar (fiyat) en sonda.
-          Wrap(
-            spacing: 16,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              _stat(null, '${r.duraklar.length} durak', svg: AppIcons.pin),
-              // Görüntülenme herkese; gösterim (listeleme) yalnız sahibe.
-              _stat(null, '${r.goruntulenme} görüntülenme',
-                  svg: AppIcons.eye),
-              if (r.benim)
-                _stat(Icons.bar_chart_outlined, '${r.gosterim} gösterim'),
-              // Tutar en sonda.
-              if (r.fiyatLabel.isNotEmpty)
-                _stat(null, r.fiyatLabel, primary: true, svg: AppIcons.tag),
-            ],
-          ),
-          const SizedBox(height: 22),
-          _actions(r),
+                const SizedBox(height: 22),
+                _actions(r),
               ],
             ),
           ),
@@ -924,8 +1051,12 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
 
   /// İkon + etiket taşıyan sade istatistik öğesi. [svg] verilirse SVG,
   /// yoksa [icon] Material ikonu kullanılır.
-  Widget _stat(IconData? icon, String label,
-      {bool primary = false, String? svg}) {
+  Widget _stat(
+    IconData? icon,
+    String label, {
+    bool primary = false,
+    String? svg,
+  }) {
     final color = primary ? AppColors.primary : AppColors.muted;
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -935,11 +1066,14 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
         else
           Icon(icon, size: 15, color: color),
         const SizedBox(width: 5),
-        Text(label,
-            style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: primary ? FontWeight.w700 : FontWeight.w500,
-                color: primary ? AppColors.primary : AppColors.ink)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: primary ? FontWeight.w700 : FontWeight.w500,
+            color: primary ? AppColors.primary : AppColors.ink,
+          ),
+        ),
       ],
     );
   }
@@ -996,18 +1130,19 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
           icon,
           if (count != null && count > 0) ...[
             const SizedBox(width: 6),
-            Text('$count',
-                style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.ink)),
+            Text(
+              '$count',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.ink,
+              ),
+            ),
           ],
         ],
       ),
     );
   }
-
-
 
   /// Paylaşım seçenekleri (alttan sheet): Instagram'da Paylaş / Harita Olarak
   /// Paylaş. Tasarım rota ayar menüsüyle tutarlı.
@@ -1031,24 +1166,29 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                    color: AppColors.line,
-                    borderRadius: BorderRadius.circular(2)),
+                  color: AppColors.line,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.camera_alt_outlined,
-                  color: AppColors.primary),
-              title: const Text('Instagram\u2019da Paylaş',
-                  style: TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w500)),
+              leading: const Icon(
+                Icons.camera_alt_outlined,
+                color: AppColors.primary,
+              ),
+              title: const Text(
+                'Instagram\u2019da Paylaş',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+              ),
               onTap: () => Navigator.pop(ctx, 'ig'),
             ),
             const Divider(height: 1, thickness: 1, color: AppColors.line),
             ListTile(
               leading: const Icon(Icons.map_outlined, color: AppColors.primary),
-              title: const Text('Harita Olarak Paylaş',
-                  style: TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w500)),
+              title: const Text(
+                'Harita Olarak Paylaş',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+              ),
               onTap: () => Navigator.pop(ctx, 'map'),
             ),
             const Divider(height: 1, thickness: 1, color: AppColors.line),
@@ -1083,14 +1223,20 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
           children: [
             following
                 ? const Icon(Icons.check, size: 15, color: AppColors.primary)
-                : const AppSvgIcon(AppIcons.userPlus,
-                    size: 15, color: Colors.white),
+                : const AppSvgIcon(
+                    AppIcons.userPlus,
+                    size: 15,
+                    color: Colors.white,
+                  ),
             const SizedBox(width: 5),
-            Text(following ? 'Takipte' : 'Takip Et',
-                style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: following ? AppColors.primary : Colors.white)),
+            Text(
+              following ? 'Takipte' : 'Takip Et',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: following ? AppColors.primary : Colors.white,
+              ),
+            ),
           ],
         ),
       ),
@@ -1149,8 +1295,11 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                         ? NetImage(thumb)
                         : Container(
                             color: Colors.white,
-                            child: const Icon(Icons.restaurant_menu,
-                                size: 13, color: AppColors.primary),
+                            child: const Icon(
+                              Icons.restaurant_menu,
+                              size: 13,
+                              color: AppColors.primary,
+                            ),
                           ),
                   ),
                 ),
@@ -1162,11 +1311,14 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(1.5),
                       decoration: const BoxDecoration(
-                          color: AppColors.primary, shape: BoxShape.circle),
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
                       child: Icon(
-                          hasFoto ? Icons.edit : Icons.add_a_photo,
-                          size: 8,
-                          color: Colors.white),
+                        hasFoto ? Icons.edit : Icons.add_a_photo,
+                        size: 8,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
               ],
@@ -1178,9 +1330,10 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primary),
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                ),
               ),
             ),
           ],
@@ -1212,15 +1365,22 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
             : Container(
                 color: AppColors.primarySoft,
                 alignment: Alignment.center,
-                child: AppSvgIcon(AppIcons.user,
-                    size: size * 0.5, color: AppColors.primary),
+                child: AppSvgIcon(
+                  AppIcons.user,
+                  size: size * 0.5,
+                  color: AppColors.primary,
+                ),
               ),
       ),
     );
   }
 
-  Widget _stopTile(RotaDurak d, int index,
-      {required Key key, required bool owner}) {
+  Widget _stopTile(
+    RotaDurak d,
+    int index, {
+    required Key key,
+    required bool owner,
+  }) {
     final m = d.mekan;
     return Container(
       key: key,
@@ -1241,105 +1401,127 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
             children: [
               Row(
                 children: [
-              // Sıra numarası rozeti.
-              Container(
-                width: 26,
-                height: 26,
-                alignment: Alignment.center,
-                decoration: const BoxDecoration(
-                    color: AppColors.primary, shape: BoxShape.circle),
-                child: Text('${index + 1}',
-                    style: const TextStyle(
+                  // Sıra numarası rozeti.
+                  Container(
+                    width: 26,
+                    height: 26,
+                    alignment: Alignment.center,
+                    decoration: const BoxDecoration(
+                      color: AppColors.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      '${index + 1}',
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 13,
-                        fontWeight: FontWeight.w600)),
-              ),
-              const SizedBox(width: 12),
-              _stopThumb(d, m),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      d.silinmis
-                          ? 'Silinmiş mekan'
-                          : (m?.name.isNotEmpty == true
-                              ? m!.name
-                              : (d.isKonum ? 'Konum' : 'Mekan')),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w600,
-                          color: d.silinmis ? AppColors.muted : AppColors.ink),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    // Konum durağının adresi (varsa).
-                    if (d.isKonum && (m?.adres.isNotEmpty ?? false)) ...[
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          const Icon(Icons.place_outlined,
-                              size: 13, color: AppColors.muted),
-                          const SizedBox(width: 3),
-                          Expanded(
-                            child: Text(m!.adres,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    fontSize: 12, color: AppColors.muted)),
+                  ),
+                  const SizedBox(width: 12),
+                  _stopThumb(d, m),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          d.silinmis
+                              ? 'Silinmiş mekan'
+                              : (m?.name.isNotEmpty == true
+                                    ? m!.name
+                                    : (d.isKonum ? 'Konum' : 'Mekan')),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w600,
+                            color: d.silinmis ? AppColors.muted : AppColors.ink,
+                          ),
+                        ),
+                        // Konum durağının adresi (varsa).
+                        if (d.isKonum && (m?.adres.isNotEmpty ?? false)) ...[
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.place_outlined,
+                                size: 13,
+                                color: AppColors.muted,
+                              ),
+                              const SizedBox(width: 3),
+                              Expanded(
+                                child: Text(
+                                  m!.adres,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.muted,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
-                      ),
-                    ],
-                    if (d.yorum.isNotEmpty) ...[
-                      const SizedBox(height: 3),
-                      Text(d.yorum,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                        if (d.yorum.isNotEmpty) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            d.yorum,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
                               fontSize: 12.5,
                               height: 1.4,
-                              color: AppColors.muted)),
-                    ],
-                    // Durağa bağlı QR menü ürünleri (çoklu, rota-coklu-yemek.md).
-                    if (d.urunler.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          for (final u in d.urunler) _urunRozet(d, u, owner),
+                              color: AppColors.muted,
+                            ),
+                          ),
                         ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              // Durağı haritada aç (koordinatı varsa) — herkeste görünür.
-              if (d.haritaLink.isNotEmpty)
-                IconButton(
-                  tooltip: 'Haritada aç',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => _openMaps(d.haritaLink),
-                  icon: const Icon(Icons.place_outlined,
-                      color: AppColors.primary),
-                ),
-              if (owner) ...[
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.more_vert, color: AppColors.muted),
-                  onPressed: () => _openStopMenu(d),
-                ),
-                ReorderableDragStartListener(
-                  index: index,
-                  child: const Padding(
-                    padding: EdgeInsets.only(left: 2),
-                    child: Icon(Icons.drag_handle,
-                        color: AppColors.muted, size: 22),
+                        // Durağa bağlı QR menü ürünleri (çoklu, rota-coklu-yemek.md).
+                        if (d.urunler.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              for (final u in d.urunler)
+                                _urunRozet(d, u, owner),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                  // Durağı haritada aç (koordinatı varsa) — herkeste görünür.
+                  if (d.haritaLink.isNotEmpty)
+                    IconButton(
+                      tooltip: 'Haritada aç',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => _openMaps(d.haritaLink),
+                      icon: const Icon(
+                        Icons.place_outlined,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  if (owner) ...[
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.more_vert, color: AppColors.muted),
+                      onPressed: () => _openStopMenu(d),
+                    ),
+                    ReorderableDragStartListener(
+                      index: index,
+                      child: const Padding(
+                        padding: EdgeInsets.only(left: 2),
+                        child: Icon(
+                          Icons.drag_handle,
+                          color: AppColors.muted,
+                          size: 22,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
               // Durak fotoğrafları — yalnız görüntüleme (ekleme üç nokta
@@ -1369,8 +1551,10 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     if (d.silinmis) {
       inner = Container(
         color: AppColors.primarySoft,
-        child: const Icon(Icons.image_not_supported_outlined,
-            color: AppColors.muted),
+        child: const Icon(
+          Icons.image_not_supported_outlined,
+          color: AppColors.muted,
+        ),
       );
     } else if (konumFoto) {
       inner = NetImage(fotos.first.url);
@@ -1379,8 +1563,11 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
       inner = Container(
         color: AppColors.primarySoft,
         alignment: Alignment.center,
-        child: const AppSvgIcon(AppIcons.pin,
-            size: 22, color: AppColors.primary),
+        child: const AppSvgIcon(
+          AppIcons.pin,
+          size: 22,
+          color: AppColors.primary,
+        ),
       );
     } else {
       inner = NetImage(m?.image ?? '');
@@ -1407,11 +1594,14 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                         color: Colors.black.withValues(alpha: 0.55),
                         shape: BoxShape.circle,
                       ),
-                      child: Text('${fotos.length}',
-                          style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white)),
+                      child: Text(
+                        '${fotos.length}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -1448,14 +1638,20 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.image_outlined,
-                  size: 15, color: AppColors.primary),
+              const Icon(
+                Icons.image_outlined,
+                size: 15,
+                color: AppColors.primary,
+              ),
               const SizedBox(width: 6),
-              Text('${fotos.length} resim',
-                  style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary)),
+              Text(
+                '${fotos.length} resim',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                ),
+              ),
             ],
           ),
         ),
@@ -1523,19 +1719,25 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                    color: AppColors.line,
-                    borderRadius: BorderRadius.circular(2)),
+                  color: AppColors.line,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
             for (final it in items) ...[
               ListTile(
-                leading: Icon(it.$2,
-                    color: it.$4 ? AppColors.closing : AppColors.primary),
-                title: Text(it.$3,
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: it.$4 ? AppColors.closing : AppColors.ink)),
+                leading: Icon(
+                  it.$2,
+                  color: it.$4 ? AppColors.closing : AppColors.primary,
+                ),
+                title: Text(
+                  it.$3,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: it.$4 ? AppColors.closing : AppColors.ink,
+                  ),
+                ),
                 onTap: () => Navigator.pop(ctx, it.$1),
               ),
               const Divider(height: 1, thickness: 1, color: AppColors.line),
@@ -1591,10 +1793,12 @@ void _showPickError(BuildContext context) {
   final err = _lastPickError;
   _lastPickError = null;
   if (err == null || !context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    content: Text('Fotoğraf alınamadı: $err'),
-    duration: const Duration(seconds: 6),
-  ));
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text('Fotoğraf alınamadı: $err'),
+      duration: const Duration(seconds: 6),
+    ),
+  );
 }
 
 /// Görsel seçip verilen orana göre kırpar; JPEG bytes döner.
@@ -1662,27 +1866,29 @@ Future<Uint8List?> _pickAndCrop(
 
 /// Kapak görseli: **16:10** kırpma.
 Future<Uint8List?> _cropCover(ImageSource source) => _pickAndCrop(
-      source,
-      ratioX: 16,
-      ratioY: 10,
-      title: 'Kapağı Kırp',
-      maxWidth: 1200,
-      maxHeight: 750,
-    );
+  source,
+  ratioX: 16,
+  ratioY: 10,
+  title: 'Kapağı Kırp',
+  maxWidth: 1200,
+  maxHeight: 750,
+);
 
 /// Durak/ürün fotoğrafı: **1:1 kare** kırpma (rota-yemek-gorsel.md).
 Future<Uint8List?> _cropSquare(ImageSource source) => _pickAndCrop(
-      source,
-      ratioX: 1,
-      ratioY: 1,
-      title: 'Fotoğrafı Kırp',
-      maxWidth: 1080,
-      maxHeight: 1080,
-    );
+  source,
+  ratioX: 1,
+  ratioY: 1,
+  title: 'Fotoğrafı Kırp',
+  maxWidth: 1080,
+  maxHeight: 1080,
+);
 
 /// Görsel kaynağı seçici (galeri/kamera[/kaldır]) — `'gallery'|'camera'|'remove'`.
-Future<String?> _pickImageSource(BuildContext context,
-    {bool allowRemove = false}) {
+Future<String?> _pickImageSource(
+  BuildContext context, {
+  bool allowRemove = false,
+}) {
   return showModalBottomSheet<String>(
     context: context,
     backgroundColor: Colors.white,
@@ -1695,23 +1901,31 @@ Future<String?> _pickImageSource(BuildContext context,
         mainAxisSize: MainAxisSize.min,
         children: [
           ListTile(
-            leading: const Icon(Icons.photo_library_outlined,
-                color: AppColors.primary),
+            leading: const Icon(
+              Icons.photo_library_outlined,
+              color: AppColors.primary,
+            ),
             title: const Text('Galeriden seç'),
             onTap: () => Navigator.pop(ctx, 'gallery'),
           ),
           ListTile(
-            leading:
-                const Icon(Icons.camera_alt_outlined, color: AppColors.primary),
+            leading: const Icon(
+              Icons.camera_alt_outlined,
+              color: AppColors.primary,
+            ),
             title: const Text('Fotoğraf çek'),
             onTap: () => Navigator.pop(ctx, 'camera'),
           ),
           if (allowRemove)
             ListTile(
-              leading:
-                  const Icon(Icons.delete_outline, color: AppColors.closing),
-              title: const Text('Kapağı kaldır',
-                  style: TextStyle(color: AppColors.closing)),
+              leading: const Icon(
+                Icons.delete_outline,
+                color: AppColors.closing,
+              ),
+              title: const Text(
+                'Kapağı kaldır',
+                style: TextStyle(color: AppColors.closing),
+              ),
               onTap: () => Navigator.pop(ctx, 'remove'),
             ),
           const SizedBox(height: 8),
@@ -1724,14 +1938,15 @@ Future<String?> _pickImageSource(BuildContext context,
 /// Rota oluştur/düzenle formu (kapak görseli **ilk adımda**). Kaydedilirse
 /// `(baslik, aciklama, gorunurluk, yorumlarAcik, kapak-bytes?)` döner; iptalde null.
 Future<
-        ({
-          String baslik,
-          String aciklama,
-          String gorunurluk,
-          bool yorumlarAcik,
-          Uint8List? kapak
-        })?>
-    _showRouteForm(BuildContext context, {GeziRota? initial}) {
+  ({
+    String baslik,
+    String aciklama,
+    String gorunurluk,
+    bool yorumlarAcik,
+    Uint8List? kapak,
+  })?
+>
+_showRouteForm(BuildContext context, {GeziRota? initial}) {
   final baslikC = TextEditingController(text: initial?.baslik ?? '');
   final aciklamaC = TextEditingController(text: initial?.aciklama ?? '');
   var herkeseAcik = initial?.herkeseAcik ?? false;
@@ -1740,13 +1955,14 @@ Future<
   Uint8List? kapak;
 
   return showModalBottomSheet<
-      ({
-        String baslik,
-        String aciklama,
-        String gorunurluk,
-        bool yorumlarAcik,
-        Uint8List? kapak
-      })>(
+    ({
+      String baslik,
+      String aciklama,
+      String gorunurluk,
+      bool yorumlarAcik,
+      Uint8List? kapak,
+    })
+  >(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
@@ -1756,7 +1972,8 @@ Future<
           final src = await _pickImageSource(ctx);
           if (src == null || src == 'remove') return;
           final b = await _cropCover(
-              src == 'camera' ? ImageSource.camera : ImageSource.gallery);
+            src == 'camera' ? ImageSource.camera : ImageSource.gallery,
+          );
           if (!ctx.mounted) return;
           if (b == null) {
             _showPickError(ctx);
@@ -1766,8 +1983,9 @@ Future<
         }
 
         return Padding(
-          padding:
-              EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          ),
           child: Container(
             decoration: const BoxDecoration(
               color: AppColors.bg,
@@ -1784,19 +2002,25 @@ Future<
                       width: 40,
                       height: 4,
                       decoration: BoxDecoration(
-                          color: AppColors.line,
-                          borderRadius: BorderRadius.circular(2)),
+                        color: AppColors.line,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 18),
-                  Text(initial == null ? 'Yeni Rota' : 'Rotayı Düzenle',
-                      style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.w600)),
+                  Text(
+                    initial == null ? 'Yeni Rota' : 'Rotayı Düzenle',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   // Kapak görseli — ilk adımda seçilir/kırpılır.
-                  const Text('Kapak görseli (opsiyonel)',
-                      style: TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w600)),
+                  const Text(
+                    'Kapak görseli (opsiyonel)',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
                   const SizedBox(height: 8),
                   GestureDetector(
                     onTap: pickCover,
@@ -1813,50 +2037,63 @@ Future<
                                 ],
                               )
                             : initialKapak.isNotEmpty
-                                ? Stack(
-                                    fit: StackFit.expand,
+                            ? Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  NetImage(initialKapak),
+                                  _coverEditHint(),
+                                ],
+                              )
+                            : Container(
+                                color: AppColors.primarySoft,
+                                child: const Center(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      NetImage(initialKapak),
-                                      _coverEditHint(),
-                                    ],
-                                  )
-                                : Container(
-                                    color: AppColors.primarySoft,
-                                    child: const Center(
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.add_photo_alternate_outlined,
-                                              size: 30,
-                                              color: AppColors.primary),
-                                          SizedBox(height: 6),
-                                          Text('Kapak Ekle',
-                                              style: TextStyle(
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: AppColors.primary)),
-                                        ],
+                                      Icon(
+                                        Icons.add_photo_alternate_outlined,
+                                        size: 30,
+                                        color: AppColors.primary,
                                       ),
-                                    ),
+                                      SizedBox(height: 6),
+                                      Text(
+                                        'Kapak Ekle',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                    ],
                                   ),
+                                ),
+                              ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 14),
                   _field(baslikC, 'Rota başlığı', 'Örn. Kadıköy Turu'),
                   const SizedBox(height: 14),
-                  _field(aciklamaC, 'Açıklama (opsiyonel)',
-                      'Kısa bir açıklama',
-                      maxLines: 3),
+                  _field(
+                    aciklamaC,
+                    'Açıklama (opsiyonel)',
+                    'Kısa bir açıklama',
+                    maxLines: 3,
+                  ),
                   const SizedBox(height: 14),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Herkese açık',
-                        style: TextStyle(
-                            fontSize: 14.5, fontWeight: FontWeight.w600)),
-                    subtitle: const Text('Diğer üyeler bu rotayı görebilir',
-                        style:
-                            TextStyle(fontSize: 12.5, color: AppColors.muted)),
+                    title: const Text(
+                      'Herkese açık',
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: const Text(
+                      'Diğer üyeler bu rotayı görebilir',
+                      style: TextStyle(fontSize: 12.5, color: AppColors.muted),
+                    ),
                     value: herkeseAcik,
                     activeThumbColor: Colors.white,
                     activeTrackColor: AppColors.primary,
@@ -1864,12 +2101,17 @@ Future<
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Yoruma izin ver',
-                        style: TextStyle(
-                            fontSize: 14.5, fontWeight: FontWeight.w600)),
-                    subtitle: const Text('Diğer üyeler bu rotaya yorum yapabilir',
-                        style:
-                            TextStyle(fontSize: 12.5, color: AppColors.muted)),
+                    title: const Text(
+                      'Yoruma izin ver',
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: const Text(
+                      'Diğer üyeler bu rotaya yorum yapabilir',
+                      style: TextStyle(fontSize: 12.5, color: AppColors.muted),
+                    ),
                     value: yorumlarAcik,
                     activeThumbColor: Colors.white,
                     activeTrackColor: AppColors.primary,
@@ -1895,11 +2137,16 @@ Future<
                         foregroundColor: Colors.white,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                       ),
-                      child: Text(initial == null ? 'Oluştur' : 'Kaydet',
-                          style: const TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.w600)),
+                      child: Text(
+                        initial == null ? 'Oluştur' : 'Kaydet',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -1928,21 +2175,29 @@ Widget _coverEditHint() {
         children: [
           Icon(Icons.edit, size: 13, color: Colors.white),
           SizedBox(width: 4),
-          Text('Değiştir',
-              style: TextStyle(fontSize: 11.5, color: Colors.white)),
+          Text(
+            'Değiştir',
+            style: TextStyle(fontSize: 11.5, color: Colors.white),
+          ),
         ],
       ),
     ),
   );
 }
 
-Widget _field(TextEditingController c, String label, String hint,
-    {int maxLines = 1}) {
+Widget _field(
+  TextEditingController c,
+  String label,
+  String hint, {
+  int maxLines = 1,
+}) {
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(label,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+      Text(
+        label,
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+      ),
       const SizedBox(height: 6),
       TextField(
         controller: c,
@@ -1951,8 +2206,10 @@ Widget _field(TextEditingController c, String label, String hint,
           hintText: hint,
           filled: true,
           fillColor: AppColors.primarySoft,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide.none,
@@ -2002,8 +2259,9 @@ class _StopSheet extends StatefulWidget {
 }
 
 class _StopSheetState extends State<_StopSheet> {
-  late final TextEditingController _yorumC =
-      TextEditingController(text: widget.initialYorum);
+  late final TextEditingController _yorumC = TextEditingController(
+    text: widget.initialYorum,
+  );
   late List<RotaUrun> _urunler = List.of(widget.initialUrunler);
 
   @override
@@ -2024,7 +2282,9 @@ class _StopSheetState extends State<_StopSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Container(
         decoration: const BoxDecoration(
           color: AppColors.bg,
@@ -2040,51 +2300,67 @@ class _StopSheetState extends State<_StopSheet> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                    color: AppColors.line,
-                    borderRadius: BorderRadius.circular(2)),
+                  color: AppColors.line,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
             const SizedBox(height: 16),
-            Text(widget.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style:
-                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+            Text(
+              widget.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 16),
-            _field(_yorumC, 'Not (opsiyonel)', 'Bu durak için notun',
-                maxLines: 3),
+            _field(
+              _yorumC,
+              'Not (opsiyonel)',
+              'Bu durak için notun',
+              maxLines: 3,
+            ),
             const SizedBox(height: 16),
             Row(
               children: [
-                const Text('Menü ürünleri (opsiyonel)',
-                    style:
-                        TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                const Text(
+                  'Menü ürünleri (opsiyonel)',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
                 const Spacer(),
                 if (_urunler.isNotEmpty)
-                  Text('${_urunler.length} ürün',
-                      style: const TextStyle(
-                          fontSize: 12.5, color: AppColors.muted)),
+                  Text(
+                    '${_urunler.length} ürün',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.muted,
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 8),
             for (var i = 0; i < _urunler.length; i++) ...[
-              _selectedProduct(_urunler[i],
-                  () => setState(() => _urunler.removeAt(i))),
+              _selectedProduct(
+                _urunler[i],
+                () => setState(() => _urunler.removeAt(i)),
+              ),
               const SizedBox(height: 8),
             ],
             OutlinedButton.icon(
               onPressed: widget.postId > 0 ? _pickProducts : null,
-              icon: Icon(_urunler.isEmpty ? Icons.restaurant_menu : Icons.edit,
-                  size: 18),
-              label: Text(_urunler.isEmpty
-                  ? 'Menüden ürün seç'
-                  : 'Ürünleri düzenle'),
+              icon: Icon(
+                _urunler.isEmpty ? Icons.restaurant_menu : Icons.edit,
+                size: 18,
+              ),
+              label: Text(
+                _urunler.isEmpty ? 'Menüden ürün seç' : 'Ürünleri düzenle',
+              ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.primary,
                 side: const BorderSide(color: AppColors.line),
                 minimumSize: const Size(double.infinity, 48),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
             const SizedBox(height: 20),
@@ -2092,18 +2368,22 @@ class _StopSheetState extends State<_StopSheet> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
-                onPressed: () => Navigator.pop(context,
-                    (yorum: _yorumC.text.trim(), urunler: _urunler)),
+                onPressed: () => Navigator.pop(context, (
+                  yorum: _yorumC.text.trim(),
+                  urunler: _urunler,
+                )),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                 ),
-                child: const Text('Kaydet',
-                    style:
-                        TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                child: const Text(
+                  'Kaydet',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
           ],
@@ -2130,8 +2410,11 @@ class _StopSheetState extends State<_StopSheet> {
                   ? NetImage(u.gorsel)
                   : Container(
                       color: Colors.white,
-                      child: const Icon(Icons.restaurant_menu,
-                          color: AppColors.primary)),
+                      child: const Icon(
+                        Icons.restaurant_menu,
+                        color: AppColors.primary,
+                      ),
+                    ),
             ),
           ),
           const SizedBox(width: 10),
@@ -2139,15 +2422,23 @@ class _StopSheetState extends State<_StopSheet> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(u.ad,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w600)),
+                Text(
+                  u.ad,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 if (u.fiyatLabel.isNotEmpty)
-                  Text(u.fiyatLabel,
-                      style: const TextStyle(
-                          fontSize: 12.5, color: AppColors.muted)),
+                  Text(
+                    u.fiyatLabel,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.muted,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -2165,8 +2456,11 @@ class _StopSheetState extends State<_StopSheet> {
 /// Mekanın QR menüsünden **çoklu** ürün seçici (`/uye/rotalar/mekan-menu`).
 /// [initial] önceden seçili qr_id'ler. "Uygula" ile seçilen ürün listesini
 /// döner (boş olabilir → temizle); iptalde null.
-Future<List<RotaUrun>?> _showMenuPicker(BuildContext context, int postId,
-    {Set<int> initial = const {}}) {
+Future<List<RotaUrun>?> _showMenuPicker(
+  BuildContext context,
+  int postId, {
+  Set<int> initial = const {},
+}) {
   return showModalBottomSheet<List<RotaUrun>>(
     context: context,
     isScrollControlled: true,
@@ -2228,9 +2522,10 @@ class _MenuPickerSheetState extends State<_MenuPickerSheet> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Row(
               children: [
-                const Text('Menüden Ürün Seç',
-                    style:
-                        TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                const Text(
+                  'Menüden Ürün Seç',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                ),
                 const Spacer(),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
@@ -2243,26 +2538,31 @@ class _MenuPickerSheetState extends State<_MenuPickerSheet> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _menu.isEmpty
-                    ? const Center(
-                        child: Text('Bu mekanın menüsü yok.',
-                            style: TextStyle(color: AppColors.muted)),
-                      )
-                    : ListView(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                        children: [
-                          for (final k in _menu) ...[
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
-                              child: Text(k.kategori,
-                                  style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.ink)),
+                ? const Center(
+                    child: Text(
+                      'Bu mekanın menüsü yok.',
+                      style: TextStyle(color: AppColors.muted),
+                    ),
+                  )
+                : ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                    children: [
+                      for (final k in _menu) ...[
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+                          child: Text(
+                            k.kategori,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.ink,
                             ),
-                            for (final u in k.urunler) _urunTile(u),
-                          ],
-                        ],
-                      ),
+                          ),
+                        ),
+                        for (final u in k.urunler) _urunTile(u),
+                      ],
+                    ],
+                  ),
           ),
           if (!_loading && _menu.isNotEmpty)
             SafeArea(
@@ -2279,14 +2579,18 @@ class _MenuPickerSheetState extends State<_MenuPickerSheet> {
                       foregroundColor: Colors.white,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
                     child: Text(
-                        _selected.isEmpty
-                            ? 'Uygula'
-                            : 'Uygula (${_selected.length})',
-                        style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w600)),
+                      _selected.isEmpty
+                          ? 'Uygula'
+                          : 'Uygula (${_selected.length})',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -2315,8 +2619,9 @@ class _MenuPickerSheetState extends State<_MenuPickerSheet> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-                color: sel ? AppColors.primary : Colors.transparent,
-                width: 1.5),
+              color: sel ? AppColors.primary : Colors.transparent,
+              width: 1.5,
+            ),
             boxShadow: AppShadows.listTile,
           ),
           child: Row(
@@ -2330,22 +2635,30 @@ class _MenuPickerSheetState extends State<_MenuPickerSheet> {
                       ? NetImage(u.gorsel)
                       : Container(
                           color: AppColors.primarySoft,
-                          child: const Icon(Icons.restaurant_menu,
-                              color: AppColors.primary)),
+                          child: const Icon(
+                            Icons.restaurant_menu,
+                            color: AppColors.primary,
+                          ),
+                        ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(u.ad,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w600)),
+                child: Text(
+                  u.ad,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
               if (u.fiyatLabel.isNotEmpty) ...[
-                Text(u.fiyatLabel,
-                    style: const TextStyle(
-                        fontSize: 13, color: AppColors.muted)),
+                Text(
+                  u.fiyatLabel,
+                  style: const TextStyle(fontSize: 13, color: AppColors.muted),
+                ),
                 const SizedBox(width: 10),
               ],
               Icon(
@@ -2366,12 +2679,8 @@ class _MenuPickerSheetState extends State<_MenuPickerSheet> {
 class _PickResult {
   final Place? place;
   final PlaceDetay? konum;
-  const _PickResult.mekan(Place p)
-      : place = p,
-        konum = null;
-  const _PickResult.konum(PlaceDetay k)
-      : konum = k,
-        place = null;
+  const _PickResult.mekan(Place p) : place = p, konum = null;
+  const _PickResult.konum(PlaceDetay k) : konum = k, place = null;
 }
 
 /// Mekan arama seçici (durak eklemek için). Seçilen sonucu döner.
@@ -2427,7 +2736,9 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
       });
     });
     // Google Places (Gezgah dışı yerler) — paralel.
-    RotaRepository.instance.placeAutocomplete(term, session: _session).then((g) {
+    RotaRepository.instance.placeAutocomplete(term, session: _session).then((
+      g,
+    ) {
       if (!mounted || mySeq != _seq) return;
       setState(() {
         _gResults = g;
@@ -2439,12 +2750,16 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
   /// Google tahminini seç → detayını çöz → konum sonucu olarak döndür.
   Future<void> _pickGoogle(PlaceTahmin t) async {
     setState(() => _resolving = t.placeId);
-    final d = await RotaRepository.instance.placeDetay(t.placeId, session: _session);
+    final d = await RotaRepository.instance.placeDetay(
+      t.placeId,
+      session: _session,
+    );
     if (!mounted) return;
     setState(() => _resolving = null);
     if (d == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Yer bilgisi alınamadı.')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Yer bilgisi alınamadı.')));
       return;
     }
     Navigator.pop(context, _PickResult.konum(d));
@@ -2475,8 +2790,9 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                  color: AppColors.line,
-                  borderRadius: BorderRadius.circular(2)),
+                color: AppColors.line,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
           ),
           Padding(
@@ -2493,29 +2809,31 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: TextField(
-                controller: _c,
-                autofocus: true,
-                onChanged: _search,
-                textInputAction: TextInputAction.search,
-                decoration: InputDecoration(
-                  hintText: 'Mekan ara…',
-                  prefixIcon: const Icon(Icons.search),
-                  filled: true,
-                  fillColor: AppColors.primarySoft,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide.none,
-                  ),
+            child: TextField(
+              controller: _c,
+              autofocus: true,
+              onChanged: _search,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: 'Mekan ara…',
+                prefixIcon: const Icon(Icons.search),
+                filled: true,
+                fillColor: AppColors.primarySoft,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 4,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
                 ),
               ),
             ),
-            Expanded(child: _resultsView()),
-          ],
-        ),
-      );
+          ),
+          Expanded(child: _resultsView()),
+        ],
+      ),
+    );
   }
 
   Widget _resultsView() {
@@ -2523,8 +2841,10 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
     final busy = _loading || _gLoading;
     if (term.length < 2) {
       return const Center(
-        child: Text('En az 2 karakter yaz ve mekan ara.',
-            style: TextStyle(color: AppColors.muted)),
+        child: Text(
+          'En az 2 karakter yaz ve mekan ara.',
+          style: TextStyle(color: AppColors.muted),
+        ),
       );
     }
     if (busy && _results.isEmpty && _gResults.isEmpty) {
@@ -2532,8 +2852,10 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
     }
     if (!busy && _results.isEmpty && _gResults.isEmpty) {
       return const Center(
-        child: Text('Sonuç bulunamadı.',
-            style: TextStyle(color: AppColors.muted)),
+        child: Text(
+          'Sonuç bulunamadı.',
+          style: TextStyle(color: AppColors.muted),
+        ),
       );
     }
     return ListView(
@@ -2554,11 +2876,14 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
   Widget _sectionLabel(String s) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(2, 10, 0, 4),
-      child: Text(s,
-          style: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w700,
-              color: AppColors.muted)),
+      child: Text(
+        s,
+        style: const TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w700,
+          color: AppColors.muted,
+        ),
+      ),
     );
   }
 
@@ -2573,18 +2898,24 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
           child: NetImage(p.thumb(ThumbSize.square)),
         ),
       ),
-      title: Text(p.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+      title: Text(
+        p.name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
+      ),
       subtitle: p.cityDistrict.isNotEmpty
-          ? Text(p.cityDistrict,
+          ? Text(
+              p.cityDistrict,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12.5))
+              style: const TextStyle(fontSize: 12.5),
+            )
           : null,
       onTap: () => Navigator.pop(
-          context, _PickResult.mekan(p.toPlace(subtitle: p.cityDistrict))),
+        context,
+        _PickResult.mekan(p.toPlace(subtitle: p.cityDistrict)),
+      ),
     );
   }
 
@@ -2601,27 +2932,31 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
         ),
         child: const Icon(Icons.place_outlined, color: AppColors.primary),
       ),
-      title: Text(t.ad.isEmpty ? t.aciklama : t.ad,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+      title: Text(
+        t.ad.isEmpty ? t.aciklama : t.ad,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
+      ),
       subtitle: t.altBilgi.isNotEmpty
-          ? Text(t.altBilgi,
+          ? Text(
+              t.altBilgi,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12.5))
+              style: const TextStyle(fontSize: 12.5),
+            )
           : null,
       trailing: resolving
           ? const SizedBox(
               width: 18,
               height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2.2))
+              child: CircularProgressIndicator(strokeWidth: 2.2),
+            )
           : const Icon(Icons.add, color: AppColors.primary),
       onTap: resolving ? null : () => _pickGoogle(t),
     );
   }
 }
-
 
 /// Rotaya eklenmek üzere hazırlanan bir durak. [isKonum] true ise Google/serbest
 /// konum durağıdır (ürünsüz; `konumEkle` ile eklenir), [place] lat/lng taşır.
@@ -2691,11 +3026,13 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
     // Gezgah mekanı → ürün seçimi + not; sonra durağa ekle.
     if (picked.place != null) {
       final p = picked.place!;
-      final res =
-          await _showStopSheet(context, postId: p.id, title: p.name);
+      final res = await _showStopSheet(context, postId: p.id, title: p.name);
       if (res == null || !mounted) return;
-      setState(() => _staged
-          .add(_StagedStop(place: p, urunler: res.urunler, yorum: res.yorum)));
+      setState(
+        () => _staged.add(
+          _StagedStop(place: p, urunler: res.urunler, yorum: res.yorum),
+        ),
+      );
       return;
     }
     // Google yeri → konum durağı (ürünsüz, yalnız not).
@@ -2715,8 +3052,16 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
       lat: k.lat,
       lng: k.lng,
     );
-    setState(() => _staged.add(_StagedStop(
-        place: place, yorum: res.yorum, isKonum: true, adres: k.adres)));
+    setState(
+      () => _staged.add(
+        _StagedStop(
+          place: place,
+          yorum: res.yorum,
+          isKonum: true,
+          adres: k.adres,
+        ),
+      ),
+    );
   }
 
   Future<void> _edit(int index) async {
@@ -2768,11 +3113,13 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
         final res = await RotaRepository.instance.mekanlarEkle(
           widget.rotaId,
           mekanlar
-              .map((s) => (
-                    postId: s.place.id,
-                    qrIds: s.urunler.map((u) => u.qrId).toList(),
-                    yorum: s.yorum,
-                  ))
+              .map(
+                (s) => (
+                  postId: s.place.id,
+                  qrIds: s.urunler.map((u) => u.qrId).toList(),
+                  yorum: s.yorum,
+                ),
+              )
               .toList(),
         );
         eklenen += res.eklenen;
@@ -2790,8 +3137,9 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
     } on RotaException catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -2800,30 +3148,30 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: Text(eklenen > 0
-            ? '$eklenen durak eklendi'
-            : 'Durak eklenemedi'),
+        title: Text(
+          eklenen > 0 ? '$eklenen durak eklendi' : 'Durak eklenemedi',
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Şunlar eklenemedi:',
-                style: TextStyle(fontSize: 13.5)),
+            const Text('Şunlar eklenemedi:', style: TextStyle(fontSize: 13.5)),
             const SizedBox(height: 8),
             for (final a in atlanan)
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
-                    '• ${a['neden'] ?? 'eklenemedi'}',
-                    style:
-                        const TextStyle(fontSize: 13, color: AppColors.muted)),
+                  '• ${a['neden'] ?? 'eklenemedi'}',
+                  style: const TextStyle(fontSize: 13, color: AppColors.muted),
+                ),
               ),
           ],
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Tamam')),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Tamam'),
+          ),
         ],
       ),
     );
@@ -2840,10 +3188,7 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
           Expanded(
             child: TabBarView(
               controller: _tab,
-              children: [
-                _mekanTab(),
-                _konumTab(),
-              ],
+              children: [_mekanTab(), _konumTab()],
             ),
           ),
         ],
@@ -2875,11 +3220,16 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.add_location_alt_outlined,
-                size: 56, color: AppColors.muted),
+            const Icon(
+              Icons.add_location_alt_outlined,
+              size: 56,
+              color: AppColors.muted,
+            ),
             const SizedBox(height: 14),
-            const Text('Rotaya mekan ekle',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            const Text(
+              'Rotaya mekan ekle',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 6),
             const Text(
               'Birden çok mekan ve ürün ekleyebilirsin. Aşağıdaki butonla '
@@ -2916,8 +3266,11 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
                     ? Container(
                         color: AppColors.primarySoft,
                         alignment: Alignment.center,
-                        child: const AppSvgIcon(AppIcons.pin,
-                            size: 22, color: AppColors.primary),
+                        child: const AppSvgIcon(
+                          AppIcons.pin,
+                          size: 22,
+                          color: AppColors.primary,
+                        ),
                       )
                     : NetImage(s.place.thumb(ThumbSize.square)),
               ),
@@ -2930,16 +3283,23 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
                   Row(
                     children: [
                       if (s.isKonum) ...[
-                        const Icon(Icons.near_me,
-                            size: 13, color: AppColors.primary),
+                        const Icon(
+                          Icons.near_me,
+                          size: 13,
+                          color: AppColors.primary,
+                        ),
                         const SizedBox(width: 4),
                       ],
                       Flexible(
-                        child: Text(s.place.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 14.5, fontWeight: FontWeight.w600)),
+                        child: Text(
+                          s.place.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -2957,7 +3317,9 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                          fontSize: 12.5, color: AppColors.muted),
+                        fontSize: 12.5,
+                        color: AppColors.muted,
+                      ),
                     ),
                   ],
                 ],
@@ -2967,8 +3329,11 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
               tooltip: 'Düzenle',
               visualDensity: VisualDensity.compact,
               onPressed: () => _edit(i),
-              icon: const Icon(Icons.edit_outlined,
-                  size: 19, color: AppColors.primary),
+              icon: const Icon(
+                Icons.edit_outlined,
+                size: 19,
+                color: AppColors.primary,
+              ),
             ),
             IconButton(
               tooltip: 'Çıkar',
@@ -2985,7 +3350,11 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
   Widget _bottomBar() {
     return Container(
       padding: EdgeInsets.fromLTRB(
-          16, 12, 16, 12 + MediaQuery.of(context).viewPadding.bottom),
+        16,
+        12,
+        16,
+        12 + MediaQuery.of(context).viewPadding.bottom,
+      ),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: AppColors.line)),
@@ -2996,14 +3365,17 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
             child: OutlinedButton.icon(
               onPressed: _busy ? null : _pickAndAdd,
               icon: const Icon(Icons.add, size: 18),
-              label: const Text('Mekan Ekle',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
+              label: const Text(
+                'Mekan Ekle',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.primary,
                 side: const BorderSide(color: AppColors.primary),
                 minimumSize: const Size(0, 50),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
             ),
           ),
@@ -3017,20 +3389,24 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
                 elevation: 0,
                 minimumSize: const Size(0, 50),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
               child: _busy
                   ? const SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2.4, color: Colors.white),
+                        strokeWidth: 2.4,
+                        color: Colors.white,
+                      ),
                     )
                   : Text(
                       _staged.isEmpty
                           ? 'Rotaya Ekle'
                           : 'Rotaya Ekle (${_staged.length})',
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
             ),
           ),
         ],
@@ -3048,15 +3424,20 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
     final loc = await LocationService.resolve(forceRefresh: true);
     String? adres;
     try {
-      adres =
-          await LocationService.cityDistrict(loc.lat, loc.lng, districtFirst: true);
+      adres = await LocationService.cityDistrict(
+        loc.lat,
+        loc.lng,
+        districtFirst: true,
+      );
     } catch (_) {}
     if (!mounted) return;
     setState(() {
       _konumLat = loc.lat;
       _konumLng = loc.lng;
       _konumReal = loc.real;
-      if (adres != null && adres.isNotEmpty && _konumAdresC.text.trim().isEmpty) {
+      if (adres != null &&
+          adres.isNotEmpty &&
+          _konumAdresC.text.trim().isEmpty) {
         _konumAdresC.text = adres;
       }
       _konumLoading = false;
@@ -3064,14 +3445,18 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
   }
 
   Future<void> _pickKonumFoto() async {
-    final src = await _pickImageSource(context, allowRemove: _konumFoto != null);
+    final src = await _pickImageSource(
+      context,
+      allowRemove: _konumFoto != null,
+    );
     if (src == null) return;
     if (src == 'remove') {
       setState(() => _konumFoto = null);
       return;
     }
     final bytes = await _cropSquare(
-        src == 'camera' ? ImageSource.camera : ImageSource.gallery);
+      src == 'camera' ? ImageSource.camera : ImageSource.gallery,
+    );
     if (!mounted) return;
     if (bytes == null) {
       _showPickError(context); // sebebi göster (izin/bellek/platform hatası)
@@ -3103,8 +3488,9 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
     } on RotaException catch (e) {
       if (!mounted) return;
       setState(() => _konumBusy = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -3132,37 +3518,48 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
                         width: 44,
                         height: 44,
                         decoration: const BoxDecoration(
-                            color: AppColors.primarySoft,
-                            shape: BoxShape.circle),
-                        child: const Icon(Icons.my_location,
-                            color: AppColors.primary),
+                          color: AppColors.primarySoft,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.my_location,
+                          color: AppColors.primary,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Bulunduğun konum',
-                                style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600)),
+                            const Text(
+                              'Bulunduğun konum',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                             const SizedBox(height: 2),
                             Text(
                               _konumLoading
                                   ? 'Konum alınıyor…'
                                   : hasLoc
-                                      ? '${_konumLat!.toStringAsFixed(5)}, ${_konumLng!.toStringAsFixed(5)}'
-                                      : 'Konum alınamadı',
+                                  ? '${_konumLat!.toStringAsFixed(5)}, ${_konumLng!.toStringAsFixed(5)}'
+                                  : 'Konum alınamadı',
                               style: const TextStyle(
-                                  fontSize: 12.5, color: AppColors.muted),
+                                fontSize: 12.5,
+                                color: AppColors.muted,
+                              ),
                             ),
                             if (!_konumLoading && hasLoc && !_konumReal)
                               const Padding(
                                 padding: EdgeInsets.only(top: 2),
-                                child: Text('Yaklaşık konum (GPS kapalı olabilir)',
-                                    style: TextStyle(
-                                        fontSize: 11.5,
-                                        color: AppColors.closing)),
+                                child: Text(
+                                  'Yaklaşık konum (GPS kapalı olabilir)',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: AppColors.closing,
+                                  ),
+                                ),
                               ),
                           ],
                         ),
@@ -3175,18 +3572,23 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
                                 width: 18,
                                 height: 18,
                                 child: CircularProgressIndicator(
-                                    strokeWidth: 2.2))
-                            : const Icon(Icons.refresh,
-                                color: AppColors.primary),
+                                  strokeWidth: 2.2,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.refresh,
+                                color: AppColors.primary,
+                              ),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 18),
                 // Fotoğraf (opsiyonel, kare).
-                const Text('Fotoğraf (opsiyonel)',
-                    style:
-                        TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                const Text(
+                  'Fotoğraf (opsiyonel)',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 8),
                 GestureDetector(
                   onTap: _pickKonumFoto,
@@ -3199,8 +3601,10 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
                             children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(14),
-                                child:
-                                    Image.memory(_konumFoto!, fit: BoxFit.cover),
+                                child: Image.memory(
+                                  _konumFoto!,
+                                  fit: BoxFit.cover,
+                                ),
                               ),
                               Positioned(
                                 top: 4,
@@ -3212,12 +3616,16 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
                                     width: 26,
                                     height: 26,
                                     decoration: BoxDecoration(
-                                      color:
-                                          Colors.black.withValues(alpha: 0.55),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.55,
+                                      ),
                                       shape: BoxShape.circle,
                                     ),
-                                    child: const Icon(Icons.close,
-                                        color: Colors.white, size: 16),
+                                    child: const Icon(
+                                      Icons.close,
+                                      color: Colors.white,
+                                      size: 16,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -3229,26 +3637,44 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(color: AppColors.line),
                             ),
-                            child: const Icon(Icons.add_a_photo_outlined,
-                                color: AppColors.primary, size: 26),
+                            child: const Icon(
+                              Icons.add_a_photo_outlined,
+                              color: AppColors.primary,
+                              size: 26,
+                            ),
                           ),
                   ),
                 ),
                 const SizedBox(height: 16),
-                _field(_konumAdC, 'Konum adı (opsiyonel)',
-                    'Örn. Sultanahmet Meydanı'),
+                _field(
+                  _konumAdC,
+                  'Konum adı (opsiyonel)',
+                  'Örn. Sultanahmet Meydanı',
+                ),
                 const SizedBox(height: 14),
-                _field(_konumAdresC, 'Adres (opsiyonel)', 'Örn. Fatih/İstanbul'),
+                _field(
+                  _konumAdresC,
+                  'Adres (opsiyonel)',
+                  'Örn. Fatih/İstanbul',
+                ),
                 const SizedBox(height: 14),
-                _field(_konumYorumC, 'Yorum (opsiyonel)', 'Kısa bir not',
-                    maxLines: 3),
+                _field(
+                  _konumYorumC,
+                  'Yorum (opsiyonel)',
+                  'Kısa bir not',
+                  maxLines: 3,
+                ),
               ],
             ),
           ),
         ),
         Container(
           padding: EdgeInsets.fromLTRB(
-              16, 12, 16, 12 + MediaQuery.of(context).viewPadding.bottom),
+            16,
+            12,
+            16,
+            12 + MediaQuery.of(context).viewPadding.bottom,
+          ),
           decoration: const BoxDecoration(
             color: Colors.white,
             border: Border(top: BorderSide(color: AppColors.line)),
@@ -3263,16 +3689,22 @@ class _AddStopsScreenState extends State<_AddStopsScreen>
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2.4, color: Colors.white))
+                        strokeWidth: 2.4,
+                        color: Colors.white,
+                      ),
+                    )
                   : const Icon(Icons.add_location_alt_outlined, size: 20),
-              label: Text(_konumBusy ? 'Ekleniyor…' : 'Konumu Rotaya Ekle',
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              label: Text(
+                _konumBusy ? 'Ekleniyor…' : 'Konumu Rotaya Ekle',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
             ),
           ),
@@ -3342,68 +3774,89 @@ class _FilterSheetState extends State<_FilterSheet> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                  color: AppColors.line,
-                  borderRadius: BorderRadius.circular(2)),
+                color: AppColors.line,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
           ),
           const SizedBox(height: 16),
-          const Text('Filtrele',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+          const Text(
+            'Filtrele',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 18),
-          const Text('Tür',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          const Text(
+            'Tür',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 10),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
               for (final t in _tipler)
-                _choice(t.$2, _tip == t.$1,
-                    () => setState(() => _tip = _tip == t.$1 ? null : t.$1),
-                    icon: t.$3),
+                _choice(
+                  t.$2,
+                  _tip == t.$1,
+                  () => setState(() => _tip = _tip == t.$1 ? null : t.$1),
+                  icon: t.$3,
+                ),
             ],
           ),
           const SizedBox(height: 20),
-          const Text('İlçe',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          const Text(
+            'İlçe',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 10),
           if (_loadingIlce)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
               child: SizedBox(
-                  height: 22,
-                  width: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2.4)),
+                height: 22,
+                width: 22,
+                child: CircularProgressIndicator(strokeWidth: 2.4),
+              ),
             )
           else
             // Tasarım: dokununca alttan yarım modal (ilçe listesi) açılır.
             GestureDetector(
               onTap: _pickIlce,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 14,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.primarySoft,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.place_outlined,
-                        size: 19, color: AppColors.primary),
+                    const Icon(
+                      Icons.place_outlined,
+                      size: 19,
+                      color: AppColors.primary,
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Text(_ilceAd ?? 'Tüm ilçeler',
-                          style: TextStyle(
-                              fontSize: 14.5,
-                              fontWeight: _ilceAd == null
-                                  ? FontWeight.w400
-                                  : FontWeight.w600,
-                              color: _ilceAd == null
-                                  ? AppColors.muted
-                                  : AppColors.ink)),
+                      child: Text(
+                        _ilceAd ?? 'Tüm ilçeler',
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: _ilceAd == null
+                              ? FontWeight.w400
+                              : FontWeight.w600,
+                          color: _ilceAd == null
+                              ? AppColors.muted
+                              : AppColors.ink,
+                        ),
+                      ),
                     ),
-                    const Icon(Icons.keyboard_arrow_down,
-                        color: AppColors.muted),
+                    const Icon(
+                      Icons.keyboard_arrow_down,
+                      color: AppColors.muted,
+                    ),
                   ],
                 ),
               ),
@@ -3413,34 +3866,46 @@ class _FilterSheetState extends State<_FilterSheet> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => Navigator.pop(
-                      context, (tip: null, ilce: null, ilceAd: null)),
+                  onPressed: () => Navigator.pop(context, (
+                    tip: null,
+                    ilce: null,
+                    ilceAd: null,
+                  )),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.ink,
                     side: const BorderSide(color: AppColors.line),
                     minimumSize: const Size(0, 50),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                   ),
-                  child: const Text('Temizle',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  child: const Text(
+                    'Temizle',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context,
-                      (tip: _tip, ilce: _ilce, ilceAd: _ilceAd)),
+                  onPressed: () => Navigator.pop(context, (
+                    tip: _tip,
+                    ilce: _ilce,
+                    ilceAd: _ilceAd,
+                  )),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     elevation: 0,
                     minimumSize: const Size(0, 50),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                   ),
-                  child: const Text('Uygula',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  child: const Text(
+                    'Uygula',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ),
               ),
             ],
@@ -3450,8 +3915,12 @@ class _FilterSheetState extends State<_FilterSheet> {
     );
   }
 
-  Widget _choice(String label, bool active, VoidCallback onTap,
-      {IconData? icon}) {
+  Widget _choice(
+    String label,
+    bool active,
+    VoidCallback onTap, {
+    IconData? icon,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -3461,22 +3930,28 @@ class _FilterSheetState extends State<_FilterSheet> {
           color: active ? AppColors.primary : Colors.white,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
-              color: active ? AppColors.primary : AppColors.line),
+            color: active ? AppColors.primary : AppColors.line,
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(icon,
-                  size: 16,
-                  color: active ? Colors.white : AppColors.primary),
+              Icon(
+                icon,
+                size: 16,
+                color: active ? Colors.white : AppColors.primary,
+              ),
               const SizedBox(width: 6),
             ],
-            Text(label,
-                style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
-                    color: active ? Colors.white : AppColors.ink)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+                color: active ? Colors.white : AppColors.ink,
+              ),
+            ),
           ],
         ),
       ),
@@ -3504,17 +3979,19 @@ class _FilterSheetState extends State<_FilterSheet> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                    color: AppColors.line,
-                    borderRadius: BorderRadius.circular(2)),
+                  color: AppColors.line,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
             const Padding(
               padding: EdgeInsets.fromLTRB(20, 6, 20, 8),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text('İlçe seç',
-                    style:
-                        TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                child: Text(
+                  'İlçe seç',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
             const Divider(height: 1, color: AppColors.line),
@@ -3522,7 +3999,12 @@ class _FilterSheetState extends State<_FilterSheet> {
               child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
-                  _ilceRow(ctx, id: 0, ad: 'Tüm ilçeler', selected: _ilce == null),
+                  _ilceRow(
+                    ctx,
+                    id: 0,
+                    ad: 'Tüm ilçeler',
+                    selected: _ilce == null,
+                  ),
                   for (final i in _ilceler)
                     _ilceRow(ctx, id: i.id, ad: i.ad, selected: _ilce == i.id),
                 ],
@@ -3540,15 +4022,21 @@ class _FilterSheetState extends State<_FilterSheet> {
       } else {
         _ilce = res;
         _ilceAd = _ilceler
-            .firstWhere((e) => e.id == res,
-                orElse: () => const Ilce(id: 0, ad: ''))
+            .firstWhere(
+              (e) => e.id == res,
+              orElse: () => const Ilce(id: 0, ad: ''),
+            )
             .ad;
       }
     });
   }
 
-  Widget _ilceRow(BuildContext ctx,
-      {required int id, required String ad, required bool selected}) {
+  Widget _ilceRow(
+    BuildContext ctx, {
+    required int id,
+    required String ad,
+    required bool selected,
+  }) {
     return InkWell(
       onTap: () => Navigator.pop(ctx, id),
       child: Container(
@@ -3557,12 +4045,14 @@ class _FilterSheetState extends State<_FilterSheet> {
         child: Row(
           children: [
             Expanded(
-              child: Text(ad,
-                  style: TextStyle(
-                      fontSize: 15,
-                      fontWeight:
-                          selected ? FontWeight.w600 : FontWeight.w400,
-                      color: AppColors.ink)),
+              child: Text(
+                ad,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                  color: AppColors.ink,
+                ),
+              ),
             ),
             if (selected)
               const Icon(Icons.check, size: 18, color: AppColors.primary),
@@ -3585,8 +4075,8 @@ class DiscoverRoutesScreen extends StatefulWidget {
 
 class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen>
     with SingleTickerProviderStateMixin {
-  late final TabController _tab =
-      TabController(length: 2, vsync: this)..addListener(_onTab);
+  late final TabController _tab = TabController(length: 2, vsync: this)
+    ..addListener(_onTab);
 
   // Keşfet sıralama + filtre (header ikonlarından yönetilir).
   String _sort = 'yeni';
@@ -3646,7 +4136,11 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen>
             // Filtre + sıralama yalnız Keşfet sekmesinde, sağ üstte, ikonlu.
             actions: onKesfet
                 ? [
-                    _headerAction(AppIcons.filter, filterCount > 0, _openFilter),
+                    _headerAction(
+                      AppIcons.filter,
+                      filterCount > 0,
+                      _openFilter,
+                    ),
                     _headerAction(AppIcons.sort, _sort != 'yeni', _openSort),
                   ]
                 : const [],
@@ -3701,8 +4195,10 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen>
         yorumlarAcik: data.yorumlarAcik,
       );
       if (data.kapak != null) {
-        await RotaRepository.instance.kapakYukle(rota.id,
-            'data:image/jpeg;base64,${base64Encode(data.kapak!)}');
+        await RotaRepository.instance.kapakYukle(
+          rota.id,
+          'data:image/jpeg;base64,${base64Encode(data.kapak!)}',
+        );
       }
       if (!mounted) return;
       await Navigator.push(
@@ -3716,8 +4212,9 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen>
       await _handlePlus(context, e);
     } on RotaException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -3728,8 +4225,11 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen>
       children: [
         IconButton(
           onPressed: onTap,
-          icon: AppSvgIcon(svg,
-              size: 21, color: active ? AppColors.primary : AppColors.ink),
+          icon: AppSvgIcon(
+            svg,
+            size: 21,
+            color: active ? AppColors.primary : AppColors.ink,
+          ),
         ),
         if (active)
           Positioned(
@@ -3739,7 +4239,9 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen>
               width: 8,
               height: 8,
               decoration: const BoxDecoration(
-                  color: AppColors.primary, shape: BoxShape.circle),
+                color: AppColors.primary,
+                shape: BoxShape.circle,
+              ),
             ),
           ),
       ],
@@ -3749,11 +4251,11 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen>
   Future<void> _openFilter() async {
     final res =
         await showModalBottomSheet<({String? tip, int? ilce, String? ilceAd})>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _FilterSheet(tip: _tip, ilce: _ilce, ilceAd: _ilceAd),
-    );
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (_) => _FilterSheet(tip: _tip, ilce: _ilce, ilceAd: _ilceAd),
+        );
     if (res == null || !mounted) return;
     setState(() {
       _tip = res.tip;
@@ -3782,19 +4284,23 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen>
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                    color: AppColors.line,
-                    borderRadius: BorderRadius.circular(2)),
+                  color: AppColors.line,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
             const Padding(
               padding: EdgeInsets.fromLTRB(20, 6, 20, 12),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text('Sırala',
-                    style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.ink)),
+                child: Text(
+                  'Sırala',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.ink,
+                  ),
+                ),
               ),
             ),
             const Divider(height: 1, color: AppColors.line),
@@ -3808,11 +4314,12 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen>
               ),
               if (i < entries.length - 1)
                 const Divider(
-                    height: 1,
-                    thickness: 1,
-                    indent: 68,
-                    endIndent: 20,
-                    color: AppColors.line),
+                  height: 1,
+                  thickness: 1,
+                  indent: 68,
+                  endIndent: 20,
+                  color: AppColors.line,
+                ),
             ],
             const SizedBox(height: 12),
           ],
@@ -3826,8 +4333,11 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen>
       final loc = await LocationService.resolve();
       if (!mounted) return;
       if (!loc.real) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Mesafeye göre sıralamak için konum izni gerekli.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Mesafeye göre sıralamak için konum izni gerekli.'),
+          ),
+        );
         return;
       }
       _lat = loc.lat;
@@ -3857,33 +4367,42 @@ class _DiscoverRoutesScreenState extends State<DiscoverRoutesScreen>
                 color: selected ? AppColors.primary : AppColors.primarySoft,
                 borderRadius: BorderRadius.circular(11),
               ),
-              child: Icon(icon,
-                  size: 19,
-                  color: selected ? Colors.white : AppColors.primary),
+              child: Icon(
+                icon,
+                size: 19,
+                color: selected ? Colors.white : AppColors.primary,
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(
-              child: Text(label,
-                  style: TextStyle(
-                      fontSize: 15,
-                      fontWeight:
-                          selected ? FontWeight.w600 : FontWeight.w500,
-                      color: AppColors.ink)),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  color: AppColors.ink,
+                ),
+              ),
             ),
             // Aktif badge — en sağda.
             if (selected)
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.primary,
                   borderRadius: BorderRadius.circular(999),
                 ),
-                child: const Text('Seçili',
-                    style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white)),
+                child: const Text(
+                  'Seçili',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
               ),
           ],
         ),
@@ -3930,19 +4449,21 @@ class _PillTabs extends StatelessWidget {
                         boxShadow: active == i
                             ? const [
                                 BoxShadow(
-                                    color: Color(0x14000000),
-                                    blurRadius: 6,
-                                    offset: Offset(0, 2))
+                                  color: Color(0x14000000),
+                                  blurRadius: 6,
+                                  offset: Offset(0, 2),
+                                ),
                               ]
                             : null,
                       ),
-                      child: Text(labels[i],
-                          style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: active == i
-                                  ? AppColors.ink
-                                  : AppColors.muted)),
+                      child: Text(
+                        labels[i],
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: active == i ? AppColors.ink : AppColors.muted,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -4024,7 +4545,7 @@ class _RouteFeedState extends State<_RouteFeed>
   }
 
   Future<({List<GeziRota> items, bool hasMore, int? nextPage, int total})>
-      _fetch(int page) {
+  _fetch(int page) {
     if (widget.follow) {
       return RotaRepository.instance.takipAkisi(page: page, limit: 20);
     }
@@ -4091,8 +4612,10 @@ class _RouteFeedState extends State<_RouteFeed>
           children: [
             const Icon(Icons.group_outlined, size: 60, color: AppColors.muted),
             const SizedBox(height: 14),
-            const Text('Takip akışı için giriş yap',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            const Text(
+              'Takip akışı için giriş yap',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 6),
             const Text(
               'Takip ettiğin kişilerin paylaştığı rotaları burada görürsün.',
@@ -4113,11 +4636,13 @@ class _RouteFeedState extends State<_RouteFeed>
                   foregroundColor: Colors.white,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                 ),
-                child: const Text('Üye Girişi Yap',
-                    style: TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w600)),
+                child: const Text(
+                  'Üye Girişi Yap',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
           ],
@@ -4137,12 +4662,16 @@ class _RouteFeedState extends State<_RouteFeed>
               width: 72,
               height: 72,
               decoration: const BoxDecoration(
-                  color: AppColors.primarySoft, shape: BoxShape.circle),
+                color: AppColors.primarySoft,
+                shape: BoxShape.circle,
+              ),
               child: const Center(child: ShipWheelIcon(size: 34)),
             ),
             const SizedBox(height: 16),
-            const Text('Henüz paylaşılan rota yok',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            const Text(
+              'Henüz paylaşılan rota yok',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 6),
             const Text(
               'Üyelerin herkese açık gezi rotaları burada listelenir.',
@@ -4224,11 +4753,15 @@ class _RouteFeedState extends State<_RouteFeed>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(r.baslik.isEmpty ? 'Adsız rota' : r.baslik,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w600)),
+                    Text(
+                      r.baslik.isEmpty ? 'Adsız rota' : r.baslik,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -4241,58 +4774,93 @@ class _RouteFeedState extends State<_RouteFeed>
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                  fontSize: 12.5, color: AppColors.muted),
+                                fontSize: 12.5,
+                                color: AppColors.muted,
+                              ),
                             ),
                           ),
-                          const Text('  ·  ',
-                              style: TextStyle(color: AppColors.muted)),
+                          const Text(
+                            '  ·  ',
+                            style: TextStyle(color: AppColors.muted),
+                          ),
                         ],
-                        Text('${r.durakSayisi} durak',
-                            style: const TextStyle(
-                                fontSize: 12.5, color: AppColors.muted)),
-                        // Beğeni sayısı (statik gösterim; beğenme rota
-                        // detayında yapılır — SOSYAL §1).
-                        const Text('  ·  ',
-                            style: TextStyle(color: AppColors.muted)),
-                        r.begendim
-                            ? const Icon(Icons.favorite,
-                                size: 14, color: AppColors.heart)
-                            : const AppSvgIcon(AppIcons.heart,
-                                size: 13, color: AppColors.muted),
-                        const SizedBox(width: 3),
-                        Text('${r.begeniSayisi}',
-                            style: const TextStyle(
-                                fontSize: 12.5, color: AppColors.muted)),
-                        // Yorum sayısı (beğeninin yanında, ikonuyla).
-                        const SizedBox(width: 10),
-                        const AppSvgIcon(AppIcons.comment,
-                            size: 13, color: AppColors.muted),
-                        const SizedBox(width: 3),
-                        Text('${r.yorumSayisi}',
-                            style: const TextStyle(
-                                fontSize: 12.5, color: AppColors.muted)),
+                        Text(
+                          '${r.durakSayisi} durak',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            color: AppColors.muted,
+                          ),
+                        ),
                       ],
                     ),
-                    // Fiyat / mesafe rozetleri (varsa) — sıralamaya göre dolar.
-                    if (r.fiyatLabel.isNotEmpty || r.mesafeLabel.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          if (r.fiyatLabel.isNotEmpty)
-                            _badge(Icons.payments_outlined, r.fiyatLabel,
-                                svg: AppIcons.tag),
-                          if (r.mesafeLabel.isNotEmpty)
-                            _badge(Icons.near_me_outlined, r.mesafeLabel),
+                    // Alt satır: solda beğeni + yorum (+ varsa mesafe),
+                    // en sağda fiyat rozeti.
+                    const SizedBox(height: 7),
+                    Row(
+                      children: [
+                        // Beğeni sayısı (statik gösterim; beğenme rota
+                        // detayında yapılır — SOSYAL §1).
+                        r.begendim
+                            ? const Icon(
+                                Icons.favorite,
+                                size: 14,
+                                color: AppColors.heart,
+                              )
+                            : const AppSvgIcon(
+                                AppIcons.heart,
+                                size: 13,
+                                color: AppColors.muted,
+                              ),
+                        const SizedBox(width: 3),
+                        Text(
+                          '${r.begeniSayisi}',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            color: AppColors.muted,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        const AppSvgIcon(
+                          AppIcons.comment,
+                          size: 13,
+                          color: AppColors.muted,
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          '${r.yorumSayisi}',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            color: AppColors.muted,
+                          ),
+                        ),
+                        if (r.mesafeLabel.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: _badge(
+                              Icons.near_me_outlined,
+                              r.mesafeLabel,
+                            ),
+                          ),
                         ],
-                      ),
-                    ],
+                        const Spacer(),
+                        if (r.fiyatLabel.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          _badge(
+                            Icons.payments_outlined,
+                            r.fiyatLabel,
+                            svg: AppIcons.tag,
+                          ),
+                        ],
+                      ],
+                    ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right,
-                  size: 20, color: AppColors.primary),
+              const Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: AppColors.primary,
+              ),
             ],
           ),
         ),
@@ -4314,11 +4882,14 @@ class _RouteFeedState extends State<_RouteFeed>
               ? AppSvgIcon(svg, size: 12, color: AppColors.primary)
               : Icon(icon, size: 13, color: AppColors.primary),
           const SizedBox(width: 4),
-          Text(label,
-              style: const TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.primary)),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.primary,
+            ),
+          ),
         ],
       ),
     );
@@ -4335,14 +4906,16 @@ class _RouteFeedState extends State<_RouteFeed>
             : Container(
                 color: AppColors.primarySoft,
                 alignment: Alignment.center,
-                child: AppSvgIcon(AppIcons.user,
-                    size: size * 0.5, color: AppColors.primary),
+                child: AppSvgIcon(
+                  AppIcons.user,
+                  size: size * 0.5,
+                  color: AppColors.primary,
+                ),
               ),
       ),
     );
   }
 }
-
 
 /// Durak fotoğrafları tam ekran görüntüleyici (kaydırmalı + yakınlaştırma).
 class _FotoViewer extends StatelessWidget {
@@ -4426,9 +4999,10 @@ class _DurakFotoSheetState extends State<_DurakFotoSheet> {
         final bytes = await f.readAsBytes();
         final b64 = 'data:image/jpeg;base64,${base64Encode(bytes)}';
         final g = await RotaRepository.instance.durakGorselYukle(
-            widget.rotaId,
-            durakId: widget.durak.durakId,
-            base64: b64);
+          widget.rotaId,
+          durakId: widget.durak.durakId,
+          base64: b64,
+        );
         if (!mounted) return;
         setState(() {
           _fotos.add(g);
@@ -4450,8 +5024,11 @@ class _DurakFotoSheetState extends State<_DurakFotoSheet> {
 
   Future<void> _remove(DurakGorsel g) async {
     try {
-      await RotaRepository.instance.durakGorselSil(widget.rotaId,
-          durakId: widget.durak.durakId, gorselId: g.id);
+      await RotaRepository.instance.durakGorselSil(
+        widget.rotaId,
+        durakId: widget.durak.durakId,
+        gorselId: g.id,
+      );
       if (!mounted) return;
       setState(() {
         _fotos.removeWhere((e) => e.id == g.id);
@@ -4480,13 +5057,15 @@ class _DurakFotoSheetState extends State<_DurakFotoSheet> {
             padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
             child: Row(
               children: [
-                const Text('Durak Fotoğrafları',
-                    style:
-                        TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                const Text(
+                  'Durak Fotoğrafları',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(width: 8),
-                Text('(${_fotos.length}/$_max)',
-                    style: const TextStyle(
-                        fontSize: 13, color: AppColors.muted)),
+                Text(
+                  '(${_fotos.length}/$_max)',
+                  style: const TextStyle(fontSize: 13, color: AppColors.muted),
+                ),
                 const Spacer(),
                 IconButton(
                   onPressed: () => Navigator.pop(context, _changed),
@@ -4504,12 +5083,17 @@ class _DurakFotoSheetState extends State<_DurakFotoSheet> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.photo_library_outlined,
-                              size: 48, color: AppColors.muted),
+                          const Icon(
+                            Icons.photo_library_outlined,
+                            size: 48,
+                            color: AppColors.muted,
+                          ),
                           const SizedBox(height: 12),
-                          const Text('Bu durağa henüz fotoğraf eklenmedi.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: AppColors.muted)),
+                          const Text(
+                            'Bu durağa henüz fotoğraf eklenmedi.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: AppColors.muted),
+                          ),
                         ],
                       ),
                     ),
@@ -4540,8 +5124,11 @@ class _DurakFotoSheetState extends State<_DurakFotoSheet> {
                                     color: Colors.black.withValues(alpha: 0.55),
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(Icons.close,
-                                      color: Colors.white, size: 16),
+                                  child: const Icon(
+                                    Icons.close,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
                                 ),
                               ),
                             ),
@@ -4564,16 +5151,22 @@ class _DurakFotoSheetState extends State<_DurakFotoSheet> {
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2.2, color: Colors.white))
+                            strokeWidth: 2.2,
+                            color: Colors.white,
+                          ),
+                        )
                       : const Icon(Icons.add_a_photo_outlined, size: 18),
-                  label: Text(_busy ? 'Yükleniyor…' : 'Fotoğraf Ekle',
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  label: Text(
+                    _busy ? 'Yükleniyor…' : 'Fotoğraf Ekle',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                   ),
                 ),
               ),
@@ -4591,8 +5184,11 @@ class _UrunFotoSheet extends StatefulWidget {
   final int rotaId;
   final RotaDurak durak;
   final RotaUrun urun;
-  const _UrunFotoSheet(
-      {required this.rotaId, required this.durak, required this.urun});
+  const _UrunFotoSheet({
+    required this.rotaId,
+    required this.durak,
+    required this.urun,
+  });
 
   @override
   State<_UrunFotoSheet> createState() => _UrunFotoSheetState();
@@ -4616,7 +5212,8 @@ class _UrunFotoSheetState extends State<_UrunFotoSheet> {
       return;
     }
     final bytes = await _cropSquare(
-        src == 'camera' ? ImageSource.camera : ImageSource.gallery);
+      src == 'camera' ? ImageSource.camera : ImageSource.gallery,
+    );
     if (!mounted) return;
     if (bytes == null) {
       _showPickError(context);
@@ -4649,8 +5246,11 @@ class _UrunFotoSheetState extends State<_UrunFotoSheet> {
   Future<void> _remove() async {
     setState(() => _busy = true);
     try {
-      await RotaRepository.instance.urunGorselSil(widget.rotaId,
-          durakId: widget.durak.durakId, qrId: widget.urun.qrId);
+      await RotaRepository.instance.urunGorselSil(
+        widget.rotaId,
+        durakId: widget.durak.durakId,
+        qrId: widget.urun.qrId,
+      );
       if (!mounted) return;
       setState(() {
         _foto = '';
@@ -4687,8 +5287,9 @@ class _UrunFotoSheetState extends State<_UrunFotoSheet> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                    color: AppColors.line,
-                    borderRadius: BorderRadius.circular(2)),
+                  color: AppColors.line,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
             Padding(
@@ -4701,7 +5302,9 @@ class _UrunFotoSheetState extends State<_UrunFotoSheet> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                          fontSize: 17, fontWeight: FontWeight.w600),
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   IconButton(
@@ -4722,8 +5325,11 @@ class _UrunFotoSheetState extends State<_UrunFotoSheet> {
                       : Container(
                           color: AppColors.primarySoft,
                           child: const Center(
-                            child: Icon(Icons.restaurant_menu,
-                                size: 48, color: AppColors.primary),
+                            child: Icon(
+                              Icons.restaurant_menu,
+                              size: 48,
+                              color: AppColors.primary,
+                            ),
                           ),
                         ),
                 ),
@@ -4753,26 +5359,29 @@ class _UrunFotoSheetState extends State<_UrunFotoSheet> {
                                 width: 18,
                                 height: 18,
                                 child: CircularProgressIndicator(
-                                    strokeWidth: 2.2, color: Colors.white))
+                                  strokeWidth: 2.2,
+                                  color: Colors.white,
+                                ),
+                              )
                             : Icon(
                                 _foto.isEmpty
                                     ? Icons.add_a_photo_outlined
                                     : Icons.swap_horiz,
-                                size: 18),
+                                size: 18,
+                              ),
                         label: Text(
-                            _busy
-                                ? 'Yükleniyor…'
-                                : (_foto.isEmpty
-                                    ? 'Fotoğraf Yükle'
-                                    : 'Değiştir'),
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w600)),
+                          _busy
+                              ? 'Yükleniyor…'
+                              : (_foto.isEmpty ? 'Fotoğraf Yükle' : 'Değiştir'),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
                           elevation: 0,
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14)),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
                         ),
                       ),
                     ),
@@ -4788,10 +5397,13 @@ class _UrunFotoSheetState extends State<_UrunFotoSheet> {
                           padding: EdgeInsets.zero,
                           side: const BorderSide(color: AppColors.closing),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14)),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
                         ),
-                        child: const Icon(Icons.delete_outline,
-                            color: AppColors.closing),
+                        child: const Icon(
+                          Icons.delete_outline,
+                          color: AppColors.closing,
+                        ),
                       ),
                     ),
                   ],
@@ -4871,8 +5483,10 @@ class _YorumSheetState extends State<_YorumSheet> {
   }
 
   Future<void> _loadMore() async {
-    final res = await RotaRepository.instance
-        .yorumlar(widget.rota.id, page: _page + 1);
+    final res = await RotaRepository.instance.yorumlar(
+      widget.rota.id,
+      page: _page + 1,
+    );
     if (!mounted) return;
     setState(() {
       _yorumlar = [..._yorumlar, ...res.items];
@@ -4920,20 +5534,28 @@ class _YorumSheetState extends State<_YorumSheet> {
         content: const Text('Bu yorumu silmek istediğine emin misin?'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Vazgeç')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Vazgeç'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Sil',
-                style: TextStyle(
-                    color: AppColors.closing, fontWeight: FontWeight.w600)),
+            child: const Text(
+              'Sil',
+              style: TextStyle(
+                color: AppColors.closing,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
     );
     if (ok != true) return;
     try {
-      final count = await RotaRepository.instance.yorumSil(widget.rota.id, y.id);
+      final count = await RotaRepository.instance.yorumSil(
+        widget.rota.id,
+        y.id,
+      );
       if (!mounted) return;
       setState(() {
         _yorumlar = _yorumlar.where((e) => e.id != y.id).toList();
@@ -4962,34 +5584,39 @@ class _YorumSheetState extends State<_YorumSheet> {
     if (like) {
       if (cur.begendim) {
         optimistic = cur.copyWith(
-            begendim: false,
-            begeniSayisi: (cur.begeniSayisi - 1).clamp(0, 1 << 30));
-        call = () => RotaRepository.instance.yorumBegenKaldir(widget.rota.id, y.id);
+          begendim: false,
+          begeniSayisi: (cur.begeniSayisi - 1).clamp(0, 1 << 30),
+        );
+        call = () =>
+            RotaRepository.instance.yorumBegenKaldir(widget.rota.id, y.id);
       } else {
         optimistic = cur.copyWith(
-            begendim: true,
-            begenmedim: false,
-            begeniSayisi: cur.begeniSayisi + 1,
-            begenmemeSayisi: cur.begenmedim
-                ? (cur.begenmemeSayisi - 1).clamp(0, 1 << 30)
-                : cur.begenmemeSayisi);
+          begendim: true,
+          begenmedim: false,
+          begeniSayisi: cur.begeniSayisi + 1,
+          begenmemeSayisi: cur.begenmedim
+              ? (cur.begenmemeSayisi - 1).clamp(0, 1 << 30)
+              : cur.begenmemeSayisi,
+        );
         call = () => RotaRepository.instance.yorumBegen(widget.rota.id, y.id);
       }
     } else {
       if (cur.begenmedim) {
         optimistic = cur.copyWith(
-            begenmedim: false,
-            begenmemeSayisi: (cur.begenmemeSayisi - 1).clamp(0, 1 << 30));
-        call =
-            () => RotaRepository.instance.yorumBegenmeKaldir(widget.rota.id, y.id);
+          begenmedim: false,
+          begenmemeSayisi: (cur.begenmemeSayisi - 1).clamp(0, 1 << 30),
+        );
+        call = () =>
+            RotaRepository.instance.yorumBegenmeKaldir(widget.rota.id, y.id);
       } else {
         optimistic = cur.copyWith(
-            begenmedim: true,
-            begendim: false,
-            begenmemeSayisi: cur.begenmemeSayisi + 1,
-            begeniSayisi: cur.begendim
-                ? (cur.begeniSayisi - 1).clamp(0, 1 << 30)
-                : cur.begeniSayisi);
+          begenmedim: true,
+          begendim: false,
+          begenmemeSayisi: cur.begenmemeSayisi + 1,
+          begeniSayisi: cur.begendim
+              ? (cur.begeniSayisi - 1).clamp(0, 1 << 30)
+              : cur.begeniSayisi,
+        );
         call = () => RotaRepository.instance.yorumBegenme(widget.rota.id, y.id);
       }
     }
@@ -4999,12 +5626,14 @@ class _YorumSheetState extends State<_YorumSheet> {
       if (!mounted) return;
       final i2 = _yorumlar.indexWhere((e) => e.id == y.id);
       if (i2 >= 0) {
-        setState(() => _yorumlar[i2] = _yorumlar[i2].copyWith(
-              begendim: r.begendim,
-              begenmedim: r.begenmedim,
-              begeniSayisi: r.begeniSayisi,
-              begenmemeSayisi: r.begenmemeSayisi,
-            ));
+        setState(
+          () => _yorumlar[i2] = _yorumlar[i2].copyWith(
+            begendim: r.begendim,
+            begenmedim: r.begenmedim,
+            begeniSayisi: r.begeniSayisi,
+            begenmemeSayisi: r.begenmemeSayisi,
+          ),
+        );
       }
     } catch (e) {
       if (!mounted) return;
@@ -5030,9 +5659,14 @@ class _YorumSheetState extends State<_YorumSheet> {
           Icon(icon, size: 17, color: color),
           if (count > 0) ...[
             const SizedBox(width: 4),
-            Text('$count',
-                style: TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+            Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
           ],
         ],
       ),
@@ -5056,19 +5690,23 @@ class _YorumSheetState extends State<_YorumSheet> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                  color: AppColors.line,
-                  borderRadius: BorderRadius.circular(2)),
+                color: AppColors.line,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 2, 12, 8),
             child: Row(
               children: [
-                Text(_total > 0 ? 'Yorumlar ($_total)' : 'Yorumlar',
-                    style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.ink)),
+                Text(
+                  _total > 0 ? 'Yorumlar ($_total)' : 'Yorumlar',
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
                 const Spacer(),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
@@ -5082,30 +5720,31 @@ class _YorumSheetState extends State<_YorumSheet> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _yorumlar.isEmpty
-                    ? _empty()
-                    : ListView.separated(
-                        controller: _scroll,
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-                        itemCount: _yorumlar.length + (_hasMore ? 1 : 0),
-                        separatorBuilder: (_, i) => i < _yorumlar.length - 1
-                            ? const Divider(
-                                height: 26,
-                                thickness: 1,
-                                indent: 50,
-                                color: AppColors.line)
-                            : const SizedBox(height: 12),
-                        itemBuilder: (_, i) {
-                          if (i >= _yorumlar.length) {
-                            return Center(
-                              child: TextButton(
-                                onPressed: _loadMore,
-                                child: const Text('Daha fazla göster'),
-                              ),
-                            );
-                          }
-                          return _yorumTile(_yorumlar[i]);
-                        },
-                      ),
+                ? _empty()
+                : ListView.separated(
+                    controller: _scroll,
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                    itemCount: _yorumlar.length + (_hasMore ? 1 : 0),
+                    separatorBuilder: (_, i) => i < _yorumlar.length - 1
+                        ? const Divider(
+                            height: 26,
+                            thickness: 1,
+                            indent: 50,
+                            color: AppColors.line,
+                          )
+                        : const SizedBox(height: 12),
+                    itemBuilder: (_, i) {
+                      if (i >= _yorumlar.length) {
+                        return Center(
+                          child: TextButton(
+                            onPressed: _loadMore,
+                            child: const Text('Daha fazla göster'),
+                          ),
+                        );
+                      }
+                      return _yorumTile(_yorumlar[i]);
+                    },
+                  ),
           ),
           _composer(insets),
         ],
@@ -5120,8 +5759,11 @@ class _YorumSheetState extends State<_YorumSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.mode_comment_outlined,
-                size: 46, color: AppColors.muted),
+            const Icon(
+              Icons.mode_comment_outlined,
+              size: 46,
+              color: AppColors.muted,
+            ),
             const SizedBox(height: 12),
             Text(
               _yorumlarAcik
@@ -5144,22 +5786,22 @@ class _YorumSheetState extends State<_YorumSheet> {
         GestureDetector(
           onTap: (y.isletme && y.postId > 0)
               ? () => Navigator.push(
-                    context,
-                    detailRoute(
-                      builder: (_) => DetailScreen(
-                        place: Place(
-                          id: y.postId,
-                          name: y.uye.adSoyad,
-                          category: '',
-                          subtitle: '',
-                          rating: 0,
-                          distance: '',
-                          price: '',
-                          image: y.uye.avatar,
-                        ),
+                  context,
+                  detailRoute(
+                    builder: (_) => DetailScreen(
+                      place: Place(
+                        id: y.postId,
+                        name: y.uye.adSoyad,
+                        category: '',
+                        subtitle: '',
+                        rating: 0,
+                        distance: '',
+                        price: '',
+                        image: y.uye.avatar,
                       ),
                     ),
-                  )
+                  ),
+                )
               : null,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(y.isletme ? 12 : 999),
@@ -5171,8 +5813,11 @@ class _YorumSheetState extends State<_YorumSheet> {
                   : Container(
                       color: AppColors.primarySoft,
                       alignment: Alignment.center,
-                      child: const AppSvgIcon(AppIcons.user,
-                          size: 18, color: AppColors.primary),
+                      child: const AppSvgIcon(
+                        AppIcons.user,
+                        size: 18,
+                        color: AppColors.primary,
+                      ),
                     ),
             ),
           ),
@@ -5190,7 +5835,9 @@ class _YorumSheetState extends State<_YorumSheet> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                          fontSize: 13.5, fontWeight: FontWeight.w700),
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                   // İşletme yorumu → mavi tik (dokununca Onaylı İşletme modalı).
@@ -5198,20 +5845,32 @@ class _YorumSheetState extends State<_YorumSheet> {
                     const SizedBox(width: 4),
                     GestureDetector(
                       onTap: () => showOnayliIsletmeModal(context),
-                      child: const Icon(Icons.verified,
-                          size: 15, color: kOnayliMavi),
+                      child: const Icon(
+                        Icons.verified,
+                        size: 15,
+                        color: kOnayliMavi,
+                      ),
                     ),
                   ],
                   const SizedBox(width: 8),
-                  Text(_yorumZaman(y.createdAt),
-                      style: const TextStyle(
-                          fontSize: 11.5, color: AppColors.muted)),
+                  Text(
+                    _yorumZaman(y.createdAt),
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      color: AppColors.muted,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 3),
-              Text(y.yorum,
-                  style: const TextStyle(
-                      fontSize: 13.5, height: 1.4, color: AppColors.ink)),
+              Text(
+                y.yorum,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  height: 1.4,
+                  color: AppColors.ink,
+                ),
+              ),
               const SizedBox(height: 8),
               // Beğeni / beğenmeme (rota-yorum-begeni.md).
               Row(
@@ -5244,8 +5903,11 @@ class _YorumSheetState extends State<_YorumSheet> {
             padding: const EdgeInsets.only(left: 8),
             child: GestureDetector(
               onTap: () => _delete(y),
-              child: const Icon(Icons.delete_outline,
-                  size: 19, color: AppColors.muted),
+              child: const Icon(
+                Icons.delete_outline,
+                size: 19,
+                color: AppColors.muted,
+              ),
             ),
           ),
       ],
@@ -5265,8 +5927,10 @@ class _YorumSheetState extends State<_YorumSheet> {
               border: Border(top: BorderSide(color: AppColors.line)),
             ),
             alignment: Alignment.center,
-            child: const Text('Bu rotada yorumlar kapalı.',
-                style: TextStyle(color: AppColors.muted, fontSize: 13)),
+            child: const Text(
+              'Bu rotada yorumlar kapalı.',
+              style: TextStyle(color: AppColors.muted, fontSize: 13),
+            ),
           ),
         ),
       );
@@ -5297,7 +5961,9 @@ class _YorumSheetState extends State<_YorumSheet> {
                     filled: true,
                     fillColor: AppColors.primarySoft,
                     contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                       borderSide: BorderSide.none,
@@ -5312,12 +5978,16 @@ class _YorumSheetState extends State<_YorumSheet> {
                   width: 44,
                   height: 44,
                   decoration: const BoxDecoration(
-                      color: AppColors.primary, shape: BoxShape.circle),
+                    color: AppColors.primary,
+                    shape: BoxShape.circle,
+                  ),
                   child: _sending
                       ? const Padding(
                           padding: EdgeInsets.all(12),
                           child: CircularProgressIndicator(
-                              strokeWidth: 2.2, color: Colors.white),
+                            strokeWidth: 2.2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Icon(Icons.send, color: Colors.white, size: 20),
                 ),
@@ -5356,7 +6026,8 @@ class _StopDetailSheet extends StatelessWidget {
 
     return Container(
       constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.85),
+        maxHeight: MediaQuery.of(context).size.height * 0.85,
+      ),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -5370,8 +6041,9 @@ class _StopDetailSheet extends StatelessWidget {
               width: 42,
               height: 4,
               decoration: BoxDecoration(
-                  color: AppColors.line,
-                  borderRadius: BorderRadius.circular(999)),
+                color: AppColors.line,
+                borderRadius: BorderRadius.circular(999),
+              ),
             ),
           ),
           Flexible(
@@ -5386,22 +6058,30 @@ class _StopDetailSheet extends StatelessWidget {
                       height: 26,
                       alignment: Alignment.center,
                       decoration: const BoxDecoration(
-                          color: AppColors.primary, shape: BoxShape.circle),
-                      child: Text('${index + 1}',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600)),
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        '${index + 1}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Text(baslik,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.ink)),
+                      child: Text(
+                        baslik,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.ink,
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 8),
                     _tag(d.isKonum ? 'Konum' : 'Mekan'),
@@ -5412,15 +6092,21 @@ class _StopDetailSheet extends StatelessWidget {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const AppSvgIcon(AppIcons.pin,
-                          size: 13, color: AppColors.primary),
+                      const AppSvgIcon(
+                        AppIcons.pin,
+                        size: 13,
+                        color: AppColors.primary,
+                      ),
                       const SizedBox(width: 6),
                       Expanded(
-                        child: Text(konum,
-                            style: const TextStyle(
-                                fontSize: 13,
-                                height: 1.4,
-                                color: AppColors.muted)),
+                        child: Text(
+                          konum,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            height: 1.4,
+                            color: AppColors.muted,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -5474,25 +6160,36 @@ class _StopDetailSheet extends StatelessWidget {
                 // Not / açıklama.
                 if (d.yorum.isNotEmpty) ...[
                   const SizedBox(height: 16),
-                  const Text('Not',
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.ink)),
+                  const Text(
+                    'Not',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.ink,
+                    ),
+                  ),
                   const SizedBox(height: 6),
-                  Text(d.yorum,
-                      style: const TextStyle(
-                          fontSize: 13.5, height: 1.5, color: AppColors.muted)),
+                  Text(
+                    d.yorum,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      height: 1.5,
+                      color: AppColors.muted,
+                    ),
+                  ),
                 ],
 
                 // Seçili ürünler (QR menüden).
                 if (d.urunler.isNotEmpty) ...[
                   const SizedBox(height: 18),
-                  const Text('Seçilen ürünler',
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.ink)),
+                  const Text(
+                    'Seçilen ürünler',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.ink,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   for (final u in d.urunler) _urunRow(u),
                 ],
@@ -5502,15 +6199,23 @@ class _StopDetailSheet extends StatelessWidget {
                     (m?.adres.isNotEmpty ?? false) &&
                     m!.adres != konum) ...[
                   const SizedBox(height: 16),
-                  const Text('Adres',
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.ink)),
+                  const Text(
+                    'Adres',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.ink,
+                    ),
+                  ),
                   const SizedBox(height: 6),
-                  Text(m.adres,
-                      style: const TextStyle(
-                          fontSize: 13.5, height: 1.5, color: AppColors.muted)),
+                  Text(
+                    m.adres,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      height: 1.5,
+                      color: AppColors.muted,
+                    ),
+                  ),
                 ],
 
                 const SizedBox(height: 18),
@@ -5552,8 +6257,10 @@ class _StopDetailSheet extends StatelessWidget {
                         ViewTracker.instance.yolTarifi(m.id);
                       }
                       try {
-                        await launchUrl(Uri.parse(d.haritaLink),
-                            mode: LaunchMode.externalApplication);
+                        await launchUrl(
+                          Uri.parse(d.haritaLink),
+                          mode: LaunchMode.externalApplication,
+                        );
                       } catch (_) {
                         // sessizce yut: harita açılamazsa panel açık kalır
                       }
@@ -5569,17 +6276,20 @@ class _StopDetailSheet extends StatelessWidget {
   }
 
   Widget _tag(String text) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-        decoration: BoxDecoration(
-          color: AppColors.primarySoft,
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Text(text,
-            style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primary)),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+    decoration: BoxDecoration(
+      color: AppColors.primarySoft,
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Text(
+      text,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: AppColors.primary,
+      ),
+    ),
+  );
 
   Widget _urunRow(RotaUrun u) {
     final img = u.foto.isNotEmpty ? u.foto : u.gorsel;
@@ -5595,21 +6305,27 @@ class _StopDetailSheet extends StatelessWidget {
             const SizedBox(width: 10),
           ],
           Expanded(
-            child: Text(u.ad,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.ink)),
+            child: Text(
+              u.ad,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.ink,
+              ),
+            ),
           ),
           if (u.fiyatLabel.isNotEmpty) ...[
             const SizedBox(width: 8),
-            Text(u.fiyatLabel,
-                style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.primary)),
+            Text(
+              u.fiyatLabel,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary,
+              ),
+            ),
           ],
         ],
       ),
@@ -5631,11 +6347,14 @@ class _StopDetailSheet extends StatelessWidget {
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
           elevation: 0,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
-        label: Text(label,
-            style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+        label: Text(
+          label,
+          style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
+        ),
       ),
     );
   }
@@ -5654,11 +6373,14 @@ class _StopDetailSheet extends StatelessWidget {
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.primary,
           side: const BorderSide(color: AppColors.line),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
-        label: Text(label,
-            style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+        label: Text(
+          label,
+          style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
+        ),
       ),
     );
   }

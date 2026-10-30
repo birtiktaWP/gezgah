@@ -14,7 +14,6 @@ import '../data/favorites_service.dart';
 import '../data/location_service.dart';
 import '../data/models.dart';
 import '../data/view_tracker.dart';
-import '../navigation/main_nav.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
@@ -53,8 +52,7 @@ class DetailScreen extends StatefulWidget {
   /// detay yanıtındaki `type` kullanılır.
   final String? type;
 
-  const DetailScreen(
-      {super.key, required this.place, this.heroTag, this.type});
+  const DetailScreen({super.key, required this.place, this.heroTag, this.type});
 
   @override
   State<DetailScreen> createState() => _DetailScreenState();
@@ -88,6 +86,10 @@ class _DetailScreenState extends State<DetailScreen> {
   Set<int> _topIds = const {};
   // Aynı kategorilerin ikonlu kaydı: detaydaki `kategoriler[]` ikon taşımıyor.
   Map<int, Category> _topCats = const {};
+
+  // Özellik id → SVG ikon (`/filtreler` → `meta.ozellikler`). Detaydaki
+  // `ozellikler[]` ikon taşımadığı için ayrıca çekilir (oturumda cache'li).
+  Map<int, String> _ozIkon = const {};
 
   static const List<(String, String)> _days = [
     ('pazartesi', 'Pazartesi'),
@@ -130,8 +132,11 @@ class _DetailScreenState extends State<DetailScreen> {
     // çağrısı sunucuda `tiklama` sayacını artırıyor.
     final me = LocationService.lastReal;
     final results = await Future.wait([
-      HomeRepository.instance
-          .mekanDetay(widget.place.id, lat: me?.lat, lng: me?.lng),
+      HomeRepository.instance.mekanDetay(
+        widget.place.id,
+        lat: me?.lat,
+        lng: me?.lng,
+      ),
       HomeRepository.instance.ustDuzeyKategoriler(),
     ]);
     if (!mounted) return;
@@ -148,6 +153,15 @@ class _DetailScreenState extends State<DetailScreen> {
     _playIntro(d);
     _fetchSimilar(d);
     _fetchRezervasyon();
+    _fetchOzellikIkonlari(d);
+  }
+
+  /// İkonsuz özellik varsa özellik ikon eşlemesini çeker.
+  Future<void> _fetchOzellikIkonlari(PlaceDetail? d) async {
+    if (d == null || d.ozellikler.every((o) => o.icon != null)) return;
+    final map = await HomeRepository.instance.ozellikIkonlari();
+    if (!mounted || map.isEmpty) return;
+    setState(() => _ozIkon = map);
   }
 
   /// `videolar[]` varsa ilk videoyu zorunlu giriş videosu olarak oynatır.
@@ -155,28 +169,33 @@ class _DetailScreenState extends State<DetailScreen> {
     // iOS WebM oynatamaz → orada ilk oynatılabilir videoya geç.
     final ios = defaultTargetPlatform == TargetPlatform.iOS;
     final intro = d?.videolar
-        .where((v) =>
-            v.url.isNotEmpty &&
-            !(ios &&
-                (v.mime == 'video/webm' ||
-                    v.url.toLowerCase().endsWith('.webm'))))
+        .where(
+          (v) =>
+              v.url.isNotEmpty &&
+              !(ios &&
+                  (v.mime == 'video/webm' ||
+                      v.url.toLowerCase().endsWith('.webm'))),
+        )
         .firstOrNull;
     if (intro == null || !mounted) return;
     // Detay beklenirken kullanıcı başka bir sayfa/sheet açtıysa video onun
     // üstüne açılmasın.
     if (ModalRoute.of(context)?.isCurrent == false) return;
-    await Navigator.of(context).push(PageRouteBuilder<void>(
-      transitionDuration: Duration.zero,
-      reverseTransitionDuration: Duration.zero,
-      pageBuilder: (_, __, ___) => _IntroVideoScreen(url: intro.url),
-    ));
+    await Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+        pageBuilder: (_, __, ___) => _IntroVideoScreen(url: intro.url),
+      ),
+    );
   }
 
   /// Rezervasyon seçeneklerini çeker (Plus mı, bölge/masa/saatler). Hata/kapalı
   /// olursa `_rez` null kalır → "Rezerve" butonu pasif görünür.
   Future<void> _fetchRezervasyon() async {
-    final opts =
-        await RezervasyonRepository.instance.secenekler(widget.place.id);
+    final opts = await RezervasyonRepository.instance.secenekler(
+      widget.place.id,
+    );
     if (!mounted) return;
     setState(() => _rez = opts);
   }
@@ -196,8 +215,9 @@ class _DetailScreenState extends State<DetailScreen> {
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(
-            content: Text(e.toString()),
-            duration: const Duration(seconds: 2)),
+          content: Text(e.toString()),
+          duration: const Duration(seconds: 2),
+        ),
       );
     }
   }
@@ -214,11 +234,15 @@ class _DetailScreenState extends State<DetailScreen> {
 
   /// Mekanın ilk kategorisinden benzer mekanları çeker (mevcut mekan hariç).
   Future<void> _fetchSimilar(PlaceDetail? d) async {
-    final catId =
-        (d != null && d.kategoriler.isNotEmpty) ? d.kategoriler.first.id : 0;
+    final catId = (d != null && d.kategoriler.isNotEmpty)
+        ? d.kategoriler.first.id
+        : 0;
     if (catId <= 0) return;
-    final list = await HomeRepository.instance
-        .benzerMekanlar(catId, excludeId: widget.place.id, limit: 10);
+    final list = await HomeRepository.instance.benzerMekanlar(
+      catId,
+      excludeId: widget.place.id,
+      limit: 10,
+    );
     if (!mounted) return;
     setState(() => _similar = list);
   }
@@ -287,17 +311,25 @@ class _DetailScreenState extends State<DetailScreen> {
     // Detay gelmeden önce de aynı Stack yapısı kullanılır (anahtarlı), böylece
     // detay gelince önizleme katmanı yeniden oluşturulmaz, yalnız üste büyük
     // görsel eklenir.
-    return _heroSquare(Stack(
-      fit: StackFit.expand,
-      children: [
-        NetImage(pv, key: const ValueKey('hero-preview'), fadeIn: Duration.zero),
-        if (url != pv)
-          NetImage(url,
+    return _heroSquare(
+      Stack(
+        fit: StackFit.expand,
+        children: [
+          NetImage(
+            pv,
+            key: const ValueKey('hero-preview'),
+            fadeIn: Duration.zero,
+          ),
+          if (url != pv)
+            NetImage(
+              url,
               key: const ValueKey('hero-full'),
               transparentPlaceholder: true,
-              fadeIn: const Duration(milliseconds: 350)),
-      ],
-    ));
+              fadeIn: const Duration(milliseconds: 350),
+            ),
+        ],
+      ),
+    );
   }
 
   /// Üst görsel şeridinde [i]'nin yanındaki sayfaları (i+1, i+2, i-1) ekrandaki
@@ -322,19 +354,21 @@ class _DetailScreenState extends State<DetailScreen> {
   /// kare küçük görseliyle aynı kadraj; tüm üst görsel sayfalarında kullanılır
   /// ki kaydırırken de kadraj tutarlı olsun.
   Widget _heroSquare(Widget child) {
-    return LayoutBuilder(builder: (context, c) {
-      final side = c.maxWidth > c.maxHeight ? c.maxWidth : c.maxHeight;
-      return ClipRect(
-        child: OverflowBox(
-          minWidth: side,
-          maxWidth: side,
-          minHeight: side,
-          maxHeight: side,
-          alignment: Alignment.center,
-          child: SizedBox(width: side, height: side, child: child),
-        ),
-      );
-    });
+    return LayoutBuilder(
+      builder: (context, c) {
+        final side = c.maxWidth > c.maxHeight ? c.maxWidth : c.maxHeight;
+        return ClipRect(
+          child: OverflowBox(
+            minWidth: side,
+            maxWidth: side,
+            minHeight: side,
+            maxHeight: side,
+            alignment: Alignment.center,
+            child: SizedBox(width: side, height: side, child: child),
+          ),
+        );
+      },
+    );
   }
 
   /// Mekan videoları: `videolar[]` (MEKAN_VIDEO.md) + eski yoldan `galeri[]`
@@ -360,9 +394,8 @@ class _DetailScreenState extends State<DetailScreen> {
     return out;
   }
 
-  String get _name => _detail?.name.isNotEmpty == true
-      ? _detail!.name
-      : widget.place.name;
+  String get _name =>
+      _detail?.name.isNotEmpty == true ? _detail!.name : widget.place.name;
 
   /// Doğrulanmış (onaylı) mekan mı? Detay gelince taze değeri kullanılır,
   /// yoksa liste kartından gelen `verified` (MEKAN_DOGRULAMA.md).
@@ -462,13 +495,20 @@ class _DetailScreenState extends State<DetailScreen> {
             decoration: BoxDecoration(color: fg, shape: BoxShape.circle),
           ),
           const SizedBox(width: 8),
-          Text(open ? 'Şu an açık' : 'Şu an kapalı',
-              style: TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w600, color: fg)),
+          Text(
+            open ? 'Şu an açık' : 'Şu an kapalı',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: fg,
+            ),
+          ),
           if (open && st.until != null) ...[
             const SizedBox(width: 6),
-            Text("· ${st.until}'a kadar",
-                style: const TextStyle(fontSize: 13, color: AppColors.muted)),
+            Text(
+              "· ${st.until}'a kadar",
+              style: const TextStyle(fontSize: 13, color: AppColors.muted),
+            ),
           ],
         ],
       ),
@@ -504,11 +544,14 @@ class _DetailScreenState extends State<DetailScreen> {
                     color: AppColors.bg,
                     borderRadius: _isOtopark
                         ? null
-                        : const BorderRadius.vertical(
-                            top: Radius.circular(24)),
+                        : const BorderRadius.vertical(top: Radius.circular(24)),
                   ),
-                  padding: EdgeInsets.fromLTRB(22, _isOtopark ? 0 : 22, 22,
-                      tabbarSpace),
+                  padding: EdgeInsets.fromLTRB(
+                    22,
+                    _isOtopark ? 0 : 22,
+                    22,
+                    tabbarSpace,
+                  ),
                   child: _body(),
                 ),
               ),
@@ -549,8 +592,11 @@ class _DetailScreenState extends State<DetailScreen> {
               child: Container(
                 color: AppColors.primarySoft,
                 child: const Center(
-                  child: Icon(Icons.restaurant_outlined,
-                      size: 48, color: AppColors.primary),
+                  child: Icon(
+                    Icons.restaurant_outlined,
+                    size: 48,
+                    color: AppColors.primary,
+                  ),
                 ),
               ),
             )
@@ -566,10 +612,16 @@ class _DetailScreenState extends State<DetailScreen> {
                 onTap: _openGalleryGrid,
                 child: i == 0
                     ? _heroFirst(images[0])
-                    : _heroSquare(NetImage(images[i],
-                        // Önceden yüklendiği için çoğu zaman anında gelir;
-                        // gelmezse açık gri yerine marka zemini.
-                        loading: const ColoredBox(color: AppColors.primarySoft))),
+                    : _heroSquare(
+                        NetImage(
+                          images[i],
+                          // Önceden yüklendiği için çoğu zaman anında gelir;
+                          // gelmezse açık gri yerine marka zemini.
+                          loading: const ColoredBox(
+                            color: AppColors.primarySoft,
+                          ),
+                        ),
+                      ),
               ),
             ),
           if (images.length > 1)
@@ -577,8 +629,10 @@ class _DetailScreenState extends State<DetailScreen> {
               right: 14,
               bottom: 32,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0x8C080526),
                   borderRadius: BorderRadius.circular(999),
@@ -586,14 +640,20 @@ class _DetailScreenState extends State<DetailScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.photo_library_outlined,
-                        size: 13, color: Colors.white),
+                    const Icon(
+                      Icons.photo_library_outlined,
+                      size: 13,
+                      color: Colors.white,
+                    ),
                     const SizedBox(width: 5),
-                    Text('${_photo + 1} / ${images.length}',
-                        style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white)),
+                    Text(
+                      '${_photo + 1} / ${images.length}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -610,8 +670,11 @@ class _DetailScreenState extends State<DetailScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            _roundBtn(Icons.chevron_left, AppColors.primary,
-                () => Navigator.pop(context)),
+            _roundBtn(
+              Icons.chevron_left,
+              AppColors.primary,
+              () => Navigator.pop(context),
+            ),
             ValueListenableBuilder<Set<int>>(
               valueListenable: FavoritesService.instance.ids,
               builder: (_, ids, __) {
@@ -669,11 +732,14 @@ class _DetailScreenState extends State<DetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Flexible(
-              child: Text(_name,
-                  style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary)),
+              child: Text(
+                _name,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
+              ),
             ),
             if (_verified) ...[
               const SizedBox(width: 8),
@@ -688,15 +754,21 @@ class _DetailScreenState extends State<DetailScreen> {
           const SizedBox(height: 6),
           Row(
             children: [
-              const AppSvgIcon(AppIcons.pin,
-                  size: 14, color: AppColors.primary),
+              const AppSvgIcon(
+                AppIcons.pin,
+                size: 14,
+                color: AppColors.primary,
+              ),
               const SizedBox(width: 6),
               Expanded(
-                child: Text(_locationLine,
-                    style: const TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.muted)),
+                child: Text(
+                  _locationLine,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.muted,
+                  ),
+                ),
               ),
             ],
           ),
@@ -717,27 +789,27 @@ class _DetailScreenState extends State<DetailScreen> {
   /// Genelde kısa sürer; yanıt gelince yerini gerçek bölümler alır.
   Widget _bodySkeleton() {
     Widget infoRow(double w) => Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: Row(
-            children: [
-              const SkeletonBox(width: 34, height: 34, radius: 10),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SkeletonBox(width: 70, height: 10),
-                    const SizedBox(height: 7),
-                    FractionallySizedBox(
-                      widthFactor: w,
-                      child: const SkeletonBox(height: 12),
-                    ),
-                  ],
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        children: [
+          const SkeletonBox(width: 34, height: 34, radius: 10),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SkeletonBox(width: 70, height: 10),
+                const SizedBox(height: 7),
+                FractionallySizedBox(
+                  widthFactor: w,
+                  child: const SkeletonBox(height: 12),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        );
+        ],
+      ),
+    );
 
     return SkeletonPulse(
       child: Column(
@@ -806,9 +878,14 @@ class _DetailScreenState extends State<DetailScreen> {
       if (d.description.trim().isNotEmpty) ...[
         _divider(),
         _sectionH('Hakkımızda'),
-        Text(d.description.trim(),
-            style: const TextStyle(
-                fontSize: 14, height: 1.65, color: AppColors.muted)),
+        Text(
+          d.description.trim(),
+          style: const TextStyle(
+            fontSize: 14,
+            height: 1.65,
+            color: AppColors.muted,
+          ),
+        ),
       ],
       if (_similar.isNotEmpty) ...[
         _divider(),
@@ -852,32 +929,44 @@ class _DetailScreenState extends State<DetailScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(
-                  height: 116, width: double.infinity, child: NetImage(p.image)),
+                height: 116,
+                width: double.infinity,
+                child: NetImage(p.image),
+              ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 11, 12, 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(p.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.primary)),
+                    Text(
+                      p.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        const AppSvgIcon(AppIcons.pin,
-                            size: 13, color: AppColors.primary),
+                        const AppSvgIcon(
+                          AppIcons.pin,
+                          size: 13,
+                          color: AppColors.primary,
+                        ),
                         const SizedBox(width: 5),
                         Expanded(
                           child: Text(
-                              location.isNotEmpty ? location : 'Mekan',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontSize: 12, color: AppColors.muted)),
+                            location.isNotEmpty ? location : 'Mekan',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.muted,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -903,9 +992,11 @@ class _DetailScreenState extends State<DetailScreen> {
         children: [
           Icon(Icons.info_outline, size: 30, color: AppColors.muted),
           SizedBox(height: 10),
-          Text('Bu mekanın detayları şu an yüklenemedi.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13.5, color: AppColors.muted)),
+          Text(
+            'Bu mekanın detayları şu an yüklenemedi.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13.5, color: AppColors.muted),
+          ),
         ],
       ),
     );
@@ -932,16 +1023,23 @@ class _DetailScreenState extends State<DetailScreen> {
     final raw = svg?.trim() ?? '';
     final safe = raw.contains('<svg') ? CategoryIcon.sanitizeSvg(raw) : null;
     final Widget? lead = safe != null
-        ? SvgPicture.string(safe,
+        ? SvgPicture.string(
+            safe,
             width: 14,
             height: 14,
-            colorFilter:
-                const ColorFilter.mode(AppColors.primary, BlendMode.srcIn))
+            colorFilter: const ColorFilter.mode(
+              AppColors.primary,
+              BlendMode.srcIn,
+            ),
+          )
         : (icon != null
-            ? Icon(icon, size: 14, color: AppColors.primary)
-            : null);
+              ? Icon(icon, size: 14, color: AppColors.primary)
+              : null);
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: lead == null ? 13 : 11, vertical: 5),
+      padding: EdgeInsets.symmetric(
+        horizontal: lead == null ? 13 : 11,
+        vertical: 5,
+      ),
       decoration: BoxDecoration(
         color: AppColors.primarySoft,
         borderRadius: BorderRadius.circular(999),
@@ -950,11 +1048,14 @@ class _DetailScreenState extends State<DetailScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (lead != null) ...[lead, const SizedBox(width: 6)],
-          Text(text,
-              style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.primary)),
+          Text(
+            text,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.primary,
+            ),
+          ),
         ],
       ),
     );
@@ -968,11 +1069,17 @@ class _DetailScreenState extends State<DetailScreen> {
       actions.add(_action(_qrIcon(), 'QR Menü', _openMenu));
     }
     if (d.hasCoord) {
-      actions.add(_action(
-          const AppSvgIcon(AppIcons.directions,
-              size: 19, color: AppColors.primary),
+      actions.add(
+        _action(
+          const AppSvgIcon(
+            AppIcons.directions,
+            size: 19,
+            color: AppColors.primary,
+          ),
           'Yol Tarifi',
-          () => _openDirections(d)));
+          () => _openDirections(d),
+        ),
+      );
     }
     final hasActions = actions.isNotEmpty;
     // Özellikler (ozellikler) artık "Olanaklar" bölümünde gösteriliyor.
@@ -999,12 +1106,11 @@ class _DetailScreenState extends State<DetailScreen> {
 
   /// QR Menü aksiyonunun ikonu (verilen SVG, primary renkte).
   Widget _qrIcon() => SvgPicture.string(
-        _qrSvg,
-        width: 20,
-        height: 20,
-        colorFilter:
-            const ColorFilter.mode(AppColors.primary, BlendMode.srcIn),
-      );
+    _qrSvg,
+    width: 20,
+    height: 20,
+    colorFilter: const ColorFilter.mode(AppColors.primary, BlendMode.srcIn),
+  );
 
   static const String _qrSvg =
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><line x1="14" y1="14" x2="14" y2="17"></line><line x1="17" y1="14" x2="17" y2="14.01"></line><line x1="21" y1="14" x2="21" y2="17"></line><line x1="14" y1="21" x2="17" y2="21"></line><line x1="21" y1="20" x2="21" y2="21"></line></svg>';
@@ -1053,7 +1159,9 @@ class _DetailScreenState extends State<DetailScreen> {
                         bottom: 10,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 9, vertical: 5),
+                            horizontal: 9,
+                            vertical: 5,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(999),
@@ -1061,14 +1169,20 @@ class _DetailScreenState extends State<DetailScreen> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.calendar_today,
-                                  size: 11, color: AppColors.primary),
+                              const Icon(
+                                Icons.calendar_today,
+                                size: 11,
+                                color: AppColors.primary,
+                              ),
                               const SizedBox(width: 5),
-                              Text(e.kisaTarih,
-                                  style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.primary)),
+                              Text(
+                                e.kisaTarih,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primary,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -1081,26 +1195,35 @@ class _DetailScreenState extends State<DetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(e.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.primary)),
+                    Text(
+                      e.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        const Icon(Icons.access_time,
-                            size: 13, color: AppColors.primary),
+                        const Icon(
+                          Icons.access_time,
+                          size: 13,
+                          color: AppColors.primary,
+                        ),
                         const SizedBox(width: 5),
                         Expanded(
                           child: Text(
-                              e.time.isNotEmpty ? e.time : e.fiyatLabel,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontSize: 12, color: AppColors.muted)),
+                            e.time.isNotEmpty ? e.time : e.fiyatLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.muted,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -1124,34 +1247,38 @@ class _DetailScreenState extends State<DetailScreen> {
           children: [
             leading,
             const SizedBox(width: 8),
-            Text(label,
-                style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primary)),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  List<Widget>
-      _infoRows(PlaceDetail d) {
-    final specs = <
-        ({
-          IconData icon,
-          String? svg,
-          String title,
-          String value,
-          VoidCallback? onTap
-        })>[];
+  List<Widget> _infoRows(PlaceDetail d) {
+    final specs =
+        <
+          ({
+            IconData icon,
+            String? svg,
+            String title,
+            String value,
+            VoidCallback? onTap,
+          })
+        >[];
     if (d.calismaSaatleri.isNotEmpty) {
       specs.add((
         icon: Icons.schedule,
         svg: AppIcons.clock,
         title: 'Çalışma Saatleri',
         value: _hoursSummary(d),
-        onTap: () => _openHoursSheet(d)
+        onTap: () => _openHoursSheet(d),
       ));
     }
     if (d.adres.trim().isNotEmpty) {
@@ -1160,7 +1287,7 @@ class _DetailScreenState extends State<DetailScreen> {
         svg: AppIcons.pin,
         title: 'Adres',
         value: d.adres.trim(),
-        onTap: () => _openMaps(d)
+        onTap: () => _openMaps(d),
       ));
     }
     if (d.telefon.trim().isNotEmpty) {
@@ -1169,22 +1296,32 @@ class _DetailScreenState extends State<DetailScreen> {
         svg: AppIcons.phone,
         title: 'İletişim',
         value: d.telefon.trim(),
-        onTap: () => _callPhone(d.telefon)
+        onTap: () => _callPhone(d.telefon),
       ));
     }
     // Hiç bilgi yoksa boş liste döner → "Bilgiler" bölümü hiç gösterilmez.
     // Son satırda alt çizgi olmasın.
     return [
       for (var i = 0; i < specs.length; i++)
-        _infoRow(specs[i].icon, specs[i].title, specs[i].value,
-            svg: specs[i].svg,
-            onTap: specs[i].onTap,
-            showBorder: i != specs.length - 1),
+        _infoRow(
+          specs[i].icon,
+          specs[i].title,
+          specs[i].value,
+          svg: specs[i].svg,
+          onTap: specs[i].onTap,
+          showBorder: i != specs.length - 1,
+        ),
     ];
   }
 
-  Widget _infoRow(IconData icon, String title, String value,
-      {String? svg, VoidCallback? onTap, bool showBorder = true}) {
+  Widget _infoRow(
+    IconData icon,
+    String title,
+    String value, {
+    String? svg,
+    VoidCallback? onTap,
+    bool showBorder = true,
+  }) {
     return InkWell(
       onTap: onTap,
       child: Container(
@@ -1201,8 +1338,9 @@ class _DetailScreenState extends State<DetailScreen> {
               height: 40,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                  color: const Color(0xFFF4F5F9),
-                  borderRadius: BorderRadius.circular(11)),
+                color: const Color(0xFFF4F5F9),
+                borderRadius: BorderRadius.circular(11),
+              ),
               child: svg != null
                   ? AppSvgIcon(svg, size: 18, color: AppColors.primary)
                   : Icon(icon, size: 19, color: AppColors.primary),
@@ -1212,24 +1350,34 @@ class _DetailScreenState extends State<DetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary)),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text(value,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 12.5, color: AppColors.muted)),
+                  Text(
+                    value,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.muted,
+                    ),
+                  ),
                 ],
               ),
             ),
             if (onTap != null) ...[
               const SizedBox(width: 8),
-              const Icon(Icons.chevron_right,
-                  size: 20, color: AppColors.primary),
+              const Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: AppColors.primary,
+              ),
             ],
           ],
         ),
@@ -1240,8 +1388,7 @@ class _DetailScreenState extends State<DetailScreen> {
   /// Kısa bilgi mesajı gösterir.
   void _snack(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-          content: Text(message), duration: const Duration(seconds: 2)),
+      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
     );
   }
 
@@ -1250,8 +1397,59 @@ class _DetailScreenState extends State<DetailScreen> {
     Clipboard.setData(ClipboardData(text: value));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-          content: Text('$label kopyalandı'),
-          duration: const Duration(seconds: 2)),
+        content: Text('$label kopyalandı'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// Footer "Telefon": mekan detayındaki numarayı arar (Bilgiler'deki
+  /// "İletişim" satırıyla aynı numara). Eskiden buton bir şey yapmıyordu.
+  void _onPhoneTap() {
+    final d = _detail;
+    if (d == null) {
+      _snack(
+        _loading ? 'Mekan bilgileri yükleniyor…' : 'Mekan bilgileri alınamadı.',
+      );
+      return;
+    }
+    final phone = d.telefon.trim();
+    if (phone.isEmpty) {
+      _snack('Bu mekanın telefon numarası yok.');
+      return;
+    }
+    HapticFeedback.selectionClick();
+    _callPhone(phone);
+  }
+
+  /// Footer "Etkinlik": bu işletmenin etkinliklerini alttan açılan panelde
+  /// listeler (detaydaki `etkinlikler[]`). Etkinliğe dokununca panel kapanır
+  /// ve etkinlik detayı açılır. Eskiden genel Etkinlikler sekmesine
+  /// gidiyordu.
+  Future<void> _openEventsSheet() async {
+    final d = _detail;
+    if (d == null) {
+      _snack(
+        _loading ? 'Mekan bilgileri yükleniyor…' : 'Mekan bilgileri alınamadı.',
+      );
+      return;
+    }
+    HapticFeedback.selectionClick();
+    final events = d.etkinlikler;
+    final picked = await showModalBottomSheet<Etkinlik>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => _EventsSheet(placeName: _name, events: events),
+    );
+    if (picked == null || !mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => EventDetailScreen(etkinlik: picked)),
     );
   }
 
@@ -1270,7 +1468,8 @@ class _DetailScreenState extends State<DetailScreen> {
   Future<void> _openMaps(PlaceDetail d) async {
     final query = d.hasCoord ? '${d.lat},${d.lng}' : d.adres;
     final uri = Uri.parse(
-        'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(query)}');
+      'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(query)}',
+    );
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
         mounted) {
       _copy(d.adres, 'Adres');
@@ -1286,7 +1485,8 @@ class _DetailScreenState extends State<DetailScreen> {
       return;
     }
     final uri = Uri.parse(
-        'https://www.google.com/maps/dir/?api=1&destination=${Uri.encodeComponent(dest)}');
+      'https://www.google.com/maps/dir/?api=1&destination=${Uri.encodeComponent(dest)}',
+    );
     // Pro: Yol Tarifi — harita açılmadan önce kuyruğa (arka plana geçişte gider).
     ViewTracker.instance.yolTarifi(widget.place.id);
     try {
@@ -1313,11 +1513,14 @@ class _DetailScreenState extends State<DetailScreen> {
           children: [
             AppSvgIcon(AppIcons.star, size: 18, color: Colors.white),
             SizedBox(width: 8),
-            Text('Değerlendirme Yap',
-                style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white)),
+            Text(
+              'Değerlendirme Yap',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
           ],
         ),
       ),
@@ -1351,24 +1554,36 @@ class _DetailScreenState extends State<DetailScreen> {
                 width: 64,
                 height: 64,
                 decoration: const BoxDecoration(
-                    color: AppColors.primarySoft, shape: BoxShape.circle),
-                child: const Icon(Icons.event_busy_outlined,
-                    size: 32, color: AppColors.primary),
+                  color: AppColors.primarySoft,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.event_busy_outlined,
+                  size: 32,
+                  color: AppColors.primary,
+                ),
               ),
               const SizedBox(height: 16),
-              const Text('Rezervasyona kapalı',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary)),
+              const Text(
+                'Rezervasyona kapalı',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                ),
+              ),
               const SizedBox(height: 8),
               Text(
-                  '$_name şu an online rezervasyon almıyor. '
-                  'Dilersen işletmeyi telefonla arayabilirsin.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      fontSize: 13.5, color: AppColors.muted, height: 1.4)),
+                '$_name şu an online rezervasyon almıyor. '
+                'Dilersen işletmeyi telefonla arayabilirsin.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  color: AppColors.muted,
+                  height: 1.4,
+                ),
+              ),
               const SizedBox(height: 20),
               GestureDetector(
                 onTap: () => Navigator.pop(ctx),
@@ -1380,11 +1595,14 @@ class _DetailScreenState extends State<DetailScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Center(
-                    child: Text('Anladım',
-                        style: TextStyle(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white)),
+                    child: Text(
+                      'Anladım',
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1428,25 +1646,37 @@ class _DetailScreenState extends State<DetailScreen> {
                 width: 64,
                 height: 64,
                 decoration: const BoxDecoration(
-                    color: Color(0xFFF0FBF4), shape: BoxShape.circle),
-                child: const Icon(Icons.event_available_rounded,
-                    size: 34, color: AppColors.open),
+                  color: Color(0xFFF0FBF4),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.event_available_rounded,
+                  size: 34,
+                  color: AppColors.open,
+                ),
               ),
               const SizedBox(height: 16),
-              const Text('Rezervasyon talebin alındı!',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary)),
+              const Text(
+                'Rezervasyon talebin alındı!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                ),
+              ),
               const SizedBox(height: 8),
               Text(
-                  '$_name\n$tarihStr · $kisi kişi\n\n'
-                  'Talebin işletmeye iletildi. Onaylandığında seni '
-                  'bilgilendireceğiz.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      fontSize: 13.5, color: AppColors.muted, height: 1.4)),
+                '$_name\n$tarihStr · $kisi kişi\n\n'
+                'Talebin işletmeye iletildi. Onaylandığında seni '
+                'bilgilendireceğiz.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  color: AppColors.muted,
+                  height: 1.4,
+                ),
+              ),
               const SizedBox(height: 20),
               GestureDetector(
                 onTap: () => Navigator.pop(ctx),
@@ -1458,11 +1688,14 @@ class _DetailScreenState extends State<DetailScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Center(
-                    child: Text('Tamam',
-                        style: TextStyle(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white)),
+                    child: Text(
+                      'Tamam',
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1504,7 +1737,8 @@ class _DetailScreenState extends State<DetailScreen> {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     } catch (_) {
       messenger.showSnackBar(
-          const SnackBar(content: Text('Değerlendirme gönderilemedi.')));
+        const SnackBar(content: Text('Değerlendirme gönderilemedi.')),
+      );
     }
   }
 
@@ -1524,20 +1758,30 @@ class _DetailScreenState extends State<DetailScreen> {
                 width: 64,
                 height: 64,
                 decoration: const BoxDecoration(
-                    color: Color(0xFFF0FBF4), shape: BoxShape.circle),
-                child: const Icon(Icons.check_rounded,
-                    size: 34, color: AppColors.open),
+                  color: Color(0xFFF0FBF4),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check_rounded,
+                  size: 34,
+                  color: AppColors.open,
+                ),
               ),
               const SizedBox(height: 16),
-              const Text('Teşekkürler!',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary)),
+              const Text(
+                'Teşekkürler!',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                ),
+              ),
               const SizedBox(height: 8),
-              const Text('Değerlendirmen başarıyla alındı.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13.5, color: AppColors.muted)),
+              const Text(
+                'Değerlendirmen başarıyla alındı.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13.5, color: AppColors.muted),
+              ),
               const SizedBox(height: 20),
               GestureDetector(
                 onTap: () => Navigator.pop(ctx),
@@ -1549,11 +1793,14 @@ class _DetailScreenState extends State<DetailScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Center(
-                    child: Text('Tamam',
-                        style: TextStyle(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white)),
+                    child: Text(
+                      'Tamam',
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1584,16 +1831,20 @@ class _DetailScreenState extends State<DetailScreen> {
                   width: 42,
                   height: 4,
                   decoration: BoxDecoration(
-                      color: AppColors.line,
-                      borderRadius: BorderRadius.circular(999)),
+                    color: AppColors.line,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
-              const Text('Çalışma Saatleri',
-                  style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary)),
+              const Text(
+                'Çalışma Saatleri',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                ),
+              ),
               const SizedBox(height: 6),
               _hoursTable(d),
             ],
@@ -1613,23 +1864,28 @@ class _DetailScreenState extends State<DetailScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(label,
-                    style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: key == todayKey
-                            ? FontWeight.w600
-                            : FontWeight.w500,
-                        color: AppColors.primary)),
                 Text(
-                    d.calismaSaatleri[key] != null
-                        ? _fmtHours(d.calismaSaatleri[key]!)
-                        : 'Kapalı',
-                    style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w600,
-                        color: d.calismaSaatleri[key] != null
-                            ? AppColors.primary
-                            : AppColors.muted)),
+                  label,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: key == todayKey
+                        ? FontWeight.w600
+                        : FontWeight.w500,
+                    color: AppColors.primary,
+                  ),
+                ),
+                Text(
+                  d.calismaSaatleri[key] != null
+                      ? _fmtHours(d.calismaSaatleri[key]!)
+                      : 'Kapalı',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: d.calismaSaatleri[key] != null
+                        ? AppColors.primary
+                        : AppColors.muted,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1637,7 +1893,8 @@ class _DetailScreenState extends State<DetailScreen> {
     );
   }
 
-  /// Özellik (restoran_ozellik) adına/slug'ına göre ikon türetir.
+  /// Özellik (restoran_ozellik) adına/slug'ına göre yedek ikon türetir
+  /// (API SVG'si yoksa kullanılır).
   IconData _ozellikIcon(OzellikItem o) {
     final s = '${o.slug} ${o.name}'.toLowerCase();
     bool has(String k) => s.contains(k);
@@ -1660,7 +1917,9 @@ class _DetailScreenState extends State<DetailScreen> {
     if (has('deniz') || has('sahil') || has('havuz')) {
       return Icons.pool_outlined;
     }
-    if (has('bahçe') || has('bahce') || has('teras')) return Icons.deck_outlined;
+    if (has('bahçe') || has('bahce') || has('teras')) {
+      return Icons.deck_outlined;
+    }
     if (has('kahvalt')) return Icons.free_breakfast_outlined;
     if (has('nargile')) return Icons.air;
     if (has('spor') || has('maç') || has('mac')) {
@@ -1672,17 +1931,40 @@ class _DetailScreenState extends State<DetailScreen> {
   /// Aktif filtreler (Otopark, Wifi, Alkol...) — "Mekan Özellikleri" tarzı
   /// satır listesi (ikon kutusu + ad + onay çemberi). API yalnızca aktif
   /// filtreleri döndürdüğü için tümü onaylı gösterilir.
+  ///
+  /// İkonlar API'den (SVG): filtrelerde detaydaki `icon`, özelliklerde
+  /// detayda `icon` yoksa `/filtreler` → `meta.ozellikler` eşlemesi
+  /// ([_ozIkon]). SVG yoksa / bozuksa addan türetilen yedek ikon çizilir
+  /// (OLANAK_IKONLARI.md).
   Widget _olanaklar(PlaceDetail d) {
     return Column(
       children: [
         // Önce mekan özellikleri (Teras, Bahçe, Manzara vb.), sonra filtreler.
-        for (final o in d.ozellikler) _olanakRow(_ozellikIcon(o), o.name),
-        for (final f in d.filtreler) _olanakRow(_filterIcon(f), f.name),
+        for (final o in d.ozellikler)
+          _olanakRow(
+            _olanakIcon(o.icon ?? _ozIkon[o.id], _ozellikIcon(o)),
+            o.name,
+          ),
+        for (final f in d.filtreler)
+          _olanakRow(_olanakIcon(f.icon, _filterIcon(f)), f.name),
       ],
     );
   }
 
-  Widget _olanakRow(IconData icon, String name) {
+  /// API SVG'si varsa onu (marka renginde), yoksa [fallback] Material ikonu.
+  Widget _olanakIcon(String? svg, IconData fallback) {
+    final fb = Icon(fallback, size: 20, color: AppColors.primary);
+    if (svg == null || svg.trim().isEmpty) return fb;
+    return SvgPicture.string(
+      svg,
+      width: 20,
+      height: 20,
+      colorFilter: const ColorFilter.mode(AppColors.primary, BlendMode.srcIn),
+      errorBuilder: (_, __, ___) => fb,
+    );
+  }
+
+  Widget _olanakRow(Widget icon, String name) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 13),
       decoration: const BoxDecoration(
@@ -1695,27 +1977,33 @@ class _DetailScreenState extends State<DetailScreen> {
             height: 40,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-                color: AppColors.primarySoft,
-                borderRadius: BorderRadius.circular(11)),
-            child: Icon(icon, size: 20, color: AppColors.primary),
+              color: AppColors.primarySoft,
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: icon,
           ),
           const SizedBox(width: 14),
           Expanded(
-            child: Text(name,
-                style: const TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primary)),
+            child: Text(
+              name,
+              style: const TextStyle(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
           ),
-          const Icon(Icons.check_circle_outline,
-              size: 22, color: AppColors.primary),
+          const Icon(
+            Icons.check_circle_outline,
+            size: 22,
+            color: AppColors.primary,
+          ),
         ],
       ),
     );
   }
 
-  /// Filtre slug/adından bir ikon türetir. SVG `icon` alanı (MEKAN_DETAY.md)
-  /// yok sayılır; istemci id/ad üzerinden kendi ikonunu uygular.
+  /// Filtre slug/adından yedek ikon türetir (API SVG'si yoksa kullanılır).
   IconData _filterIcon(Filter f) {
     final s = '${f.slug} ${f.name}'.toLowerCase();
     bool has(String k) => s.contains(k);
@@ -1750,8 +2038,12 @@ class _DetailScreenState extends State<DetailScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-          builder: (_) => MenuScreen(
-              title: _name, menu: d.menu, guncelleme: d.menuGuncelleme)),
+        builder: (_) => MenuScreen(
+          title: _name,
+          menu: d.menu,
+          guncelleme: d.menuGuncelleme,
+        ),
+      ),
     );
   }
 
@@ -1767,45 +2059,65 @@ class _DetailScreenState extends State<DetailScreen> {
       openGalleryViewer(context, images, 0);
       return;
     }
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) =>
-          _GalleryGridScreen(title: _name, images: images, videos: videos),
-    ));
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            _GalleryGridScreen(title: _name, images: images, videos: videos),
+      ),
+    );
   }
 
   Widget _divider() => const Padding(
-        padding: EdgeInsets.symmetric(vertical: 20),
-        child: Divider(height: 1, color: AppColors.line),
-      );
+    padding: EdgeInsets.symmetric(vertical: 20),
+    child: Divider(height: 1, color: AppColors.line),
+  );
 
   Widget _sectionH(String t) => Padding(
-        padding: const EdgeInsets.only(bottom: 14),
-        child: Text(t,
-            style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
-                color: AppColors.primary)),
-      );
+    padding: const EdgeInsets.only(bottom: 14),
+    child: Text(
+      t,
+      style: const TextStyle(
+        fontSize: 17,
+        fontWeight: FontWeight.w600,
+        color: AppColors.primary,
+      ),
+    ),
+  );
 
   Widget _detailTabbar() {
     return FloatingTabBarShell(
       onKedyTap: () => showKedyChat(context, postId: widget.place.id),
       items: [
         TabItemData(
-            Icons.event_available_outlined,
-            'Rezerve',
-            _rez?.aktif == true, // Plus ise etkin (beyaz), değilse soluk
-            _onReserveTap,
-            svg: _svgReserve),
-        TabItemData(Icons.phone_outlined, 'Telefon', false, () {},
-            svg: _svgPhone),
+          Icons.event_available_outlined,
+          'Rezerve',
+          _rez?.aktif == true, // Plus ise etkin (beyaz), değilse soluk
+          _onReserveTap,
+          svg: _svgReserve,
+        ),
+        TabItemData(
+          Icons.phone_outlined,
+          'Telefon',
+          // Numara varsa etkin (beyaz); arama, detaydaki `telefon` ile.
+          _detail?.telefon.trim().isNotEmpty ?? false,
+          _onPhoneTap,
+          svg: _svgPhone,
+        ),
         null,
-        TabItemData(Icons.calendar_today_outlined, 'Etkinlik', false,
-            () => MainNav.instance.select(3),
-            svg: FloatingTabBar.svgEvent),
-        TabItemData(Icons.qr_code_2, 'Menü',
-            _detail?.menu.isNotEmpty ?? false, _openMenu,
-            svg: _svgQr),
+        TabItemData(
+          Icons.calendar_today_outlined,
+          'Etkinlik',
+          _detail?.etkinlikler.isNotEmpty ?? false,
+          _openEventsSheet,
+          svg: FloatingTabBar.svgEvent,
+        ),
+        TabItemData(
+          Icons.qr_code_2,
+          'Menü',
+          _detail?.menu.isNotEmpty ?? false,
+          _openMenu,
+          svg: _svgQr,
+        ),
       ],
     );
   }
@@ -1820,6 +2132,195 @@ class _DetailScreenState extends State<DetailScreen> {
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M0 64C0 28.7 28.7 0 64 0l80 0c8.8 0 16 7.2 16 16s-7.2 16-16 16L64 32C46.3 32 32 46.3 32 64l0 80c0 8.8-7.2 16-16 16S0 152.8 0 144L0 64zm512 0l0 80c0 8.8-7.2 16-16 16s-16-7.2-16-16l0-80c0-17.7-14.3-32-32-32l-80 0c-8.8 0-16-7.2-16-16s7.2-16 16-16l80 0c35.3 0 64 28.7 64 64zM64 512c-35.3 0-64-28.7-64-64l0-80c0-8.8 7.2-16 16-16s16 7.2 16 16l0 80c0 17.7 14.3 32 32 32l80 0c8.8 0 16 7.2 16 16s-7.2 16-16 16l-80 0zm448-64c0 35.3-28.7 64-64 64l-80 0c-8.8 0-16-7.2-16-16s7.2-16 16-16l80 0c17.7 0 32-14.3 32-32l0-80c0-8.8 7.2-16 16-16s16 7.2 16 16l0 80zM144 128c-8.8 0-16 7.2-16 16l0 48c0 8.8 7.2 16 16 16l48 0c8.8 0 16-7.2 16-16l0-48c0-8.8-7.2-16-16-16l-48 0zM96 144c0-26.5 21.5-48 48-48l48 0c26.5 0 48 21.5 48 48l0 48c0 26.5-21.5 48-48 48l-48 0c-26.5 0-48-21.5-48-48l0-48zm272-16l-48 0c-8.8 0-16 7.2-16 16l0 48c0 8.8 7.2 16 16 16l48 0c8.8 0 16-7.2 16-16l0-48c0-8.8-7.2-16-16-16zM320 96l48 0c26.5 0 48 21.5 48 48l0 48c0 26.5-21.5 48-48 48l-48 0c-26.5 0-48-21.5-48-48l0-48c0-26.5 21.5-48 48-48zM144 304c-8.8 0-16 7.2-16 16l0 48c0 8.8 7.2 16 16 16l48 0c8.8 0 16-7.2 16-16l0-48c0-8.8-7.2-16-16-16l-48 0zM96 320c0-26.5 21.5-48 48-48l48 0c26.5 0 48 21.5 48 48l0 48c0 26.5-21.5 48-48 48l-48 0c-26.5 0-48-21.5-48-48l0-48zm232-16a24 24 0 1 1 -48 0 24 24 0 1 1 48 0zM304 408a24 24 0 1 1 0-48 24 24 0 1 1 0 48zM408 304a24 24 0 1 1 -48 0 24 24 0 1 1 48 0zM384 408a24 24 0 1 1 0-48 24 24 0 1 1 0 48z"/></svg>';
 }
 
+/// İşletmenin etkinlikleri — alttan açılan panel (footer "Etkinlik").
+/// Etkinliğe dokununca seçilen [Etkinlik] ile kapanır; detayı çağıran açar.
+class _EventsSheet extends StatelessWidget {
+  final String placeName;
+  final List<Etkinlik> events;
+  const _EventsSheet({required this.placeName, required this.events});
+
+  @override
+  Widget build(BuildContext context) {
+    final maxH = MediaQuery.sizeOf(context).height * 0.75;
+    return SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxH),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 10, bottom: 6),
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.line,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 8, 22, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Etkinlikler',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    placeName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (events.isEmpty)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(22, 28, 22, 34),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.event_busy_outlined,
+                      size: 38,
+                      color: AppColors.muted,
+                    ),
+                    SizedBox(height: 10),
+                    Text(
+                      'Bu işletmenin yaklaşan etkinliği yok.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.fromLTRB(22, 14, 22, 18),
+                  itemCount: events.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (_, i) => _row(context, events[i]),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _row(BuildContext context, Etkinlik e) {
+    final meta = [
+      e.tarihSaat,
+      e.fiyatLabel,
+    ].where((s) => s.trim().isNotEmpty).join(' · ');
+    return Semantics(
+      button: true,
+      child: Material(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.line),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => Navigator.pop(context, e),
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SizedBox(
+                    width: 72,
+                    height: 72,
+                    child: e.image.isEmpty
+                        ? const ColoredBox(
+                            color: AppColors.primarySoft,
+                            child: Icon(
+                              Icons.event_outlined,
+                              color: AppColors.primary,
+                            ),
+                          )
+                        : NetImage(e.image),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        e.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      if (meta.isNotEmpty) ...[
+                        const SizedBox(height: 5),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.calendar_today,
+                              size: 12,
+                              color: AppColors.muted,
+                            ),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                meta,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.muted,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: AppColors.muted,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Tam ekran görsel görüntüleyici (fancybox tarzı): kaydırılabilir galeri,
 /// çift/pinch ile yakınlaştırma, sayaç ve kapat butonu. Arka plan karartılır.
 class _GalleryViewer extends StatefulWidget {
@@ -1832,8 +2333,9 @@ class _GalleryViewer extends StatefulWidget {
 }
 
 class _GalleryViewerState extends State<_GalleryViewer> {
-  late final PageController _pc =
-      PageController(initialPage: widget.initialIndex);
+  late final PageController _pc = PageController(
+    initialPage: widget.initialIndex,
+  );
   late int _index = widget.initialIndex;
 
   bool _precached = false;
@@ -1853,8 +2355,10 @@ class _GalleryViewerState extends State<_GalleryViewer> {
       if (j < 0 || j >= widget.images.length) continue;
       final u = widget.images[j];
       if (u.trim().isEmpty) continue;
-      precacheImage(CachedNetworkImageProvider(u), context)
-          .catchError((Object _) {});
+      precacheImage(
+        CachedNetworkImageProvider(u),
+        context,
+      ).catchError((Object _) {});
     }
   }
 
@@ -1897,7 +2401,9 @@ class _GalleryViewerState extends State<_GalleryViewer> {
                           width: 26,
                           height: 26,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2.2, color: Colors.white70),
+                            strokeWidth: 2.2,
+                            color: Colors.white70,
+                          ),
                         ),
                       ),
                     ),
@@ -1920,24 +2426,32 @@ class _GalleryViewerState extends State<_GalleryViewer> {
                         color: Colors.white.withValues(alpha: 0.18),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.close,
-                          color: Colors.white, size: 22),
+                      child: const Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 22,
+                      ),
                     ),
                   ),
                   const Spacer(),
                   if (widget.images.length > 1)
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(999),
                       ),
-                      child: Text('${_index + 1} / ${widget.images.length}',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600)),
+                      child: Text(
+                        '${_index + 1} / ${widget.images.length}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                 ],
               ),
@@ -1966,17 +2480,22 @@ class _VideoViewerState extends State<_VideoViewer> {
   @override
   void initState() {
     super.initState();
-    _c.initialize().then((_) {
-      if (!mounted) return;
-      setState(() {});
-      _c
-        ..setLooping(true)
-        ..play();
-    }).catchError((Object e) {
-      debugPrint('Video oynatılamadı: ${widget.video.url} '
-          '(${widget.video.mime}) → $e');
-      if (mounted) setState(() => _error = true);
-    });
+    _c
+        .initialize()
+        .then((_) {
+          if (!mounted) return;
+          setState(() {});
+          _c
+            ..setLooping(true)
+            ..play();
+        })
+        .catchError((Object e) {
+          debugPrint(
+            'Video oynatılamadı: ${widget.video.url} '
+            '(${widget.video.mime}) → $e',
+          );
+          if (mounted) setState(() => _error = true);
+        });
   }
 
   @override
@@ -1996,7 +2515,8 @@ class _VideoViewerState extends State<_VideoViewer> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
-        fit: StackFit.expand, // tam ekran; yoksa Stack kapat butonu boyutunda kalıyordu
+        fit: StackFit
+            .expand, // tam ekran; yoksa Stack kapat butonu boyutunda kalıyordu
         children: [
           Positioned.fill(
             child: GestureDetector(
@@ -2007,25 +2527,28 @@ class _VideoViewerState extends State<_VideoViewer> {
                     ? Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 32),
                         child: Text(
-                            widget.video.mime == 'video/quicktime'
-                                ? 'Bu video (MOV) cihazında oynatılamadı.'
-                                : 'Video oynatılamadı.',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 15)),
+                          widget.video.mime == 'video/quicktime'
+                              ? 'Bu video (MOV) cihazında oynatılamadı.'
+                              : 'Video oynatılamadı.',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                          ),
+                        ),
                       )
                     : !ready || _c.value.size.isEmpty
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : SizedBox.expand(
-                            child: FittedBox(
-                              fit: BoxFit.contain,
-                              child: SizedBox(
-                                width: _c.value.size.width,
-                                height: _c.value.size.height,
-                                child: VideoPlayer(_c),
-                              ),
-                            ),
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : SizedBox.expand(
+                        child: FittedBox(
+                          fit: BoxFit.contain,
+                          child: SizedBox(
+                            width: _c.value.size.width,
+                            height: _c.value.size.height,
+                            child: VideoPlayer(_c),
                           ),
+                        ),
+                      ),
               ),
             ),
           ),
@@ -2043,8 +2566,11 @@ class _VideoViewerState extends State<_VideoViewer> {
                             color: Colors.black.withValues(alpha: 0.45),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.play_arrow_rounded,
-                              size: 44, color: Colors.white),
+                          child: const Icon(
+                            Icons.play_arrow_rounded,
+                            size: 44,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                     ),
@@ -2052,26 +2578,32 @@ class _VideoViewerState extends State<_VideoViewer> {
           Align(
             alignment: Alignment.topLeft,
             child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Semantics(
-                button: true,
-                label: 'Kapat',
-                child: GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.18),
-                      shape: BoxShape.circle,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                child: Semantics(
+                  button: true,
+                  label: 'Kapat',
+                  child: GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 22,
+                      ),
                     ),
-                    child:
-                        const Icon(Icons.close, color: Colors.white, size: 22),
                   ),
                 ),
               ),
-            ),
             ),
           ),
           if (ready)
@@ -2128,11 +2660,14 @@ class _VideoFirstFrameState extends State<_VideoFirstFrame> {
   @override
   void initState() {
     super.initState();
-    _c.initialize().then((_) async {
-      await _c.setVolume(0);
-      await _c.seekTo(Duration.zero);
-      if (mounted) setState(() {});
-    }).catchError((Object _) {});
+    _c
+        .initialize()
+        .then((_) async {
+          await _c.setVolume(0);
+          await _c.seekTo(Duration.zero);
+          if (mounted) setState(() {});
+        })
+        .catchError((Object _) {});
   }
 
   @override
@@ -2190,16 +2725,23 @@ class _IntroVideoScreenState extends State<_IntroVideoScreen> {
     super.initState();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _c.addListener(_onTick);
-    _c.initialize().timeout(_loadTimeout).then((_) {
-      if (!mounted) return;
-      setState(() {});
-      _c.play();
-      _lastProgress = DateTime.now();
-      _watchdog = Timer.periodic(const Duration(seconds: 1), (_) => _checkStall());
-    }).catchError((Object e) {
-      debugPrint('Giriş videosu oynatılamadı: ${widget.url} → $e');
-      _close();
-    });
+    _c
+        .initialize()
+        .timeout(_loadTimeout)
+        .then((_) {
+          if (!mounted) return;
+          setState(() {});
+          _c.play();
+          _lastProgress = DateTime.now();
+          _watchdog = Timer.periodic(
+            const Duration(seconds: 1),
+            (_) => _checkStall(),
+          );
+        })
+        .catchError((Object e) {
+          debugPrint('Giriş videosu oynatılamadı: ${widget.url} → $e');
+          _close();
+        });
   }
 
   void _checkStall() {
@@ -2231,7 +2773,8 @@ class _IntroVideoScreenState extends State<_IntroVideoScreen> {
     if (buffering != _buffering && mounted) {
       setState(() => _buffering = buffering);
     }
-    final ended = v.isCompleted ||
+    final ended =
+        v.isCompleted ||
         (v.isInitialized &&
             v.duration > Duration.zero &&
             !v.isPlaying &&
@@ -2287,7 +2830,9 @@ class _IntroVideoScreenState extends State<_IntroVideoScreen> {
                   width: 28,
                   height: 28,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2.5, color: Colors.white),
+                    strokeWidth: 2.5,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             // Sağ üstte kapat: videoyu bitirmeden detaya geçer.
@@ -2295,8 +2840,10 @@ class _IntroVideoScreenState extends State<_IntroVideoScreen> {
               alignment: Alignment.topRight,
               child: SafeArea(
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   child: Semantics(
                     button: true,
                     label: 'Videoyu kapat',
@@ -2310,8 +2857,11 @@ class _IntroVideoScreenState extends State<_IntroVideoScreen> {
                           color: Colors.black.withValues(alpha: 0.35),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.close,
-                            color: Colors.white, size: 22),
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 22,
+                        ),
                       ),
                     ),
                   ),
@@ -2330,26 +2880,30 @@ void openVideoPlayer(BuildContext context, MekanVideo video) {
   if (video.url.isEmpty) return;
   // Opak rota, geçiş animasyonu yok: native video görünümü opaklık/şeffaf
   // rota katmanında yanlış boyutta (sol üstte küçük) çizilebiliyordu.
-  Navigator.of(context).push(PageRouteBuilder(
-    transitionDuration: Duration.zero,
-    reverseTransitionDuration: Duration.zero,
-    pageBuilder: (_, __, ___) => _VideoViewer(video: video),
-  ));
+  Navigator.of(context).push(
+    PageRouteBuilder(
+      transitionDuration: Duration.zero,
+      reverseTransitionDuration: Duration.zero,
+      pageBuilder: (_, __, ___) => _VideoViewer(video: video),
+    ),
+  );
 }
 
 /// Fancybox tarzı tam ekran görüntüleyiciyi [index]'ten açar (galeri + zoom).
 void openGalleryViewer(BuildContext context, List<String> images, int index) {
   if (images.isEmpty) return;
-  Navigator.of(context).push(PageRouteBuilder(
-    // Opak rota: açıldıktan sonra arkadaki (beyaz) detay sayfası hiç
-    // çizilmez; kaydırma sırasında sayfa kenarında beyaz görünmez.
-    opaque: true,
-    transitionDuration: const Duration(milliseconds: 220),
-    pageBuilder: (_, __, ___) =>
-        _GalleryViewer(images: images, initialIndex: index),
-    transitionsBuilder: (_, anim, __, child) =>
-        FadeTransition(opacity: anim, child: child),
-  ));
+  Navigator.of(context).push(
+    PageRouteBuilder(
+      // Opak rota: açıldıktan sonra arkadaki (beyaz) detay sayfası hiç
+      // çizilmez; kaydırma sırasında sayfa kenarında beyaz görünmez.
+      opaque: true,
+      transitionDuration: const Duration(milliseconds: 220),
+      pageBuilder: (_, __, ___) =>
+          _GalleryViewer(images: images, initialIndex: index),
+      transitionsBuilder: (_, anim, __, child) =>
+          FadeTransition(opacity: anim, child: child),
+    ),
+  );
 }
 
 /// Mekan fotoğraflarını mozaik ızgarada gösteren sayfa. Bir fotoğrafa
@@ -2398,9 +2952,13 @@ class _GalleryGridScreen extends StatelessWidget {
                 indicatorSize: TabBarIndicatorSize.label,
                 dividerColor: AppColors.line,
                 labelStyle: const TextStyle(
-                    fontSize: 14.5, fontWeight: FontWeight.w600),
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w600,
+                ),
                 unselectedLabelStyle: const TextStyle(
-                    fontSize: 14.5, fontWeight: FontWeight.w500),
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w500,
+                ),
                 tabs: [
                   Tab(text: 'Görseller (${images.length})'),
                   Tab(text: 'Videolar (${videos.length})'),
@@ -2427,9 +2985,11 @@ class _GalleryGridScreen extends StatelessWidget {
   }
 
   Widget _empty(String text) => Center(
-        child: Text(text,
-            style: const TextStyle(fontSize: 14, color: AppColors.muted)),
-      );
+    child: Text(
+      text,
+      style: const TextStyle(fontSize: 14, color: AppColors.muted),
+    ),
+  );
 
   /// Videolar: 2 sütunlu ızgara. Kapak (`poster`) varsa o gösterilir; yoksa
   /// videonun ilk karesi. Video yalnız dokunulunca tam ekranda oynatılır.
@@ -2468,16 +3028,21 @@ class _GalleryGridScreen extends StatelessWidget {
                       right: 8,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 7, vertical: 3),
+                          horizontal: 7,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.black.withValues(alpha: 0.6),
                           borderRadius: BorderRadius.circular(999),
                         ),
-                        child: Text(v.durationLabel,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w600)),
+                        child: Text(
+                          v.durationLabel,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ),
                   if (v.title.isNotEmpty)
@@ -2494,13 +3059,16 @@ class _GalleryGridScreen extends StatelessWidget {
                             colors: [Color(0x00000000), Color(0xAA000000)],
                           ),
                         ),
-                        child: Text(v.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600)),
+                        child: Text(
+                          v.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ),
                   Center(
@@ -2511,8 +3079,11 @@ class _GalleryGridScreen extends StatelessWidget {
                         color: Colors.white.withValues(alpha: 0.9),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.play_arrow_rounded,
-                          size: 34, color: AppColors.primary),
+                      child: const Icon(
+                        Icons.play_arrow_rounded,
+                        size: 34,
+                        color: AppColors.primary,
+                      ),
                     ),
                   ),
                 ],
@@ -2539,15 +3110,17 @@ class _GalleryGridScreen extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.primary),
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
             ),
           ),
           if (showCount)
-            Text('${images.length} fotoğraf',
-                style:
-                    const TextStyle(fontSize: 12.5, color: AppColors.muted)),
+            Text(
+              '${images.length} fotoğraf',
+              style: const TextStyle(fontSize: 12.5, color: AppColors.muted),
+            ),
         ],
       ),
     );
@@ -2676,21 +3249,27 @@ class _ReviewSheetState extends State<_ReviewSheet> {
                   width: 42,
                   height: 4,
                   decoration: BoxDecoration(
-                      color: AppColors.line,
-                      borderRadius: BorderRadius.circular(999)),
+                    color: AppColors.line,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
-              const Text('Değerlendirme Yap',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary)),
+              const Text(
+                'Değerlendirme Yap',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                ),
+              ),
               const SizedBox(height: 4),
-              Text(widget.placeName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13, color: AppColors.muted)),
+              Text(
+                widget.placeName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13, color: AppColors.muted),
+              ),
               const SizedBox(height: 18),
               Center(
                 child: Row(
@@ -2736,8 +3315,10 @@ class _ReviewSheetState extends State<_ReviewSheet> {
               const SizedBox(height: 18),
               GestureDetector(
                 onTap: canSend
-                    ? () => Navigator.pop(context,
-                        (puan: _rating, yorum: _comment.text.trim()))
+                    ? () => Navigator.pop(context, (
+                        puan: _rating,
+                        yorum: _comment.text.trim(),
+                      ))
                     : null,
                 child: Opacity(
                   opacity: canSend ? 1 : 0.5,
@@ -2749,11 +3330,14 @@ class _ReviewSheetState extends State<_ReviewSheet> {
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: const Center(
-                      child: Text('Gönder',
-                          style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white)),
+                      child: Text(
+                        'Gönder',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
                   ),
                 ),

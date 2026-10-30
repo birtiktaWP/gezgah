@@ -1610,6 +1610,23 @@ class HomeRepository {
     }
   }
 
+  /// Özellik id → SVG ikon. Detay yanıtındaki `ozellikler[]` ikon taşımıyor;
+  /// ikonlar `/filtreler` → `meta.ozellikler`'de (tipsiz liste) geliyor
+  /// (OLANAK_IKONLARI.md). Başarılı sonuç oturum boyunca bellekte tutulur.
+  Future<Map<int, String>> ozellikIkonlari() async {
+    final cached = _ozellikIkonCache;
+    if (cached != null) return cached;
+    final r = await filtreler(type: 'restoran');
+    final map = <int, String>{
+      for (final o in r.ozellikler)
+        if (o.icon != null && o.icon!.trim().isNotEmpty) o.id: o.icon!,
+    };
+    if (map.isNotEmpty) _ozellikIkonCache = map;
+    return map;
+  }
+
+  Map<int, String>? _ozellikIkonCache;
+
   /// Üst düzey (parent == 0) kategori id'leri. `/kategoriler` yalnızca üst
   /// düzey kategorileri döndürdüğü için bu küme, "parent 0" evrenini temsil
   /// eder. Hata durumunda boş küme döner (çağıran tarafta tümü gösterilir).
@@ -1989,6 +2006,7 @@ class HomeRepository {
     List<int>? filtreler,
     List<int>? ozellikler,
     String? type,
+    int? bolge,
   }) async {
     const empty = (
       items: <SearchResult>[],
@@ -2003,7 +2021,7 @@ class HomeRepository {
     final oq = idsCsv(ozellikler);
     final sq = siralarCsv(siralar);
     final key =
-        '$term|$page|$limit|${sort ?? ''}|$sq|$fq|$oq|${_coordKey(lat, lng)}|${type ?? ''}';
+        '$term|$page|$limit|${sort ?? ''}|$sq|$fq|$oq|${_coordKey(lat, lng)}|${type ?? ''}|${bolge ?? ''}';
     final c = _mekanCache[key];
     if (c != null && DateTime.now().difference(c.at) < _searchTtl) {
       return (
@@ -2028,6 +2046,9 @@ class HomeRepository {
         if (sq.isNotEmpty) 'siralar': sq,
         if (fq.isNotEmpty) 'filtreler': fq,
         if (oq.isNotEmpty) 'ozellikler': oq,
+        // İlçe filtresi: sunucu bugün yok sayıyor, sonuçlar istemcide de
+        // süzülüyor (LISTE_BOLGE_FILTRE.md).
+        if (bolge != null && bolge > 0) 'bolge': bolge,
         if (userId != null && userId.isNotEmpty) 'user_id': userId,
       },
       cancelToken: cancelToken,
@@ -2097,6 +2118,7 @@ class HomeRepository {
     List<String>? siralar,
     List<int>? filtreler,
     List<int>? ozellikler,
+    int? bolge,
   }) async {
     const empty = (
       items: <FoodResult>[],
@@ -2111,7 +2133,7 @@ class HomeRepository {
     final oq = idsCsv(ozellikler);
     final sq = siralarCsv(siralar);
     final key =
-        '$term|$page|$limit|${sort ?? ''}|$sq|$fq|$oq|${_coordKey(lat, lng)}';
+        '$term|$page|$limit|${sort ?? ''}|$sq|$fq|$oq|${_coordKey(lat, lng)}|${bolge ?? ''}';
     final c = _yemekCache[key];
     if (c != null && DateTime.now().difference(c.at) < _searchTtl) {
       return (
@@ -2135,6 +2157,9 @@ class HomeRepository {
         if (sq.isNotEmpty) 'siralar': sq,
         if (fq.isNotEmpty) 'filtreler': fq,
         if (oq.isNotEmpty) 'ozellikler': oq,
+        // İlçe filtresi: sunucu bugün yok sayıyor, sonuçlar istemcide de
+        // süzülüyor (LISTE_BOLGE_FILTRE.md).
+        if (bolge != null && bolge > 0) 'bolge': bolge,
         if (userId != null && userId.isNotEmpty) 'user_id': userId,
       },
       cancelToken: cancelToken,
@@ -2198,18 +2223,51 @@ class HomeRepository {
       thumbSquare: thumbs.square,
       thumbCard: thumbs.card,
       thumbWide: thumbs.wide,
+      bolgeId: switch (int.tryParse('${m['bolge'] ?? ''}'.trim())) {
+        final v? when v > 0 => v,
+        _ => null,
+      },
     );
 
-    return FoodResult(
-      urunId: (j['urun_id'] as num?)?.toInt() ?? 0,
-      urun: (j['urun'] as String?)?.trim() ?? '',
-      fiyat: j['fiyat']?.toString().trim() ?? '',
-      gorsel: img(j['gorsel']),
-      begeni: (j['begeni'] as num?)?.toInt() ?? 0,
+    FoodResult build(
+      Map<String, dynamic> u, {
+      List<FoodResult> diger = const [],
+      int? eslesenSayisi,
+    }) => FoodResult(
+      ilce: ilce,
+      aciklama: (u['aciklama'] as String?)?.trim() ?? '',
+      icindekiler: (u['icindekiler'] as String?)?.trim() ?? '',
+      kalori: (u['kalori'] as num?)?.toInt(),
+      urunId: (u['urun_id'] as num?)?.toInt() ?? 0,
+      urun: (u['urun'] as String?)?.trim() ?? '',
+      fiyat: u['fiyat']?.toString().trim() ?? '',
+      gorsel: img(u['gorsel']),
+      begeni: (u['begeni'] as num?)?.toInt() ?? 0,
       mekan: place,
       // Canlıda `mekan.mesafe_m`; doküman ürün düzeyinde `mesafe` (metre) diyor.
       mesafeM: parseMesafeM(m) ?? (j['mesafe'] as num?)?.round(),
+      diger: diger,
+      eslesenSayisi: eslesenSayisi,
     );
+
+    // Gruplu yanıt (ARAMA_YEMEK_GRUPLU.md): kayıt = mekan + en iyi eşleşen
+    // `urun` objesi + `diger_urunler[]` + `eslesen_urun_sayisi`.
+    final urunObj = j['urun'];
+    if (urunObj is Map) {
+      final diger =
+          (j['diger_urunler'] as List?)
+              ?.whereType<Map>()
+              .map((d) => build(d.cast<String, dynamic>()))
+              .toList() ??
+          const <FoodResult>[];
+      return build(
+        urunObj.cast<String, dynamic>(),
+        diger: diger,
+        eslesenSayisi: (j['eslesen_urun_sayisi'] as num?)?.toInt(),
+      );
+    }
+    // Bugünkü ürün bazlı yanıt: kayıt = tek ürün + mekan.
+    return build(j);
   }
 
   /// Arama cache anahtarı için konumu ~1.1 km kovaya yuvarlar (yoksa 'none').
@@ -2858,6 +2916,28 @@ class RezervasyonRepository {
   }
 }
 
+/// Kedy'ye gönderilen kullanıcı konumu. Yalnız konum izni verilmişse ve
+/// gerçek cihaz konumu biliniyorsa oluşturulur (varsayılan merkez asla).
+class KedyKonum {
+  final double lat;
+  final double lng;
+  final String ilce; // reverse geocoding (yoksa '')
+  final String sehir;
+  const KedyKonum({
+    required this.lat,
+    required this.lng,
+    this.ilce = '',
+    this.sehir = '',
+  });
+
+  Map<String, dynamic> toJson() => {
+    'lat': lat,
+    'lng': lng,
+    if (ilce.isNotEmpty) 'ilce': ilce,
+    if (sehir.isNotEmpty) 'sehir': sehir,
+  };
+}
+
 /// Kedy yapay zeka asistanı — `/kedy` ve `/kedy/gecmis` (app-kedy.md).
 ///
 /// Mobil API bir proxy'dir; istek `kedy.gezgah.com`'a `source=app` ile iletilir.
@@ -2872,11 +2952,12 @@ class KedyRepository {
   /// `POST /kedy` — kullanıcının mesajını gönderir, asistan yanıtını döner.
   /// [postId] "bu işletme" bağlamı; [history] yalnız anonim kullanıcıda
   /// gönderilir. 429'da [RateLimitException], diğer hatalarda [KedyException].
-  Future<String> sor({
+  Future<KedyAnswer> sor({
     required String message,
     int? postId,
     String lang = 'tr',
     List<KedyMessage>? history,
+    KedyKonum? konum,
   }) async {
     try {
       // Üye girişliyse üye token'ıyla gönder → sunucu geçmişi üyeye (app_id)
@@ -2889,6 +2970,16 @@ class KedyRepository {
           'lang': lang,
           if (history != null && history.isNotEmpty)
             'history': history.map((m) => m.toJson()).toList(),
+          // Konum izni verilmişse kullanıcının konumu (KEDY_ZENGIN_YANIT.md
+          // §1). Eskiden hiç gönderilmiyordu; Kedy kullanıcının nerede
+          // olduğunu bilmiyordu.
+          if (konum != null) ...{
+            'lat': konum.lat,
+            'lng': konum.lng,
+            'konum': konum.toJson(),
+          },
+          // Mobil zengin yanıtı (kartlar + öneriler) okuyabiliyor.
+          'format': 'zengin',
         },
         options: await _uyeAuth(),
       );
@@ -2896,8 +2987,23 @@ class KedyRepository {
       if (body is Map && body['success'] == true) {
         final data = body['data'];
         final answer = data is Map ? (data['answer'] as String?) : null;
-        if (answer != null && answer.trim().isNotEmpty) return answer.trim();
-        return 'Şu an yanıt veremedim. Biraz sonra tekrar dener misin?';
+        final kartlar = data is Map
+            ? KedyKart.parseList(data['kartlar'] ?? data['cards'])
+            : const <KedyKart>[];
+        final oneriler = data is Map
+            ? KedyKart.parseStrings(data['oneriler'] ?? data['suggestions'])
+            : const <String>[];
+        if ((answer != null && answer.trim().isNotEmpty) ||
+            kartlar.isNotEmpty) {
+          return KedyAnswer(
+            answer?.trim() ?? '',
+            kartlar: kartlar,
+            oneriler: oneriler,
+          );
+        }
+        return const KedyAnswer(
+          'Şu an yanıt veremedim. Biraz sonra tekrar dener misin?',
+        );
       }
       // Plus gerektiren erişim (UYELIK_PLUS.md §7): 403 → paywall'a yönlendir.
       if (res.statusCode == 403 || _kedyDetail(body) == 'plus_gerekli') {

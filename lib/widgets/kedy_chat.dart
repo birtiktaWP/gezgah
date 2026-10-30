@@ -1,19 +1,26 @@
 import 'package:flutter/material.dart';
 import '../data/api.dart';
 import '../data/auth_service.dart';
+import '../data/location_service.dart';
 import '../data/models.dart';
 import '../data/mock_data.dart';
+import '../screens/detail_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/plus_screen.dart';
 import 'common.dart';
+import 'menu_item_sheet.dart';
+import 'place_cards.dart' show VerifiedTick;
 
 /// Kedy yapay zeka asistanı — alttan açılan tam yükseklikli sohbet paneli
 /// (app-kedy.md). [postId] verilirse "bu işletme" bağlamı olarak gönderilir.
 /// [initialMessage] verilirse (ör. arama sayfası Kedy tavsiyeleri) panel açılıp
 /// üye Plus ise bu mesaj otomatik olarak Kedy'ye gönderilir.
 /// Tasarım: tasarim/index.html içindeki koyu (siyah) temalı chatbot paneli.
-Future<void> showKedyChat(BuildContext context,
-    {int? postId, String? initialMessage}) {
+Future<void> showKedyChat(
+  BuildContext context, {
+  int? postId,
+  String? initialMessage,
+}) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -59,7 +66,14 @@ class _KedyChatSheet extends StatefulWidget {
 class _Message {
   final String text;
   final bool me;
-  _Message(this.text, this.me);
+  final List<KedyKart> kartlar;
+  final List<String> oneriler;
+  _Message(
+    this.text,
+    this.me, {
+    this.kartlar = const [],
+    this.oneriler = const [],
+  });
 }
 
 class _KedyChatSheetState extends State<_KedyChatSheet> {
@@ -104,7 +118,16 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
     setState(() {
       _messages
         ..clear()
-        ..addAll(hist.map((m) => _Message(m.content, m.isUser)));
+        ..addAll(
+          hist.map(
+            (m) => _Message(
+              m.content,
+              m.isUser,
+              kartlar: m.kartlar,
+              // Geçmişteki eski önerilere tıklanmasın; yalnız son yanıtta.
+            ),
+          ),
+        );
       _loadingHistory = false;
     });
     _scrollDown();
@@ -124,9 +147,19 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
         message: value,
         postId: widget.postId,
         lang: 'tr',
+        konum: await _konum(),
       );
       if (!mounted) return;
-      setState(() => _messages.add(_Message(answer, false)));
+      setState(
+        () => _messages.add(
+          _Message(
+            answer.text,
+            false,
+            kartlar: answer.kartlar,
+            oneriler: answer.oneriler,
+          ),
+        ),
+      );
     } on PlusRequiredException catch (e) {
       // Plus düştü/gerekli: mesajı göster ve paywall'a yönlendir.
       if (!mounted) return;
@@ -144,20 +177,63 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
       setState(() => _messages.add(_Message(e.message, false)));
     } catch (_) {
       if (!mounted) return;
-      setState(() => _messages
-          .add(_Message('Bir sorun oluştu. Lütfen tekrar dene.', false)));
+      setState(
+        () => _messages.add(
+          _Message('Bir sorun oluştu. Lütfen tekrar dene.', false),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _sending = false);
       _scrollDown();
     }
   }
 
+  // Sohbet boyunca bir kez çözülen konum (izin yoksa null; izin istenmez).
+  Future<KedyKonum?>? _konumFuture;
+
+  /// Konum izni verilmişse kullanıcının konumu + ilçe/il (reverse geocoding).
+  /// En fazla ~3 sn beklenir; alınamazsa mesaj konumsuz gider.
+  Future<KedyKonum?> _konum() => _konumFuture ??= () async {
+    final loc = await LocationService.realLocationIfPermitted();
+    if (loc == null) return null;
+    final p = await LocationService.ilIlce(loc.lat, loc.lng);
+    return KedyKonum(lat: loc.lat, lng: loc.lng, ilce: p.ilce, sehir: p.il);
+  }();
+
+  /// Kartlardan mekan detayını açar (Kedy paneli arkada açık kalır; geri
+  /// dönünce sohbet sürer).
+  void _openMekan(KedyKart k) {
+    FocusScope.of(context).unfocus();
+    Navigator.of(
+      context,
+    ).push(detailRoute(builder: (_) => DetailScreen(place: k.toPlace())));
+  }
+
+  /// Yemek kartından ürün modalı (menüdeki ürün paneli); altındaki işletme
+  /// satırı işletme detayına götürür.
+  void _openYemek(KedyKart k) {
+    FocusScope.of(context).unfocus();
+    final km = LocationService.formatM(k.mesafeM);
+    showMenuItemSheet(
+      context,
+      k.toMenuUrun(),
+      mekanAdi: k.mekanAd,
+      mekanAlt: [
+        if (k.ilce.isNotEmpty) k.ilce,
+        if (km.isNotEmpty) km,
+      ].join(' · '),
+      onOpenMekan: () => _openMekan(k),
+    );
+  }
+
   void _scrollDown() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scroll.hasClients) {
-        _scroll.animateTo(_scroll.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOut);
+        _scroll.animateTo(
+          _scroll.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
       }
     });
   }
@@ -217,7 +293,9 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
                     width: 26,
                     height: 26,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2.5, color: Colors.white),
+                      strokeWidth: 2.5,
+                      color: Colors.white,
+                    ),
                   ),
                 )
               : (started ? _list() : _welcome()),
@@ -238,11 +316,14 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
           children: [
             const KedyIcon(size: 88, color: Colors.white),
             const SizedBox(height: 18),
-            const Text('Kedy seni bekliyor',
-                style: TextStyle(
-                    fontSize: 21,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white)),
+            const Text(
+              'Kedy seni bekliyor',
+              style: TextStyle(
+                fontSize: 21,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
             const SizedBox(height: 8),
             const SizedBox(
               width: 260,
@@ -250,8 +331,7 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
                 'Kedy ile sohbet etmek, mekan önerileri almak ve rezervasyon '
                 'yapmak için üye girişi yapmalısın.',
                 textAlign: TextAlign.center,
-                style:
-                    TextStyle(fontSize: 13.5, height: 1.5, color: _K.muted),
+                style: TextStyle(fontSize: 13.5, height: 1.5, color: _K.muted),
               ),
             ),
             const SizedBox(height: 24),
@@ -266,11 +346,13 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
                   foregroundColor: Colors.black,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                 ),
-                label: const Text('Üye Girişi Yap',
-                    style: TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w600)),
+                label: const Text(
+                  'Üye Girişi Yap',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
           ],
@@ -294,15 +376,17 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.workspace_premium,
-                size: 78, color: Colors.white),
+            const Icon(Icons.workspace_premium, size: 78, color: Colors.white),
             const SizedBox(height: 18),
-            const Text('Kedy, Gezgah Plus\u2019ta',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 21,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white)),
+            const Text(
+              'Kedy, Gezgah Plus\u2019ta',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 21,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
             const SizedBox(height: 8),
             const SizedBox(
               width: 270,
@@ -310,8 +394,7 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
                 'Kedy ile sohbet etmek, mekan önerileri almak ve rezervasyon '
                 'yapmak Gezgah Plus üyeliği gerektirir.',
                 textAlign: TextAlign.center,
-                style:
-                    TextStyle(fontSize: 13.5, height: 1.5, color: _K.muted),
+                style: TextStyle(fontSize: 13.5, height: 1.5, color: _K.muted),
               ),
             ),
             const SizedBox(height: 24),
@@ -326,11 +409,13 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
                   foregroundColor: Colors.black,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                 ),
-                label: const Text('Gezgah Plus\u2019a Geç',
-                    style: TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w600)),
+                label: const Text(
+                  'Gezgah Plus\u2019a Geç',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
           ],
@@ -341,7 +426,9 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
 
   Future<void> _openPlus() async {
     final ok = await openPlus(context);
-    if (ok == true && mounted && (AuthService.instance.user.value?.isPlus ?? false)) {
+    if (ok == true &&
+        mounted &&
+        (AuthService.instance.user.value?.isPlus ?? false)) {
       _init();
     }
   }
@@ -361,11 +448,14 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Kedy',
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white)),
+                const Text(
+                  'Kedy',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
                 const SizedBox(height: 5),
                 Row(
                   children: [
@@ -373,11 +463,15 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
                       width: 7,
                       height: 7,
                       decoration: const BoxDecoration(
-                          color: _K.dot, shape: BoxShape.circle),
+                        color: _K.dot,
+                        shape: BoxShape.circle,
+                      ),
                     ),
                     const SizedBox(width: 6),
-                    const Text('Yapay Zeka Asistanı',
-                        style: TextStyle(fontSize: 12, color: _K.muted)),
+                    const Text(
+                      'Yapay Zeka Asistanı',
+                      style: TextStyle(fontSize: 12, color: _K.muted),
+                    ),
                   ],
                 ),
               ],
@@ -389,7 +483,9 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
               width: 36,
               height: 36,
               decoration: const BoxDecoration(
-                  color: _K.closeBg, shape: BoxShape.circle),
+                color: _K.closeBg,
+                shape: BoxShape.circle,
+              ),
               child: const Icon(Icons.close, color: Colors.white, size: 18),
             ),
           ),
@@ -408,11 +504,14 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
           children: [
             const KedyIcon(size: 88, color: Colors.white),
             const SizedBox(height: 16),
-            const Text("Kedy'e sor!",
-                style: TextStyle(
-                    fontSize: 23,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white)),
+            const Text(
+              "Kedy'e sor!",
+              style: TextStyle(
+                fontSize: 23,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
             const SizedBox(height: 4),
             const SizedBox(
               width: 240,
@@ -452,9 +551,12 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
             Flexible(
               child: Container(
                 constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.8),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                  maxWidth: MediaQuery.of(context).size.width * 0.8,
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 11,
+                ),
                 decoration: const BoxDecoration(
                   color: _K.meBubble,
                   borderRadius: BorderRadius.only(
@@ -464,9 +566,14 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
                     bottomRight: Radius.circular(4),
                   ),
                 ),
-                child: Text(m.text,
-                    style: const TextStyle(
-                        fontSize: 14, height: 1.5, color: Colors.white)),
+                child: Text(
+                  m.text,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    height: 1.5,
+                    color: Colors.white,
+                  ),
+                ),
               ),
             ),
           ],
@@ -474,9 +581,11 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
       );
     }
 
-    // Bot cevabı — baloncuksuz düz metin, solda kedi ikonu.
+    // Bot cevabı — baloncuksuz metin (kalın / madde işaretli satırlar
+    // biçimlenir), altında öneri kartları ve (son yanıtta) devam soruları.
+    final isLast = identical(m, _messages.last);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.only(bottom: 16),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -486,12 +595,59 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
             child: Center(child: KedyIcon(size: 22, color: Colors.white)),
           ),
           const SizedBox(width: 9),
-          Flexible(
+          Expanded(
             child: Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: Text(m.text,
-                  style: const TextStyle(
-                      fontSize: 14, height: 1.5, color: _K.botText)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (m.text.trim().isNotEmpty) _KedyText(m.text),
+                  if (m.kartlar.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    for (final k in m.kartlar.take(6))
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _KedyCard(
+                          kart: k,
+                          onTap: () =>
+                              k.isYemek ? _openYemek(k) : _openMekan(k),
+                          onMekanTap: () => _openMekan(k),
+                        ),
+                      ),
+                  ],
+                  if (isLast && !_sending && m.oneriler.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final s in m.oneriler)
+                          GestureDetector(
+                            onTap: () => _send(s),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 9,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _K.chip,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                s,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ],
@@ -514,11 +670,14 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
           SizedBox(width: 9),
           Padding(
             padding: EdgeInsets.only(top: 6),
-            child: Text('yazıyor…',
-                style: TextStyle(
-                    fontSize: 13.5,
-                    fontStyle: FontStyle.italic,
-                    color: _K.muted)),
+            child: Text(
+              'yazıyor…',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontStyle: FontStyle.italic,
+                color: _K.muted,
+              ),
+            ),
           ),
         ],
       ),
@@ -546,11 +705,14 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
                 color: _K.chip,
                 borderRadius: BorderRadius.circular(999),
               ),
-              child: Text(s,
-                  style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white)),
+              child: Text(
+                s,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
+                ),
+              ),
             ),
           );
         },
@@ -602,12 +764,337 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
                       ? const Padding(
                           padding: EdgeInsets.all(7),
                           child: CircularProgressIndicator(
-                              strokeWidth: 2.2, color: Colors.white),
+                            strokeWidth: 2.2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Icon(Icons.pets, color: Colors.white, size: 24),
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Kedy metni: `**kalın**`, madde (`- `, `• `, `* `) ve numaralı (`1. `)
+/// satırlar biçimlenir; diğer markdown işaretleri düz metin kalır.
+class _KedyText extends StatelessWidget {
+  final String text;
+  const _KedyText(this.text);
+
+  static const _base = TextStyle(fontSize: 14, height: 1.5, color: _K.botText);
+
+  /// `**…**` parçalarını kalın yapar.
+  static List<InlineSpan> _inline(String s) {
+    final out = <InlineSpan>[];
+    final re = RegExp(r'\*\*(.+?)\*\*');
+    var i = 0;
+    for (final m in re.allMatches(s)) {
+      if (m.start > i) out.add(TextSpan(text: s.substring(i, m.start)));
+      out.add(
+        TextSpan(
+          text: m.group(1),
+          style: const TextStyle(
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
+        ),
+      );
+      i = m.end;
+    }
+    if (i < s.length) out.add(TextSpan(text: s.substring(i)));
+    return out;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = text.replaceAll('\r', '').split('\n');
+    final children = <Widget>[];
+    for (final raw in lines) {
+      final line = raw.trimRight();
+      if (line.trim().isEmpty) {
+        if (children.isNotEmpty) children.add(const SizedBox(height: 6));
+        continue;
+      }
+      final bullet = RegExp(r'^\s*([-•*])\s+(.*)$').firstMatch(line);
+      final num = RegExp(r'^\s*(\d+)[.)]\s+(.*)$').firstMatch(line);
+      final heading = RegExp(r'^\s*#{1,4}\s+(.*)$').firstMatch(line);
+      if (bullet != null || num != null) {
+        final mark = num != null ? '${num.group(1)}.' : '•';
+        final body = (num ?? bullet)!.group(2)!;
+        children.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 3),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: num != null ? 20 : 14,
+                  child: Text(
+                    mark,
+                    style: _base.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(style: _base, children: _inline(body)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      } else if (heading != null) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Text.rich(
+              TextSpan(
+                style: _base.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+                children: _inline(heading.group(1)!),
+              ),
+            ),
+          ),
+        );
+      } else {
+        children.add(
+          Text.rich(TextSpan(style: _base, children: _inline(line))),
+        );
+      }
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
+}
+
+/// Kedy öneri kartı (koyu tema): solda görsel, sağda ad + konum/mesafe +
+/// Kedy'nin kısa gerekçesi. Yemek kartında görsel ürünün; ad ürün adı +
+/// fiyat, altında işletme adı (dokununca işletme detayı).
+class _KedyCard extends StatelessWidget {
+  final KedyKart kart;
+  final VoidCallback onTap;
+  final VoidCallback onMekanTap;
+  const _KedyCard({
+    required this.kart,
+    required this.onTap,
+    required this.onMekanTap,
+  });
+
+  static const Color _cardBg = Color(0xFF141414);
+  static const Color _cardLine = Color(0xFF262626);
+
+  @override
+  Widget build(BuildContext context) {
+    final k = kart;
+    final km = LocationService.formatM(k.mesafeM);
+    final loc = [
+      if (k.ilce.isNotEmpty) k.ilce else if (k.sehir.isNotEmpty) k.sehir,
+      if (km.isNotEmpty) km,
+    ].join(' · ');
+    final acik = acikDurumu(k.calismaSaatleri);
+    final img = k.isYemek && k.urunGorsel.isNotEmpty ? k.urunGorsel : k.gorsel;
+
+    return Semantics(
+      button: true,
+      label: k.isYemek ? '${k.urun}, ${k.mekanAd}' : k.mekanAd,
+      child: Material(
+        color: _cardBg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: _cardLine),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SizedBox(
+                    width: 72,
+                    height: 72,
+                    child: img.isNotEmpty
+                        ? NetImage(
+                            img,
+                            loading: const ColoredBox(color: _K.chip),
+                          )
+                        : ColoredBox(
+                            color: _K.chip,
+                            child: Icon(
+                              k.isYemek
+                                  ? Icons.restaurant_menu
+                                  : Icons.storefront_outlined,
+                              color: _K.muted,
+                              size: 26,
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              k.isYemek ? k.urun : k.mekanAd,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 14.5,
+                                height: 1.25,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                          if (k.isYemek && k.fiyat.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              '${k.fiyat} ₺',
+                              softWrap: false,
+                              style: const TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ] else if (!k.isYemek && k.dogrulanmis) ...[
+                            const SizedBox(width: 4),
+                            const Padding(
+                              padding: EdgeInsets.only(top: 2),
+                              child: VerifiedTick(size: 13),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      if (k.isYemek)
+                        GestureDetector(
+                          onTap: onMekanTap,
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.storefront_outlined,
+                                size: 13,
+                                color: _K.muted,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  [
+                                    k.mekanAd,
+                                    loc,
+                                  ].where((s) => s.isNotEmpty).join(' · '),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: _K.muted,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        Row(
+                          children: [
+                            if (loc.isNotEmpty) ...[
+                              const Icon(
+                                Icons.location_on_outlined,
+                                size: 13,
+                                color: _K.muted,
+                              ),
+                              const SizedBox(width: 3),
+                              Flexible(
+                                child: Text(
+                                  loc,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: _K.muted,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            if (acik != null) ...[
+                              if (loc.isNotEmpty) const SizedBox(width: 8),
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: acik.open
+                                      ? _K.dot
+                                      : const Color(0xFFE0533D),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                acik.open ? 'Açık' : 'Kapalı',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: acik.open
+                                      ? _K.dot
+                                      : const Color(0xFFE0533D),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      if (k.neden.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          k.neden,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            height: 1.4,
+                            color: Color(0xFFCFCFCF),
+                          ),
+                        ),
+                      ] else if (!k.isYemek && k.etiket.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          k.etiket,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFFCFCFCF),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.only(top: 24),
+                  child: Icon(Icons.chevron_right, color: _K.muted, size: 20),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -640,10 +1127,8 @@ class _GradientBorderState extends State<_GradientBorder>
   @override
   void initState() {
     super.initState();
-    _c = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 4),
-    )..repeat();
+    _c = AnimationController(vsync: this, duration: const Duration(seconds: 4))
+      ..repeat();
   }
 
   @override

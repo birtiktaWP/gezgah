@@ -1432,11 +1432,23 @@ class OzellikItem {
   final int id;
   final String name;
   final String slug;
-  const OzellikItem({required this.id, this.name = '', this.slug = ''});
+
+  /// SVG ikon (`icon`). Detay yanıtı bugün göndermiyor (OLANAK_IKONLARI.md);
+  /// gelirse doğrudan kullanılır.
+  final String? icon;
+  const OzellikItem({
+    required this.id,
+    this.name = '',
+    this.slug = '',
+    this.icon,
+  });
   factory OzellikItem.fromJson(Map<String, dynamic> j) => OzellikItem(
     id: (j['id'] as num?)?.toInt() ?? 0,
     name: (j['name'] as String?)?.trim() ?? '',
     slug: (j['slug'] as String?)?.trim() ?? '',
+    icon: (j['icon'] as String?)?.trim().isNotEmpty == true
+        ? (j['icon'] as String).trim()
+        : null,
   );
 }
 
@@ -1789,6 +1801,20 @@ class FoodResult {
   final int begeni; // like_count
   final Place mekan; // ürünün ait olduğu mekan (id/ad/görsel/konum)
   final int? mesafeM; // konum verildiyse mekanın mesafesi (metre)
+  // Mekanın ilçesi: bölge filtresi için. `mekan.bolge` (id) gelmiyor, yalnız
+  // ilçe adı (`mekan.ilce`) var; ad `/ilceler` ile eşleştirilir.
+  final String ilce;
+  // Ürün detayı (ürün modalı). `/arama?tab=yemek` bugün göndermiyor
+  // (ARAMA_YEMEK_GRUPLU.md); gelirse modalda gösterilir.
+  final String aciklama;
+  final String icindekiler;
+  final int? kalori;
+
+  /// Gruplu yanıtta (ARAMA_YEMEK_GRUPLU.md) aynı mekanın diğer eşleşen
+  /// ürünleri ve toplam eşleşen ürün sayısı. Bugünkü (ürün bazlı) yanıtta
+  /// boş / null; mobil ürünleri kendisi mekana göre gruplar.
+  final List<FoodResult> diger;
+  final int? eslesenSayisi;
 
   const FoodResult({
     required this.urunId,
@@ -1798,7 +1824,24 @@ class FoodResult {
     this.begeni = 0,
     required this.mekan,
     this.mesafeM,
+    this.ilce = '',
+    this.aciklama = '',
+    this.icindekiler = '',
+    this.kalori,
+    this.diger = const [],
+    this.eslesenSayisi,
   });
+
+  /// Ürün modalı (`showMenuItemSheet`) için menü ürünü karşılığı.
+  MenuUrun toMenuUrun() => MenuUrun(
+    id: urunId,
+    ad: urun,
+    aciklama: aciklama,
+    fiyat: fiyat,
+    gorsel: gorsel,
+    kalori: kalori,
+    icindekiler: icindekiler,
+  );
 }
 
 /// Mekana ait aktif etkinlik (`/mekanlar/{id}` → `etkinlikler[]` ve
@@ -1866,16 +1909,197 @@ class Etkinlik {
 class KedyMessage {
   final String role;
   final String content;
-  const KedyMessage({required this.role, this.content = ''});
+
+  /// Asistan mesajındaki öneri kartları (KEDY_ZENGIN_YANIT.md). Yoksa boş.
+  final List<KedyKart> kartlar;
+
+  /// Yanıtın altında gösterilecek devam sorusu önerileri (çipler).
+  final List<String> oneriler;
+
+  const KedyMessage({
+    required this.role,
+    this.content = '',
+    this.kartlar = const [],
+    this.oneriler = const [],
+  });
 
   bool get isUser => role == 'user';
 
   factory KedyMessage.fromJson(Map<String, dynamic> j) => KedyMessage(
     role: (j['role'] ?? '').toString().trim(),
     content: (j['content'] ?? '').toString(),
+    kartlar: KedyKart.parseList(j['kartlar'] ?? j['cards']),
+    oneriler: KedyKart.parseStrings(j['oneriler'] ?? j['suggestions']),
   );
 
+  /// Anonim `history` gönderimi için yalnız rol + metin.
   Map<String, String> toJson() => {'role': role, 'content': content};
+}
+
+/// Kedy öneri kartı (KEDY_ZENGIN_YANIT.md). [tip] `mekan` ya da `yemek`.
+/// Mekan kartında ürün alanları boştur; yemek kartında ürün + ait olduğu
+/// mekan birlikte gelir.
+class KedyKart {
+  final String tip; // mekan | yemek
+  final int mekanId;
+  final String mekanAd;
+  final String gorsel; // mekan görseli (tam URL; yoksa '')
+  final String sehir;
+  final String ilce;
+  final int? mesafeM;
+  final bool dogrulanmis;
+  final String neden; // Kedy'nin kısa öneri gerekçesi (1 cümle)
+  final String etiket; // ör. kategori "Kahvaltı & Brunch" (yoksa '')
+  final Map<String, String> calismaSaatleri;
+  // Yemek kartı alanları.
+  final int urunId;
+  final String urun;
+  final String fiyat;
+  final String urunGorsel;
+  final String aciklama;
+
+  const KedyKart({
+    required this.tip,
+    required this.mekanId,
+    this.mekanAd = '',
+    this.gorsel = '',
+    this.sehir = '',
+    this.ilce = '',
+    this.mesafeM,
+    this.dogrulanmis = false,
+    this.neden = '',
+    this.etiket = '',
+    this.calismaSaatleri = const {},
+    this.urunId = 0,
+    this.urun = '',
+    this.fiyat = '',
+    this.urunGorsel = '',
+    this.aciklama = '',
+  });
+
+  bool get isYemek => tip == 'yemek';
+
+  static String _abs(dynamic v) {
+    if (v is! String || v.trim().isEmpty) return '';
+    final s = v.trim();
+    return s.startsWith('http') ? s : 'https://api.gezgah.com$s';
+  }
+
+  static String _str(dynamic v) => v == null ? '' : v.toString().trim();
+
+  factory KedyKart.fromJson(Map<String, dynamic> j) {
+    final m = (j['mekan'] is Map)
+        ? (j['mekan'] as Map).cast<String, dynamic>()
+        : j;
+    final u = (j['urun'] is Map)
+        ? (j['urun'] as Map).cast<String, dynamic>()
+        : const <String, dynamic>{};
+    final rawTip = _str(j['tip'] ?? j['type']).toLowerCase();
+    final yemek =
+        rawTip == 'yemek' ||
+        rawTip == 'urun' ||
+        rawTip == 'ürün' ||
+        u.isNotEmpty;
+    final thumbs = m['thumbnails'];
+    final img = _abs(
+      (thumbs is Map ? thumbs['square'] : null) ??
+          m['thumbnail'] ??
+          m['image'] ??
+          m['gorsel'],
+    );
+    return KedyKart(
+      tip: yemek ? 'yemek' : 'mekan',
+      mekanId:
+          (m['id'] as num?)?.toInt() ??
+          (j['mekan_id'] as num?)?.toInt() ??
+          (j['post_id'] as num?)?.toInt() ??
+          0,
+      mekanAd: _str(m['ad'] ?? m['name']),
+      gorsel: img,
+      sehir: _str(m['sehir']),
+      ilce: _str(m['ilce']),
+      mesafeM: parseMesafeMOf(m),
+      dogrulanmis: m['dogrulanmis'] == true,
+      neden: _str(j['neden'] ?? j['aciklama_kisa'] ?? j['reason']),
+      etiket: _str(j['etiket'] ?? m['kategori']),
+      calismaSaatleri: parseCalismaSaatleri(m['calisma_saatleri']),
+      urunId:
+          (u['urun_id'] as num?)?.toInt() ?? (u['id'] as num?)?.toInt() ?? 0,
+      urun: _str(u['urun'] ?? u['ad']),
+      fiyat: _str(u['fiyat']),
+      urunGorsel: _abs(u['gorsel']),
+      aciklama: _str(u['aciklama']),
+    );
+  }
+
+  static List<KedyKart> parseList(dynamic raw) {
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((e) => KedyKart.fromJson(e.cast<String, dynamic>()))
+        .where((k) => k.mekanId > 0 && k.mekanAd.isNotEmpty)
+        .toList();
+  }
+
+  static List<String> parseStrings(dynamic raw) {
+    if (raw is! List) return const [];
+    return raw
+        .map((e) => e?.toString().trim() ?? '')
+        .where((s) => s.isNotEmpty)
+        .take(4)
+        .toList();
+  }
+
+  /// Mekan detayına geçiş için [Place] karşılığı.
+  Place toPlace() {
+    final loc = [sehir, ilce].where((s) => s.isNotEmpty).join(' · ');
+    return Place(
+      id: mekanId,
+      name: mekanAd,
+      category: 'Mekan',
+      subtitle: loc,
+      rating: 0,
+      distance: loc,
+      price: '',
+      image: gorsel,
+      lat: double.nan,
+      lng: double.nan,
+      verified: dogrulanmis,
+      mesafeM: mesafeM,
+      calismaSaatleri: calismaSaatleri,
+      thumbnail: gorsel.isEmpty ? null : gorsel,
+    );
+  }
+
+  /// Ürün modalı için menü ürünü karşılığı.
+  MenuUrun toMenuUrun() => MenuUrun(
+    id: urunId,
+    ad: urun,
+    aciklama: aciklama,
+    fiyat: fiyat,
+    gorsel: urunGorsel,
+  );
+}
+
+/// `mesafe_m` (metre) ya da `mesafe_km` alanından metre (yoksa null).
+int? parseMesafeMOf(Map<String, dynamic> j) {
+  final m = j['mesafe_m'];
+  if (m is num) return m.round();
+  final km = j['mesafe_km'];
+  if (km is num) return (km * 1000).round();
+  return null;
+}
+
+/// Kedy yanıtı: metin + (varsa) öneri kartları + devam sorusu önerileri.
+class KedyAnswer {
+  final String text;
+  final List<KedyKart> kartlar;
+  final List<String> oneriler;
+  const KedyAnswer(
+    this.text, {
+    this.kartlar = const [],
+    this.oneriler = const [],
+  });
 }
 
 /// Instagram paylaşım şablonu (`GET /rotalar/paylasim-sablonlari`,
