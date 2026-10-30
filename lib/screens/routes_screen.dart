@@ -1,8 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
@@ -18,6 +16,7 @@ import '../theme/app_theme.dart';
 import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
 import '../widgets/onayli_modal.dart';
+import '../widgets/rota_instagram_share.dart';
 import 'detail_screen.dart';
 import 'login_screen.dart';
 import 'member_profile_screen.dart';
@@ -1015,6 +1014,8 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
   Future<void> _openShareSheet(GeziRota r) async {
     final action = await showModalBottomSheet<String>(
       context: context,
+      // Kök navigator: yüzen alt menünün/butonların üstünde açılsın.
+      useRootNavigator: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -1058,57 +1059,10 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     );
     if (action == null || !mounted) return;
     if (action == 'ig') {
-      await _shareToInstagram(r);
+      // Story / Gönderi → şablon → galeriye kaydet → bilgi (yeni akış).
+      await showRotaInstagramShare(context, r);
     } else if (action == 'map') {
       await _shareRoute(r);
-    }
-  }
-
-  /// Rota için paylaşım görsel(ler)ini üretir, indirir ve native paylaşım
-  /// sayfasıyla (Instagram vb.) paylaşır.
-  Future<void> _shareToInstagram(GeziRota r) async {
-    // Hazırlanıyor göstergesi.
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(
-        child: CircularProgressIndicator(color: AppColors.primary),
-      ),
-    );
-    try {
-      final urls =
-          await RotaRepository.instance.paylasimGorseli(r.id, format: 'story');
-      if (urls.isEmpty) {
-        if (mounted) Navigator.pop(context); // spinner
-        _snack('Paylaşım görseli oluşturulamadı.');
-        return;
-      }
-      final dio = Dio();
-      final files = <XFile>[];
-      final dir = Directory.systemTemp;
-      for (var i = 0; i < urls.length; i++) {
-        try {
-          final path = '${dir.path}/gezgah_rota_${r.id}_$i.jpg';
-          await dio.download(urls[i], path);
-          files.add(XFile(path));
-        } catch (_) {}
-      }
-      if (!mounted) return;
-      Navigator.pop(context); // spinner
-      if (files.isEmpty) {
-        _snack('Görseller indirilemedi.');
-        return;
-      }
-      final box = context.findRenderObject() as RenderBox?;
-      await Share.shareXFiles(
-        files,
-        text: 'Gezgah\u2019taki gezi rotama gözat! @gezgah.app',
-        sharePositionOrigin:
-            box != null ? box.localToGlobal(Offset.zero) & box.size : null,
-      );
-    } catch (_) {
-      if (mounted) Navigator.pop(context); // spinner
-      _snack('Paylaşım sırasında bir hata oluştu.');
     }
   }
 

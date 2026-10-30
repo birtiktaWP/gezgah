@@ -3451,18 +3451,67 @@ class RotaRepository {
     return YorumTepki.fromData(data);
   }
 
+  /// `GET /rotalar/paylasim-sablonlari?format=` — Instagram paylaşım
+  /// şablonları (ROTA_PAYLASIM_SABLON_API.md). Önizleme görseli olmayan
+  /// kayıtlar ve başka biçimin şablonları elenir. Uç yoksa / hata / boşsa
+  /// boş liste döner; mobil o zaman yerel örnek şablonları gösterir.
+  /// Başarılı yanıt biçim başına 10 dk bellekte tutulur.
+  Future<List<PaylasimSablon>> paylasimSablonlari(String format) async {
+    final hit = _sablonCache[format];
+    if (hit != null &&
+        DateTime.now().difference(hit.at) < const Duration(minutes: 10)) {
+      return hit.list;
+    }
+    try {
+      final res = await _dio.get(
+        '/rotalar/paylasim-sablonlari',
+        queryParameters: {'format': format},
+        options: await _uyeAuth(),
+      );
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return const [];
+      final data = body['data'];
+      if (data is! List) return const [];
+      final list = data
+          .whereType<Map<String, dynamic>>()
+          .map(PaylasimSablon.fromJson)
+          .where(
+            (s) =>
+                s.id > 0 &&
+                s.onizleme.isNotEmpty &&
+                (s.format.isEmpty || s.format == format),
+          )
+          .toList();
+      if (list.isNotEmpty) {
+        _sablonCache[format] = (at: DateTime.now(), list: list);
+      }
+      return list;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  final Map<String, ({DateTime at, List<PaylasimSablon> list})> _sablonCache =
+      {};
+
   /// `GET /uye/rotalar/{id}/paylasim` — Instagram paylaşım görsel(ler)i üretir
   /// (rota-paylasim-gorseli.md). [format]: `story` (1080×1920) | `post`
-  /// (1080×1350). Sıralı görsel URL listesini döner (hata/boşta boş liste).
+  /// (1080×1350). [sablon] verilirse o şablonla üretilir
+  /// (ROTA_PAYLASIM_SABLON_API.md). Sıralı görsel URL listesini döner
+  /// (hata/boşta boş liste).
   Future<List<String>> paylasimGorseli(
     int id, {
     String format = 'story',
+    int? sablon,
   }) async {
     if (id <= 0) return const [];
     try {
       final res = await _dio.get(
         '/uye/rotalar/$id/paylasim',
-        queryParameters: {'format': format},
+        queryParameters: {
+          'format': format,
+          if (sablon != null && sablon > 0) 'sablon': sablon,
+        },
         options: await _uyeAuth(),
       );
       final body = res.data;
@@ -3472,7 +3521,9 @@ class RotaRepository {
       if (list is! List) return const [];
       return list
           .whereType<String>()
-          .where((u) => u.trim().isNotEmpty)
+          .map((u) => u.trim())
+          .where((u) => u.isNotEmpty)
+          .map((u) => u.startsWith('http') ? u : '$kApiHost$u')
           .toList();
     } catch (_) {
       return const [];

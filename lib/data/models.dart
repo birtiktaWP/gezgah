@@ -1877,3 +1877,30 @@ class KedyMessage {
 
   Map<String, String> toJson() => {'role': role, 'content': content};
 }
+
+/// Instagram paylaşım şablonu (`GET /rotalar/paylasim-sablonlari`,
+/// ROTA_PAYLASIM_SABLON_API.md). [onizleme] şablonun örnek görseli (tam URL).
+class PaylasimSablon {
+  final int id;
+  final String ad;
+  final String format; // story | post (boş = belirtilmemiş)
+  final String onizleme;
+  const PaylasimSablon({
+    required this.id,
+    required this.ad,
+    this.format = '',
+    this.onizleme = '',
+  });
+
+  factory PaylasimSablon.fromJson(Map<String, dynamic> j) {
+    var url = (j['onizleme'] ?? j['preview'] ?? '').toString().trim();
+    // Göreli yol gelirse sunucu köküyle tamamla (api.dart `kApiHost`).
+    if (url.startsWith('/')) url = 'https://api.gezgah.com$url';
+    return PaylasimSablon(
+      id: (j['id'] as num?)?.toInt() ?? 0,
+      ad: (j['ad'] ?? j['name'] ?? '').toString().trim(),
+      format: (j['format'] ?? '').toString().trim(),
+      onizleme: url,
+    );
+  }
+}
