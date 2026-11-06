@@ -17,6 +17,10 @@
 	<string>Profil avatarı ve gezi rotası fotoğrafları için kameraya erişim gerekir.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Çektiğin fotoğrafı ve Instagram'da paylaşacağın rota görselini kaydedebilmek için fotoğraf galerine yazma izni gerekir.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+	<string>remote-notification</string>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

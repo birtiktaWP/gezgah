@@ -8,6 +8,7 @@ import 'data/auth_service.dart';
 import 'data/device_service.dart';
 import 'data/favorites_service.dart';
 import 'data/home_store.dart';
+import 'data/push_service.dart';
 import 'data/user_service.dart';
 import 'screens/main_shell.dart';
 import 'screens/welcome_screen.dart';
@@ -34,10 +35,12 @@ Future<void> main() async {
     InAppPurchaseStoreKitPlatform.enableStoreKit1();
   }
 
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-  ));
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+    ),
+  );
 
   // Üstteki durum çubuğu (saat/pil/sinyal) ve alt sistem çubuğu görünür.
   SystemChrome.setEnabledSystemUIMode(
@@ -59,6 +62,10 @@ Future<void> main() async {
   // Varsa üye oturumunu yerelden geri yükle (Hesabım'ı giriş ekranı yerine
   // doğrudan gösterebilmek için ilk kareden önce hazır olsun).
   await AuthService.instance.restore();
+
+  // Push bildirimleri (OneSignal). Oturum geri yüklendikten sonra: girişli
+  // üye cihazı hemen üye id'sine bağlanır (PUSH_BILDIRIM.md).
+  PushService.instance.init();
 
   // Üye girişliyse favori mekan id'lerini önceden yükle (kalpler uygulama
   // genelinde doğru gösterilsin). Sonraki giriş/çıkışları servis kendi dinler.
@@ -92,6 +99,8 @@ class GezgahApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Gezgah',
+      // Bildirime dokununca ilgili sayfayı açabilmek için (PushService).
+      navigatorKey: PushService.navigatorKey,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       // Native tarih/saat seçiciler dahil tüm arayüz Türkçe.
@@ -149,7 +158,10 @@ class _RootState extends State<_Root> {
       duration: const Duration(milliseconds: 350),
       child: _showMain
           ? const MainShell()
-          : WelcomeScreen(key: const ValueKey('welcome'), onStart: _finishWelcome),
+          : WelcomeScreen(
+              key: const ValueKey('welcome'),
+              onStart: _finishWelcome,
+            ),
     );
   }
 }

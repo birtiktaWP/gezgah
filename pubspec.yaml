@@ -1,7 +1,7 @@
 name: gezgah
 description: "Gezgah - yakınındaki en iyi yerleri keşfet."
 publish_to: 'none'
-version: 1.0.20+66
+version: 1.0.21+67
 
 environment:
   sdk: ^3.11.4
@@ -37,6 +37,7 @@ dependencies:
   visibility_detector: 0.4.0+2 # listede ekranda görünen mekanlar (GORUNTULENME.md)
   speech_to_text: 7.5.0 # ana sayfa aramasında sesli arama (mikrofon)
   gal: ^2.3.3
+  onesignal_flutter: 5.5.2
 
 dev_dependencies:
   flutter_test:

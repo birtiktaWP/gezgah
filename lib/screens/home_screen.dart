@@ -124,10 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Alt yazı (`subtitle`):
   ///  - [preferDistance] true ve mesafe varsa → mesafe (Yakındakiler).
   ///  - aksi halde "İl · İlçe" (yoksa mesafe, o da yoksa "Restoran").
-  List<Place> _toPlaces(
-    List<ApiPlace> items, {
-    bool preferDistance = false,
-  }) {
+  List<Place> _toPlaces(List<ApiPlace> items, {bool preferDistance = false}) {
     return items.map((a) {
       final distance = LocationService.formatM(a.mesafeM);
       final cd = a.cityDistrict;
@@ -398,8 +395,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     color: AppColors.primary,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child:
-                      const Icon(Icons.mic_none, color: Colors.white, size: 18),
+                  child: const Icon(
+                    Icons.mic_none,
+                    color: Colors.white,
+                    size: 18,
+                  ),
                 ),
               ),
             ),
@@ -501,7 +501,8 @@ class _HomeScreenState extends State<HomeScreen> {
         return Padding(
           padding: const EdgeInsets.only(top: 18),
           child: SizedBox(
-            height: 86,
+            // Kategori adı 2 satıra kadar (ör. "Kahvaltı & Brunch").
+            height: 102,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 22),
@@ -535,11 +536,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(height: 8),
                         Text(
                           c.name,
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.center,
                           style: const TextStyle(
-                            fontSize: 13,
+                            fontSize: 12.5,
+                            height: 1.2,
                             fontWeight: FontWeight.w600,
                           ),
                         ),

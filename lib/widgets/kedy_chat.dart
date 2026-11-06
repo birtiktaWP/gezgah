@@ -6,7 +6,7 @@ import '../data/models.dart';
 import '../data/mock_data.dart';
 import '../screens/detail_screen.dart';
 import '../screens/login_screen.dart';
-import '../screens/plus_screen.dart';
+import '../screens/plus_screen.dart' show openPlus, kPlusSatisAcik;
 import 'common.dart';
 import 'menu_item_sheet.dart';
 import 'place_cards.dart' show VerifiedTick;
@@ -89,8 +89,15 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
   void initState() {
     super.initState();
     _pending = widget.initialMessage?.trim();
-    // Geçmiş yalnız aktif Plus üyesi için var (UYELIK_PLUS.md §7).
-    if (AuthService.instance.user.value?.isPlus ?? false) _init();
+    if (_canChat) _init();
+  }
+
+  /// Sohbet açık mı: giriş yapmış üye. Plus satışı açıkken (kPlusSatisAcik)
+  /// ayrıca aktif Plus gerekir (UYELIK_PLUS.md §7).
+  bool get _canChat {
+    final u = AuthService.instance.user.value;
+    if (u == null) return false;
+    return !kPlusSatisAcik || u.isPlus;
   }
 
   /// Geçmişi yükle, ardından (varsa) bekleyen tavsiye mesajını gönder.
@@ -101,7 +108,7 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
 
   /// Açılışta iletilen tavsiye mesajını (yalnız Plus üyede) bir kez gönderir.
   void _maybeSendPending() {
-    if (!(AuthService.instance.user.value?.isPlus ?? false)) return;
+    if (!_canChat) return;
     final p = _pending;
     if (p != null && p.isNotEmpty && !_sending) {
       _pending = null;
@@ -111,7 +118,7 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
 
   /// Giriş yapmış Plus üyesinin sunucudaki Kedy geçmişini yükler (app-kedy.md).
   Future<void> _loadHistory() async {
-    if (!(AuthService.instance.user.value?.isPlus ?? false)) return;
+    if (!_canChat) return;
     setState(() => _loadingHistory = true);
     final hist = await KedyRepository.instance.gecmis(days: 7);
     if (!mounted) return;
@@ -164,11 +171,13 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
       // Plus düştü/gerekli: mesajı göster ve paywall'a yönlendir.
       if (!mounted) return;
       setState(() => _messages.add(_Message(e.message, false)));
-      if (e.girisGerekli) {
+      if (e.girisGerekli && !AuthService.instance.isLoggedIn) {
         await _openLogin();
-      } else {
+      } else if (kPlusSatisAcik) {
         await _openPlus();
       }
+      // Plus satışı kapalıyken paywall açılmaz; sunucunun mesajı gösterilir
+      // (sunucu henüz Plus istiyorsa: KEDY_HERKESE_ACIK.md).
     } on RateLimitException catch (e) {
       if (!mounted) return;
       setState(() => _messages.add(_Message(e.message, false)));
@@ -271,7 +280,8 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
                 valueListenable: AuthService.instance.user,
                 builder: (_, user, __) {
                   if (user == null) return _loginGate();
-                  if (!user.isPlus) return _plusGate();
+                  // Plus satışı kapalıyken Kedy her üyeye açık.
+                  if (kPlusSatisAcik && !user.isPlus) return _plusGate();
                   return _chatBody(bottomInset);
                 },
               ),
@@ -426,9 +436,7 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
 
   Future<void> _openPlus() async {
     final ok = await openPlus(context);
-    if (ok == true &&
-        mounted &&
-        (AuthService.instance.user.value?.isPlus ?? false)) {
+    if (ok == true && mounted && _canChat) {
       _init();
     }
   }

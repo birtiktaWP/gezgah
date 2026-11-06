@@ -17,10 +17,24 @@ import 'login_screen.dart';
 /// bağlı değildir — çünkü TestFlight release moddadır).
 const bool kIapDebug = false;
 
+/// Gezgah Plus satışı / yükseltme ekranları açık mı. Şimdilik KAPALI:
+/// profildeki Plus kartı gizli, paywall açılmaz, Kedy her üyeye açık.
+/// Plus'ı geri açmak için `true` yap (KEDY_HERKESE_ACIK.md).
+const bool kPlusSatisAcik = false;
+
 /// Gezgah Plus satın alma (paywall) sayfasını **alttan açılan sheet** olarak
 /// gösterir. Kullanıcı Plus üyesi olursa (satın alma / geri yükleme başarılı)
 /// `true` ile kapanır (UYELIK_PLUS.md §4).
+///
+/// [kPlusSatisAcik] false iken paywall hiç açılmaz: yalnız kısa bir bilgi
+/// gösterilir ve `false` döner (Plus satışı şimdilik gizli).
 Future<bool?> openPlus(BuildContext context) {
+  if (!kPlusSatisAcik) {
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      const SnackBar(content: Text('Bu özellik şu an kullanılamıyor.')),
+    );
+    return Future.value(false);
+  }
   return showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
@@ -46,7 +60,8 @@ class _PlusScreenState extends State<PlusScreen> {
   StreamSubscription<List<PurchaseDetails>>? _sub;
 
   PlusDurum _durum = const PlusDurum();
-  ProductDetails? _product; // store'dan çekilen ürün (fiyat store para birimiyle)
+  ProductDetails?
+  _product; // store'dan çekilen ürün (fiyat store para birimiyle)
   bool _loading = true;
   bool _busy = false; // satın alma/doğrulama sürüyor
   bool _storeAvailable = true;
@@ -96,8 +111,10 @@ class _PlusScreenState extends State<PlusScreen> {
     // 1) Backend'ten güncel durum + ürün bilgisi (fiyat/store id).
     _log('Backend /uye/plus/durum çağrılıyor…');
     final durum = await PlusRepository.instance.durum();
-    _log('durum: aktif=${durum.aktif} · store id=ios:${durum.urun.iosId}/'
-        'android:${durum.urun.androidId} · fiyat=${durum.urun.fiyat}');
+    _log(
+      'durum: aktif=${durum.aktif} · store id=ios:${durum.urun.iosId}/'
+      'android:${durum.urun.androidId} · fiyat=${durum.urun.fiyat}',
+    );
     // 2) Store'dan ürün ayrıntısı (yerel para birimiyle biçimli fiyat).
     ProductDetails? product;
     var available = true;
@@ -111,19 +128,24 @@ class _PlusScreenState extends State<PlusScreen> {
         final id = _productId(durum);
         _log('queryProductDetails({"$id"}) çağrılıyor…');
         final resp = await _iap.queryProductDetails({id});
-        _log('yanıt: bulunan=${resp.productDetails.length} · '
-            'bulunamayan=${resp.notFoundIDs} · '
-            'error=${resp.error?.code}/${resp.error?.message}');
+        _log(
+          'yanıt: bulunan=${resp.productDetails.length} · '
+          'bulunamayan=${resp.notFoundIDs} · '
+          'error=${resp.error?.code}/${resp.error?.message}',
+        );
         if (resp.error != null) {
           notice = 'Mağaza yanıtı alınamadı: ${resp.error!.message}';
         } else if (resp.productDetails.isEmpty) {
           // Ürün mağazada tanımlı/onaylı değil ya da sandbox oturumu yok.
-          notice = 'Abonelik ürünü ("$id") mağazada bulunamadı. Mağaza '
+          notice =
+              'Abonelik ürünü ("$id") mağazada bulunamadı. Mağaza '
               'kurulumu (ürün onayı / sandbox oturumu) tamamlanınca etkinleşir.';
         } else {
           product = resp.productDetails.first;
-          _log('ürün OK: id=${product.id} · title=${product.title} · '
-              'price=${product.price} (${product.rawPrice} ${product.currencyCode})');
+          _log(
+            'ürün OK: id=${product.id} · title=${product.title} · '
+            'price=${product.price} (${product.rawPrice} ${product.currencyCode})',
+          );
         }
       }
     } catch (e, st) {
@@ -155,8 +177,10 @@ class _PlusScreenState extends State<PlusScreen> {
   // ---- Satın alma akışı -----------------------------------------------------
 
   Future<void> _buy() async {
-    _log('“Satın Al” tıklandı · girişli=${AuthService.instance.isLoggedIn} · '
-        'ürün=${_product?.id ?? "null"}');
+    _log(
+      '“Satın Al” tıklandı · girişli=${AuthService.instance.isLoggedIn} · '
+      'ürün=${_product?.id ?? "null"}',
+    );
     if (_busy) {
       _log('iptal: zaten işlem sürüyor (_busy)');
       return;
@@ -187,8 +211,10 @@ class _PlusScreenState extends State<PlusScreen> {
       _log('buyNonConsumable çağrılıyor (id=${product.id})…');
       // Abonelik → non-consumable olarak başlatılır.
       final started = await _iap.buyNonConsumable(purchaseParam: param);
-      _log('buyNonConsumable döndü: started=$started '
-          '(sonuç purchaseStream ile gelecek)');
+      _log(
+        'buyNonConsumable döndü: started=$started '
+        '(sonuç purchaseStream ile gelecek)',
+      );
       // Sonuç purchaseStream üzerinden _onPurchaseUpdates'e düşer.
     } catch (e) {
       _log('buyNonConsumable İSTİSNA: $e');
@@ -231,8 +257,10 @@ class _PlusScreenState extends State<PlusScreen> {
   Future<void> _onPurchaseUpdates(List<PurchaseDetails> purchases) async {
     _log('purchaseStream: ${purchases.length} güncelleme geldi');
     for (final p in purchases) {
-      _log('durum=${p.status.name} · id=${p.productID} · '
-          'pendingComplete=${p.pendingCompletePurchase} · err=${p.error?.message ?? "-"}');
+      _log(
+        'durum=${p.status.name} · id=${p.productID} · '
+        'pendingComplete=${p.pendingCompletePurchase} · err=${p.error?.message ?? "-"}',
+      );
       switch (p.status) {
         case PurchaseStatus.pending:
           if (mounted) setState(() => _busy = true);
@@ -240,8 +268,10 @@ class _PlusScreenState extends State<PlusScreen> {
         case PurchaseStatus.error:
           if (mounted) {
             setState(() => _busy = false);
-            _snack('Satın alma tamamlanamadı: '
-                '${p.error?.message ?? "bilinmeyen hata"}');
+            _snack(
+              'Satın alma tamamlanamadı: '
+              '${p.error?.message ?? "bilinmeyen hata"}',
+            );
           }
           if (p.pendingCompletePurchase) await _iap.completePurchase(p);
           break;
@@ -275,9 +305,11 @@ class _PlusScreenState extends State<PlusScreen> {
       final token = p.verificationData.serverVerificationData;
       final pref = token.length > 8 ? token.substring(0, 8) : token;
       // 'MII...' → base64 makbuz (StoreKit 1, doğru). 'eyJ...' → JWS (StoreKit 2).
-      _log('POST /uye/plus/dogrula · platform=${Platform.operatingSystem} · '
-          'token.len=${token.length} · önek="$pref…" · '
-          'source=${p.verificationData.source}');
+      _log(
+        'POST /uye/plus/dogrula · platform=${Platform.operatingSystem} · '
+        'token.len=${token.length} · önek="$pref…" · '
+        'source=${p.verificationData.source}',
+      );
       if (Platform.isIOS) {
         await AuthService.instance.plusDogrula(platform: 'ios', receipt: token);
       } else {
@@ -296,8 +328,10 @@ class _PlusScreenState extends State<PlusScreen> {
       _log('doğrulama PlusException: ${e.message} (detail=${e.detail})');
       if (!mounted) return false;
       setState(() => _busy = false);
-      _snack('Doğrulama başarısız: ${e.message}'
-          '${e.detail != null ? " [${e.detail}]" : ""}');
+      _snack(
+        'Doğrulama başarısız: ${e.message}'
+        '${e.detail != null ? " [${e.detail}]" : ""}',
+      );
       return false;
     } catch (e) {
       _log('doğrulama İSTİSNA: $e');
@@ -344,13 +378,18 @@ class _PlusScreenState extends State<PlusScreen> {
                 color: Color(0xFFEAF8EF),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.workspace_premium,
-                  size: 38, color: AppColors.open),
+              child: const Icon(
+                Icons.workspace_premium,
+                size: 38,
+                color: AppColors.open,
+              ),
             ),
             const SizedBox(height: 16),
-            const Text('Gezgah Plus aktif!',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+            const Text(
+              'Gezgah Plus aktif!',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 8),
             const Text(
               'Artık avatar yükleyebilir, gezi rotaları oluşturabilir ve '
@@ -370,10 +409,13 @@ class _PlusScreenState extends State<PlusScreen> {
                 foregroundColor: Colors.white,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              child: const Text('Harika',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
+              child: const Text(
+                'Harika',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
             ),
           ),
         ],
@@ -417,11 +459,14 @@ class _PlusScreenState extends State<PlusScreen> {
           const Spacer(),
           TextButton(
             onPressed: _busy ? null : _restore,
-            child: const Text('Geri Yükle',
-                style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primary)),
+            child: const Text(
+              'Geri Yükle',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
           ),
         ],
       ),
@@ -453,14 +498,19 @@ class _PlusScreenState extends State<PlusScreen> {
                 ),
               ],
             ),
-            child: const Icon(Icons.workspace_premium,
-                color: Colors.white, size: 44),
+            child: const Icon(
+              Icons.workspace_premium,
+              color: Colors.white,
+              size: 44,
+            ),
           ),
         ),
         const SizedBox(height: 18),
         const Center(
-          child: Text('Gezgah Plus',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600)),
+          child: Text(
+            'Gezgah Plus',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
+          ),
         ),
         const SizedBox(height: 6),
         const Center(
@@ -491,33 +541,40 @@ class _PlusScreenState extends State<PlusScreen> {
             padding: const EdgeInsets.fromLTRB(14, 12, 6, 6),
             child: Row(
               children: [
-                const Icon(Icons.bug_report_outlined,
-                    size: 18, color: Color(0xFF7DB7FF)),
+                const Icon(
+                  Icons.bug_report_outlined,
+                  size: 18,
+                  color: Color(0xFF7DB7FF),
+                ),
                 const SizedBox(width: 8),
                 const Expanded(
-                  child: Text('IAP Debug',
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white)),
+                  child: Text(
+                    'IAP Debug',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
                 IconButton(
                   tooltip: 'Kopyala',
                   visualDensity: VisualDensity.compact,
                   onPressed: () {
-                    Clipboard.setData(
-                        ClipboardData(text: _debug.join('\n')));
+                    Clipboard.setData(ClipboardData(text: _debug.join('\n')));
                     _snack('Debug günlüğü panoya kopyalandı.');
                   },
-                  icon: const Icon(Icons.copy,
-                      size: 16, color: Colors.white70),
+                  icon: const Icon(Icons.copy, size: 16, color: Colors.white70),
                 ),
                 IconButton(
                   tooltip: 'Temizle',
                   visualDensity: VisualDensity.compact,
                   onPressed: () => setState(() => _debug.clear()),
-                  icon: const Icon(Icons.delete_outline,
-                      size: 18, color: Colors.white70),
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    size: 18,
+                    color: Colors.white70,
+                  ),
                 ),
                 IconButton(
                   tooltip: 'Ürünü yeniden sorgula',
@@ -526,8 +583,11 @@ class _PlusScreenState extends State<PlusScreen> {
                     setState(() => _loading = true);
                     _init();
                   },
-                  icon: const Icon(Icons.refresh,
-                      size: 18, color: Colors.white70),
+                  icon: const Icon(
+                    Icons.refresh,
+                    size: 18,
+                    color: Colors.white70,
+                  ),
                 ),
               ],
             ),
@@ -537,8 +597,10 @@ class _PlusScreenState extends State<PlusScreen> {
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
             child: _debug.isEmpty
-                ? const Text('— henüz kayıt yok —',
-                    style: TextStyle(fontSize: 11.5, color: Colors.white38))
+                ? const Text(
+                    '— henüz kayıt yok —',
+                    style: TextStyle(fontSize: 11.5, color: Colors.white38),
+                  )
                 : SingleChildScrollView(
                     reverse: true,
                     child: SelectableText(
@@ -571,8 +633,10 @@ class _PlusScreenState extends State<PlusScreen> {
         children: [
           const Icon(Icons.verified, color: AppColors.open, size: 40),
           const SizedBox(height: 12),
-          const Text('Plus üyeliğin aktif',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          const Text(
+            'Plus üyeliğin aktif',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
           if (bitis != null && bitis.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
@@ -593,17 +657,17 @@ class _PlusScreenState extends State<PlusScreen> {
       (
         Icons.face_retouching_natural,
         'Avatar Yükle',
-        'Profiline kişisel bir fotoğraf ekle.'
+        'Profiline kişisel bir fotoğraf ekle.',
       ),
       (
         Icons.route,
         'Gezi Rotaları',
-        'Sıralı mekan listeleri oluştur, her durağa notunu ekle.'
+        'Sıralı mekan listeleri oluştur, her durağa notunu ekle.',
       ),
       (
         Icons.auto_awesome,
         'Kedy Yapay Zeka',
-        'Mekan önerileri al, rezervasyon yap, menüleri sor.'
+        'Mekan önerileri al, rezervasyon yap, menüleri sor.',
       ),
     ];
     return [
@@ -633,15 +697,22 @@ class _PlusScreenState extends State<PlusScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(it.$2,
-                          style: const TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.w600)),
+                      Text(
+                        it.$2,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       const SizedBox(height: 3),
-                      Text(it.$3,
-                          style: const TextStyle(
-                              fontSize: 12.5,
-                              height: 1.4,
-                              color: AppColors.muted)),
+                      Text(
+                        it.$3,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          height: 1.4,
+                          color: AppColors.muted,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -656,12 +727,20 @@ class _PlusScreenState extends State<PlusScreen> {
     final active = AuthService.instance.user.value?.isPlus ?? _durum.aktif;
     return Container(
       padding: EdgeInsets.fromLTRB(
-          22, 14, 22, 16 + MediaQuery.of(context).viewPadding.bottom),
+        22,
+        14,
+        22,
+        16 + MediaQuery.of(context).viewPadding.bottom,
+      ),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         boxShadow: [
-          BoxShadow(color: Color(0x14000000), blurRadius: 16, offset: Offset(0, -4)),
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 16,
+            offset: Offset(0, -4),
+          ),
         ],
       ),
       child: active
@@ -674,10 +753,13 @@ class _PlusScreenState extends State<PlusScreen> {
                   foregroundColor: AppColors.primary,
                   side: const BorderSide(color: AppColors.primary),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                 ),
-                child: const Text('Kapat',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                child: const Text(
+                  'Kapat',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
               ),
             )
           : Column(
@@ -688,12 +770,18 @@ class _PlusScreenState extends State<PlusScreen> {
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
-                    Text(_priceLabel,
-                        style: const TextStyle(
-                            fontSize: 22, fontWeight: FontWeight.w600)),
+                    Text(
+                      _priceLabel,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const SizedBox(width: 4),
-                    const Text('/ yıl',
-                        style: TextStyle(fontSize: 14, color: AppColors.muted)),
+                    const Text(
+                      '/ yıl',
+                      style: TextStyle(fontSize: 14, color: AppColors.muted),
+                    ),
                   ],
                 ),
                 if (_storeNotice != null) ...[
@@ -707,15 +795,21 @@ class _PlusScreenState extends State<PlusScreen> {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.info_outline,
-                            size: 18, color: AppColors.closing),
+                        const Icon(
+                          Icons.info_outline,
+                          size: 18,
+                          color: AppColors.closing,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(_storeNotice!,
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  height: 1.4,
-                                  color: AppColors.closing)),
+                          child: Text(
+                            _storeNotice!,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              height: 1.4,
+                              color: AppColors.closing,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -732,18 +826,25 @@ class _PlusScreenState extends State<PlusScreen> {
                       foregroundColor: Colors.white,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
                     child: _busy
                         ? const SizedBox(
                             width: 22,
                             height: 22,
                             child: CircularProgressIndicator(
-                                strokeWidth: 2.4, color: Colors.white),
+                              strokeWidth: 2.4,
+                              color: Colors.white,
+                            ),
                           )
-                        : const Text('Satın Al',
+                        : const Text(
+                            'Satın Al',
                             style: TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.w600)),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -764,23 +865,32 @@ class _PlusScreenState extends State<PlusScreen> {
   /// Abonelik zorunluluğu: Kullanım Koşulları + Gizlilik Politikası linkleri.
   Widget _legalLinks() {
     const linkStyle = TextStyle(
-        fontSize: 11,
-        color: AppColors.primary,
-        fontWeight: FontWeight.w600,
-        decoration: TextDecoration.underline);
+      fontSize: 11,
+      color: AppColors.primary,
+      fontWeight: FontWeight.w600,
+      decoration: TextDecoration.underline,
+    );
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         GestureDetector(
-          onTap: () => showLegalSheet(context, 'Kullanıcı Sözleşmesi',
-              slug: 'kullanici-sozlesmesi'),
+          onTap: () => showLegalSheet(
+            context,
+            'Kullanıcı Sözleşmesi',
+            slug: 'kullanici-sozlesmesi',
+          ),
           child: const Text('Kullanım Koşulları', style: linkStyle),
         ),
-        const Text('  ·  ',
-            style: TextStyle(fontSize: 11, color: AppColors.muted)),
+        const Text(
+          '  ·  ',
+          style: TextStyle(fontSize: 11, color: AppColors.muted),
+        ),
         GestureDetector(
-          onTap: () => showLegalSheet(context, 'Gizlilik Politikası',
-              slug: 'gizlilik-politikasi'),
+          onTap: () => showLegalSheet(
+            context,
+            'Gizlilik Politikası',
+            slug: 'gizlilik-politikasi',
+          ),
           child: const Text('Gizlilik Politikası', style: linkStyle),
         ),
       ],

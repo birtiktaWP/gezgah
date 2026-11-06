@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../data/auth_service.dart';
 import '../data/consent_service.dart';
 import '../data/models.dart';
+import '../data/push_service.dart';
 import '../navigation/main_nav.dart';
 import '../theme/app_theme.dart';
 import '../widgets/category_sheet.dart';
@@ -33,7 +34,8 @@ class _MainShellState extends State<MainShell> {
   int _index = 0;
   bool _kedyOpen = false;
   bool _consentOpen = false; // sözleşme onay paneli açık mı
-  bool _wasLoggedIn = false; // önceki oturum durumu (giriş geçişini yakalamak için)
+  bool _wasLoggedIn =
+      false; // önceki oturum durumu (giriş geçişini yakalamak için)
 
   @override
   void initState() {
@@ -44,7 +46,16 @@ class _MainShellState extends State<MainShell> {
     _wasLoggedIn = AuthService.instance.isLoggedIn;
     AuthService.instance.user.addListener(_onAuthChanged);
     // Açılışta oturum geri geldiyse sözleşme onayını kontrol et.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _checkConsent());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkConsent();
+      // Uygulama bir bildirime dokunularak açıldıysa ilgili sayfaya git.
+      PushService.instance.handlePending();
+    });
+    // Bildirim izni: ana sayfa yerleştikten biraz sonra, bir kez (sözleşme
+    // paneli açıksa onun üstüne çıkmasın).
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted && !_consentOpen) PushService.instance.askPermissionOnce();
+    });
   }
 
   /// Üye girişliyse sözleşme onayını kontrol eder; onaylanmamışsa kapatılamayan
@@ -113,7 +124,9 @@ class _MainShellState extends State<MainShell> {
         break;
       case 3:
         Navigator.push(
-            context, MaterialPageRoute(builder: (_) => const EventsScreen()));
+          context,
+          MaterialPageRoute(builder: (_) => const EventsScreen()),
+        );
         break;
       case 4:
         _openAccount();
@@ -146,13 +159,17 @@ class _MainShellState extends State<MainShell> {
   /// Footer "Kategori": alttan kategori paneli açar; seçilen kategori liste
   /// sayfasında (CategoryScreen) açılır.
   void _openCategorySheet() {
-    showCategorySheet(context, onSelect: (id, name) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (_) => CategoryScreen(categoryId: id, title: name)),
-      );
-    });
+    showCategorySheet(
+      context,
+      onSelect: (id, name) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CategoryScreen(categoryId: id, title: name),
+          ),
+        );
+      },
+    );
   }
 
   /// Ana sayfadaki arama kutusu için gelişmiş arama modalı.
@@ -167,7 +184,9 @@ class _MainShellState extends State<MainShell> {
 
   void _openDetail(Place p) {
     Navigator.push(
-        context, detailRoute(builder: (_) => DetailScreen(place: p)));
+      context,
+      detailRoute(builder: (_) => DetailScreen(place: p)),
+    );
   }
 
   void _openNotifications() => showNotifications(context);
@@ -230,7 +249,9 @@ class _MainShellState extends State<MainShell> {
               alignment: Alignment.bottomCenter,
               child: SafeArea(
                 child: FloatingTabBar(
-                    activeIndex: _index, onTap: MainNav.instance.select),
+                  activeIndex: _index,
+                  onTap: MainNav.instance.select,
+                ),
               ),
             ),
           ],

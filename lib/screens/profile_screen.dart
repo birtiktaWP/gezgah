@@ -107,46 +107,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 18),
             _stats(),
             const SizedBox(height: 8),
-            _plusGroup(),
+            // Plus satışı şimdilik gizli (kPlusSatisAcik).
+            if (kPlusSatisAcik) _plusGroup(),
             _group('Profilim', [
-              _row(Icons.person_outline, 'Profil Bilgileri',
-                  'Ad, e-posta, telefon',
-                  onTap: _openProfileEdit),
-              _row(Icons.favorite_border, 'Favorilerim',
-                  'Kaydettiğin mekanlar',
-                  onTap: _openFavorites),
-              _row(Icons.route_outlined, 'Gezi Rotalarım',
-                  'Sıralı mekan listelerin',
-                  onTap: _openRoutes),
+              _row(
+                Icons.person_outline,
+                'Profil Bilgileri',
+                'Ad, e-posta, telefon',
+                onTap: _openProfileEdit,
+              ),
+              _row(
+                Icons.favorite_border,
+                'Favorilerim',
+                'Kaydettiğin mekanlar',
+                onTap: _openFavorites,
+              ),
+              _row(
+                Icons.route_outlined,
+                'Gezi Rotalarım',
+                'Sıralı mekan listelerin',
+                onTap: _openRoutes,
+              ),
             ]),
             _group('Sosyal', [
-              _row(Icons.group_outlined, 'Takipçiler',
-                  'Seni takip edenler',
-                  onTap: () => _openFollows(0)),
-              _row(Icons.person_add_alt_1_outlined, 'Takip Edilenler',
-                  'Takip ettiğin kişiler',
-                  onTap: () => _openFollows(1)),
+              _row(
+                Icons.group_outlined,
+                'Takipçiler',
+                'Seni takip edenler',
+                onTap: () => _openFollows(0),
+              ),
+              _row(
+                Icons.person_add_alt_1_outlined,
+                'Takip Edilenler',
+                'Takip ettiğin kişiler',
+                onTap: () => _openFollows(1),
+              ),
             ]),
             _group('Sözleşmeler', [
               if (_sozlesmeler.isNotEmpty)
                 for (final s in _sozlesmeler)
-                  _row(_docIcon(s.baslik), s.baslik,
-                      s.ozet.isNotEmpty ? s.ozet : _docSub(s.baslik),
-                      onTap: () => _openDoc(s.baslik, slug: s.slug))
+                  _row(
+                    _docIcon(s.baslik),
+                    s.baslik,
+                    s.ozet.isNotEmpty ? s.ozet : _docSub(s.baslik),
+                    onTap: () => _openDoc(s.baslik, slug: s.slug),
+                  )
               else
                 for (final title in _legalDocs)
-                  _row(_docIcon(title), title, _docSub(title),
-                      onTap: () => _openDoc(title)),
+                  _row(
+                    _docIcon(title),
+                    title,
+                    _docSub(title),
+                    onTap: () => _openDoc(title),
+                  ),
             ]),
             _group(null, [
-              _row(Icons.logout, 'Çıkış Yap', null,
-                  danger: true, onTap: _confirmLogout),
+              _row(
+                Icons.logout,
+                'Çıkış Yap',
+                null,
+                danger: true,
+                onTap: _confirmLogout,
+              ),
             ]),
             const Padding(
               padding: EdgeInsets.only(top: 6),
               child: Center(
-                child: Text('Gezgah · Sürüm 1.0.0',
-                    style: TextStyle(fontSize: 12, color: AppColors.muted)),
+                child: Text(
+                  'Gezgah · Sürüm 1.0.0',
+                  style: TextStyle(fontSize: 12, color: AppColors.muted),
+                ),
               ),
             ),
           ],
@@ -161,8 +191,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Çıkış Yap'),
-        content:
-            const Text('Hesabından çıkış yapmak istediğine emin misin?'),
+        content: const Text('Hesabından çıkış yapmak istediğine emin misin?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -170,9 +199,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Çıkış Yap',
-                style: TextStyle(
-                    color: AppColors.closing, fontWeight: FontWeight.w600)),
+            child: const Text(
+              'Çıkış Yap',
+              style: TextStyle(
+                color: AppColors.closing,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
@@ -237,15 +270,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             Row(
               children: [
-                GlassButton(
-                    icon: Icons.chevron_left, onTap: widget.onGoHome),
+                GlassButton(icon: Icons.chevron_left, onTap: widget.onGoHome),
                 const Expanded(
                   child: Center(
-                    child: Text('Hesabım',
-                        style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white)),
+                    child: Text(
+                      'Hesabım',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ),
                 GlassButton(
@@ -254,7 +289,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onTap: widget.onOpenNotifications,
                 ),
                 const SizedBox(width: 10),
-                GlassButton(icon: Icons.settings_outlined, onTap: _openSettings),
+                GlassButton(
+                  icon: Icons.settings_outlined,
+                  onTap: _openSettings,
+                ),
               ],
             ),
             const SizedBox(height: 22),
@@ -287,16 +325,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Colors.white.withValues(alpha: 0.2),
-                    border:
-                        Border.all(color: Colors.white.withValues(alpha: 0.4)),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.4),
+                    ),
                   ),
                   child: (_user?.avatar.isNotEmpty ?? false)
                       ? NetImage(_user!.avatar)
-                      : Text(_initials,
+                      : Text(
+                          _initials,
                           style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white)),
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
                 ),
                 if (_user != null)
                   Positioned(
@@ -308,10 +350,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.primary, width: 1.5),
+                        border: Border.all(
+                          color: AppColors.primary,
+                          width: 1.5,
+                        ),
                       ),
-                      child: const Icon(Icons.camera_alt,
-                          size: 11, color: AppColors.primary),
+                      child: const Icon(
+                        Icons.camera_alt,
+                        size: 11,
+                        color: AppColors.primary,
+                      ),
                     ),
                   ),
               ],
@@ -322,17 +370,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_displayName,
-                    style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white)),
+                Text(
+                  _displayName,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
                 if (_displayEmail.isNotEmpty) ...[
                   const SizedBox(height: 2),
-                  Text(_displayEmail,
-                      style: TextStyle(
-                          fontSize: 12.5,
-                          color: Colors.white.withValues(alpha: 0.8))),
+                  Text(
+                    _displayEmail,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: Colors.white.withValues(alpha: 0.8),
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -340,8 +394,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           GestureDetector(
             onTap: _openProfileEdit,
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
@@ -351,11 +404,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   Icon(Icons.edit_outlined, size: 15, color: AppColors.primary),
                   SizedBox(width: 5),
-                  Text('Düzenle',
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary)),
+                  Text(
+                    'Düzenle',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -421,12 +477,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Expanded(
       child: Column(
         children: [
-          Text(value,
-              style: const TextStyle(
-                  fontSize: 20, fontWeight: FontWeight.w600)),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 2),
-          Text(label,
-              style: const TextStyle(fontSize: 11, color: AppColors.muted)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 11, color: AppColors.muted),
+          ),
         ],
       ),
     );
@@ -444,11 +503,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (title != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: Text(title,
-                  style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.ink)),
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.ink,
+                ),
+              ),
             ),
           Container(
             decoration: BoxDecoration(
@@ -463,8 +525,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _row(IconData icon, String title, String? sub,
-      {bool danger = false, VoidCallback? onTap}) {
+  Widget _row(
+    IconData icon,
+    String title,
+    String? sub, {
+    bool danger = false,
+    VoidCallback? onTap,
+  }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
@@ -476,36 +543,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                  color: danger
-                      ? const Color(0x1AE0533D)
-                      : AppColors.primarySoft,
-                  borderRadius: BorderRadius.circular(11)),
-              child: Icon(icon,
-                  size: 19,
-                  color: danger ? AppColors.closing : AppColors.primary),
+                color: danger ? const Color(0x1AE0533D) : AppColors.primarySoft,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Icon(
+                icon,
+                size: 19,
+                color: danger ? AppColors.closing : AppColors.primary,
+              ),
             ),
             const SizedBox(width: 13),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: danger ? AppColors.closing : AppColors.ink)),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: danger ? AppColors.closing : AppColors.ink,
+                    ),
+                  ),
                   if (sub != null) ...[
                     const SizedBox(height: 2),
-                    Text(sub,
-                        style: const TextStyle(
-                            fontSize: 12.5, color: AppColors.muted)),
+                    Text(
+                      sub,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.muted,
+                      ),
+                    ),
                   ],
                 ],
               ),
             ),
             if (!danger)
-              const Icon(Icons.chevron_right,
-                  size: 20, color: AppColors.primary),
+              const Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: AppColors.primary,
+              ),
           ],
         ),
       ),
@@ -567,7 +645,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (mounted) await openFollows(context, initialTab: tab);
   }
 
-
   // ---- Gezgah Plus ----
 
   /// Plus üyelik kartı: aktifse "Aktif" rozeti, değilse tanıtım + geçiş.
@@ -598,27 +675,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   color: Colors.white.withValues(alpha: 0.16),
                   borderRadius: BorderRadius.circular(13),
                 ),
-                child: const Icon(Icons.workspace_premium,
-                    color: Colors.white, size: 24),
+                child: const Icon(
+                  Icons.workspace_premium,
+                  color: Colors.white,
+                  size: 24,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Gezgah Plus',
-                        style: TextStyle(
-                            fontSize: 15.5,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white)),
+                    const Text(
+                      'Gezgah Plus',
+                      style: TextStyle(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
                     const SizedBox(height: 3),
                     Text(
                       isPlus
                           ? 'Üyeliğin aktif · avatar, gezi rotaları, Kedy'
                           : 'Avatar, gezi rotaları ve Kedy\u2019yi aç',
                       style: TextStyle(
-                          fontSize: 12.5,
-                          color: Colors.white.withValues(alpha: 0.85)),
+                        fontSize: 12.5,
+                        color: Colors.white.withValues(alpha: 0.85),
+                      ),
                     ),
                   ],
                 ),
@@ -626,16 +710,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
               if (isPlus)
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 5),
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(999),
                   ),
-                  child: const Text('Aktif',
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary)),
+                  child: const Text(
+                    'Aktif',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                    ),
+                  ),
                 )
               else
                 const Icon(Icons.chevron_right, color: Colors.white, size: 22),
@@ -684,23 +773,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.photo_library_outlined,
-                  color: AppColors.primary),
+              leading: const Icon(
+                Icons.photo_library_outlined,
+                color: AppColors.primary,
+              ),
               title: const Text('Galeriden seç'),
               onTap: () => Navigator.pop(ctx, 'gallery'),
             ),
             ListTile(
-              leading:
-                  const Icon(Icons.camera_alt_outlined, color: AppColors.primary),
+              leading: const Icon(
+                Icons.camera_alt_outlined,
+                color: AppColors.primary,
+              ),
               title: const Text('Fotoğraf çek'),
               onTap: () => Navigator.pop(ctx, 'camera'),
             ),
             if (u.avatar.isNotEmpty)
               ListTile(
-                leading:
-                    const Icon(Icons.delete_outline, color: AppColors.closing),
-                title: const Text('Avatarı kaldır',
-                    style: TextStyle(color: AppColors.closing)),
+                leading: const Icon(
+                  Icons.delete_outline,
+                  color: AppColors.closing,
+                ),
+                title: const Text(
+                  'Avatarı kaldır',
+                  style: TextStyle(color: AppColors.closing),
+                ),
                 onTap: () => Navigator.pop(ctx, 'remove'),
               ),
             const SizedBox(height: 8),
@@ -711,18 +808,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (action == null || !mounted) return;
 
     if (action == 'remove') {
-      await _runAvatar(() => AuthService.instance.avatarSil(),
-          success: 'Avatar kaldırıldı.');
+      await _runAvatar(
+        () => AuthService.instance.avatarSil(),
+        success: 'Avatar kaldırıldı.',
+      );
       return;
     }
 
-    final source =
-        action == 'camera' ? ImageSource.camera : ImageSource.gallery;
+    final source = action == 'camera'
+        ? ImageSource.camera
+        : ImageSource.gallery;
     final bytes = await _cropAvatar(source);
     if (bytes == null || !mounted) return;
     final b64 = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-    await _runAvatar(() => AuthService.instance.avatarYukle(b64),
-        success: 'Avatar güncellendi.');
+    await _runAvatar(
+      () => AuthService.instance.avatarYukle(b64),
+      success: 'Avatar güncellendi.',
+    );
   }
 
   /// Avatar için görsel seçip **1:1 kare** kırpar, JPEG bytes döner (iptalde
@@ -772,8 +874,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   /// Avatar işlemini yükleme göstergesiyle çalıştırır; Plus hatasında paywall.
-  Future<void> _runAvatar(Future<void> Function() run,
-      {required String success}) async {
+  Future<void> _runAvatar(
+    Future<void> Function() run, {
+    required String success,
+  }) async {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -784,8 +888,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (!mounted) return;
       Navigator.pop(context); // yükleme
       setState(() {});
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(success)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(success)));
     } on PlusRequiredException {
       if (!mounted) return;
       Navigator.pop(context);
@@ -794,13 +899,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } on AuthException catch (e) {
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (_) {
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('İşlem tamamlanamadı.')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('İşlem tamamlanamadı.')));
     }
   }
 }
@@ -810,8 +917,11 @@ class _SheetScaffold extends StatelessWidget {
   final String title;
   final Widget child;
   final bool backArrow;
-  const _SheetScaffold(
-      {required this.title, required this.child, this.backArrow = false});
+  const _SheetScaffold({
+    required this.title,
+    required this.child,
+    this.backArrow = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -829,13 +939,19 @@ class _SheetScaffold extends StatelessWidget {
               children: [
                 IconButton(
                   onPressed: () => Navigator.pop(context),
-                  icon: Icon(backArrow ? Icons.chevron_left : Icons.close,
-                      color: AppColors.ink),
+                  icon: Icon(
+                    backArrow ? Icons.chevron_left : Icons.close,
+                    color: AppColors.ink,
+                  ),
                 ),
                 Expanded(
-                  child: Text(title,
-                      style: const TextStyle(
-                          fontSize: 17, fontWeight: FontWeight.w600)),
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -866,11 +982,14 @@ class _SettingsSheetState extends State<_SettingsSheet> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
         children: [
-          const Text('Tercihler',
-              style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.ink)),
+          const Text(
+            'Tercihler',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppColors.ink,
+            ),
+          ),
           const SizedBox(height: 10),
           Container(
             decoration: BoxDecoration(
@@ -880,16 +999,32 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             ),
             child: Column(
               children: [
-                _switchRow(Icons.notifications_none, 'Bildirimler',
-                    'Kampanya ve etkinlik bildirimleri', _notif,
-                    (v) => setState(() => _notif = v)),
-                _switchRow(Icons.location_on_outlined, 'Konum İzni',
-                    'Yakınındaki mekanları göster', _location,
-                    (v) => setState(() => _location = v)),
-                _navRow(Icons.language, 'Dil', 'Türkçe',
-                    onTap: _showLanguageSheet),
-                _navRow(Icons.chat_outlined, 'WhatsApp Destek',
-                    'Bize WhatsApp\u2019tan yaz', onTap: _openWhatsApp),
+                _switchRow(
+                  Icons.notifications_none,
+                  'Bildirimler',
+                  'Kampanya ve etkinlik bildirimleri',
+                  _notif,
+                  (v) => setState(() => _notif = v),
+                ),
+                _switchRow(
+                  Icons.location_on_outlined,
+                  'Konum İzni',
+                  'Yakınındaki mekanları göster',
+                  _location,
+                  (v) => setState(() => _location = v),
+                ),
+                _navRow(
+                  Icons.language,
+                  'Dil',
+                  'Türkçe',
+                  onTap: _showLanguageSheet,
+                ),
+                _navRow(
+                  Icons.chat_outlined,
+                  'WhatsApp Destek',
+                  'Bize WhatsApp\u2019tan yaz',
+                  onTap: _openWhatsApp,
+                ),
               ],
             ),
           ),
@@ -899,13 +1034,16 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             child: OutlinedButton.icon(
               onPressed: _confirmDeleteAccount,
               icon: const Icon(Icons.delete_outline, size: 20),
-              label: const Text('Hesabımı Sil',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+              label: const Text(
+                'Hesabımı Sil',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.closing,
                 side: const BorderSide(color: AppColors.closing),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
             ),
           ),
@@ -937,9 +1075,10 @@ class _SettingsSheetState extends State<_SettingsSheet> {
               padding: EdgeInsets.fromLTRB(20, 18, 20, 6),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text('Dil',
-                    style: TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w600)),
+                child: Text(
+                  'Dil',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
             for (final lang in const [
@@ -969,8 +1108,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -981,20 +1119,25 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                 color: Color(0xFFEAF8EF),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.check_circle,
-                  size: 40, color: AppColors.open),
+              child: const Icon(
+                Icons.check_circle,
+                size: 40,
+                color: AppColors.open,
+              ),
             ),
             const SizedBox(height: 16),
-            const Text('Talebiniz alınmıştır',
-                textAlign: TextAlign.center,
-                style:
-                    TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+            const Text(
+              'Talebiniz alınmıştır',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 8),
             const Text(
-                'Hesap silme talebin alındı. İşlem tamamlandığında '
-                'bilgilendirileceksin.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13.5, color: AppColors.muted)),
+              'Hesap silme talebin alındı. İşlem tamamlandığında '
+              'bilgilendirileceksin.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13.5, color: AppColors.muted),
+            ),
           ],
         ),
         actions: [
@@ -1007,10 +1150,13 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                 foregroundColor: Colors.white,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              child: const Text('Tamam',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
+              child: const Text(
+                'Tamam',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
             ),
           ),
         ],
@@ -1022,8 +1168,13 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     navigator.pop();
   }
 
-  Widget _switchRow(IconData icon, String title, String sub, bool value,
-      ValueChanged<bool> onChanged) {
+  Widget _switchRow(
+    IconData icon,
+    String title,
+    String sub,
+    bool value,
+    ValueChanged<bool> onChanged,
+  ) {
     return Padding(
       padding: const EdgeInsets.all(14),
       child: Row(
@@ -1042,7 +1193,12 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     );
   }
 
-  Widget _navRow(IconData icon, String title, String sub, {VoidCallback? onTap}) {
+  Widget _navRow(
+    IconData icon,
+    String title,
+    String sub, {
+    VoidCallback? onTap,
+  }) {
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -1060,25 +1216,26 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   }
 
   Widget _iconBox(IconData icon) => Container(
-        width: 38,
-        height: 38,
-        decoration: BoxDecoration(
-            color: AppColors.primarySoft,
-            borderRadius: BorderRadius.circular(11)),
-        child: Icon(icon, size: 19, color: AppColors.primary),
-      );
+    width: 38,
+    height: 38,
+    decoration: BoxDecoration(
+      color: AppColors.primarySoft,
+      borderRadius: BorderRadius.circular(11),
+    ),
+    child: Icon(icon, size: 19, color: AppColors.primary),
+  );
 
   Widget _texts(String title, String sub) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title,
-              style:
-                  const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 2),
-          Text(sub,
-              style: const TextStyle(fontSize: 12.5, color: AppColors.muted)),
-        ],
-      );
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        title,
+        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+      ),
+      const SizedBox(height: 2),
+      Text(sub, style: const TextStyle(fontSize: 12.5, color: AppColors.muted)),
+    ],
+  );
 }
 
 /// Sözleşme metnini modal içinde gösterir. [slug] verilirse gövde
@@ -1136,7 +1293,11 @@ class _LegalSheetState extends State<_LegalSheet> {
           ? (_loading ? _spinner() : _placeholder())
           : ListView.separated(
               padding: EdgeInsets.fromLTRB(
-                  22, 20, 22, 28 + MediaQuery.of(context).viewInsets.bottom),
+                22,
+                20,
+                22,
+                28 + MediaQuery.of(context).viewInsets.bottom,
+              ),
               itemCount: sections.length,
               separatorBuilder: (_, __) => const SizedBox(height: 20),
               itemBuilder: (_, i) => _section(sections[i]),
@@ -1145,13 +1306,15 @@ class _LegalSheetState extends State<_LegalSheet> {
   }
 
   Widget _spinner() => const Center(
-        child: SizedBox(
-          width: 26,
-          height: 26,
-          child: CircularProgressIndicator(
-              strokeWidth: 2.5, color: AppColors.primary),
-        ),
-      );
+    child: SizedBox(
+      width: 26,
+      height: 26,
+      child: CircularProgressIndicator(
+        strokeWidth: 2.5,
+        color: AppColors.primary,
+      ),
+    ),
+  );
 
   Widget _placeholder() {
     return const Center(
@@ -1162,9 +1325,11 @@ class _LegalSheetState extends State<_LegalSheet> {
           children: [
             Icon(Icons.description_outlined, size: 40, color: AppColors.muted),
             SizedBox(height: 12),
-            Text('Bu metin şu an görüntülenemiyor.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: AppColors.muted)),
+            Text(
+              'Bu metin şu an görüntülenemiyor.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: AppColors.muted),
+            ),
           ],
         ),
       ),
@@ -1176,11 +1341,14 @@ class _LegalSheetState extends State<_LegalSheet> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (s.heading != null) ...[
-          Text(s.heading!,
-              style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.ink)),
+          Text(
+            s.heading!,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppColors.ink,
+            ),
+          ),
           const SizedBox(height: 10),
         ],
         for (var i = 0; i < s.paragraphs.length; i++) ...[
@@ -1194,19 +1362,29 @@ class _LegalSheetState extends State<_LegalSheet> {
   /// `**...**` işaretli kısımları kalın gösteren basit paragraf oluşturucu.
   Widget _paragraph(String text) {
     const base = TextStyle(
-        fontSize: 13.5, height: 1.55, color: AppColors.muted);
+      fontSize: 13.5,
+      height: 1.55,
+      color: AppColors.muted,
+    );
     final spans = <TextSpan>[];
     final parts = text.split('**');
     for (var i = 0; i < parts.length; i++) {
       if (parts[i].isEmpty) continue;
-      spans.add(TextSpan(
-        text: parts[i],
-        style: i.isOdd
-            ? const TextStyle(fontWeight: FontWeight.w600, color: AppColors.ink)
-            : null,
-      ));
+      spans.add(
+        TextSpan(
+          text: parts[i],
+          style: i.isOdd
+              ? const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.ink,
+                )
+              : null,
+        ),
+      );
     }
-    return RichText(text: TextSpan(style: base, children: spans));
+    return RichText(
+      text: TextSpan(style: base, children: spans),
+    );
   }
 }
 
@@ -1221,12 +1399,15 @@ class _ProfileEditSheet extends StatefulWidget {
 }
 
 class _ProfileEditSheetState extends State<_ProfileEditSheet> {
-  late final TextEditingController _isimC =
-      TextEditingController(text: widget.user.isim);
-  late final TextEditingController _soyisimC =
-      TextEditingController(text: widget.user.soyisim);
-  late final TextEditingController _emailC =
-      TextEditingController(text: widget.user.email);
+  late final TextEditingController _isimC = TextEditingController(
+    text: widget.user.isim,
+  );
+  late final TextEditingController _soyisimC = TextEditingController(
+    text: widget.user.soyisim,
+  );
+  late final TextEditingController _emailC = TextEditingController(
+    text: widget.user.email,
+  );
   // Numara, uluslararası alan tarafından (initialValue) doldurulur.
   final TextEditingController _telefonC = TextEditingController();
 
@@ -1262,7 +1443,9 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
     if (raw.isEmpty) return;
     if (!raw.startsWith('+')) {
       // Kayıtlı ülke kodunu kullan (yoksa +90); baştaki 0'ı at.
-      final dial = widget.user.ulkeKodu.isNotEmpty ? widget.user.ulkeKodu : '+90';
+      final dial = widget.user.ulkeKodu.isNotEmpty
+          ? widget.user.ulkeKodu
+          : '+90';
       var d = raw.replaceAll(RegExp(r'\D'), '');
       if (d.startsWith('0')) d = d.substring(1);
       raw = '$dial$d';
@@ -1284,8 +1467,11 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
   int _maxDigitsFor(String iso) {
     try {
       final util = libphone.PhoneNumberUtil.instance;
-      final ex = util.getExampleNumberForType(
-              regionCode: iso, type: libphone.PhoneNumberType.mobile) ??
+      final ex =
+          util.getExampleNumberForType(
+            regionCode: iso,
+            type: libphone.PhoneNumberType.mobile,
+          ) ??
           util.getExampleNumber(iso);
       if (ex == null) return 15;
       final nsn = util.getNationalSignificantNumber(ex);
@@ -1359,7 +1545,10 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
           trailingSpace: false,
         ),
         selectorTextStyle: const TextStyle(
-            fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.ink),
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+          color: AppColors.ink,
+        ),
         textStyle: const TextStyle(fontSize: 15, color: AppColors.ink),
         inputDecoration: const InputDecoration(
           hintText: 'Telefon',
@@ -1447,20 +1636,35 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
       backArrow: true,
       child: ListView(
         padding: EdgeInsets.fromLTRB(
-            22, 18, 22, 24 + MediaQuery.of(context).viewInsets.bottom),
+          22,
+          18,
+          22,
+          24 + MediaQuery.of(context).viewInsets.bottom,
+        ),
         children: [
           _label('Ad'),
-          _field(_isimC, Icons.person_outline,
-              hint: 'Adın', textCap: TextCapitalization.words),
+          _field(
+            _isimC,
+            Icons.person_outline,
+            hint: 'Adın',
+            textCap: TextCapitalization.words,
+          ),
           const SizedBox(height: 16),
           _label('Soyad'),
-          _field(_soyisimC, Icons.badge_outlined,
-              hint: 'Soyadın', textCap: TextCapitalization.words),
+          _field(
+            _soyisimC,
+            Icons.badge_outlined,
+            hint: 'Soyadın',
+            textCap: TextCapitalization.words,
+          ),
           const SizedBox(height: 16),
           _label('E-posta'),
-          _field(_emailC, Icons.mail_outline,
-              hint: 'ornek@eposta.com',
-              keyboard: TextInputType.emailAddress),
+          _field(
+            _emailC,
+            Icons.mail_outline,
+            hint: 'ornek@eposta.com',
+            keyboard: TextInputType.emailAddress,
+          ),
           const SizedBox(height: 16),
           _label('Telefon'),
           _phoneField(),
@@ -1484,15 +1688,21 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.error_outline,
-                      size: 18, color: AppColors.closing),
+                  const Icon(
+                    Icons.error_outline,
+                    size: 18,
+                    color: AppColors.closing,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(_error!,
-                        style: const TextStyle(
-                            fontSize: 12.5,
-                            color: AppColors.closing,
-                            fontWeight: FontWeight.w600)),
+                    child: Text(
+                      _error!,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.closing,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -1506,22 +1716,30 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
-                disabledBackgroundColor:
-                    AppColors.primary.withValues(alpha: 0.6),
+                disabledBackgroundColor: AppColors.primary.withValues(
+                  alpha: 0.6,
+                ),
                 elevation: 0,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
               child: _busy
                   ? const SizedBox(
                       width: 22,
                       height: 22,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2.5, color: Colors.white),
+                        strokeWidth: 2.5,
+                        color: Colors.white,
+                      ),
                     )
-                  : const Text('Değişiklikleri Kaydet',
+                  : const Text(
+                      'Değişiklikleri Kaydet',
                       style: TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w600)),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
             ),
           ),
         ],
@@ -1530,16 +1748,20 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
   }
 
   Widget _label(String t) => Padding(
-        padding: const EdgeInsets.only(bottom: 8, left: 2),
-        child: Text(t,
-            style:
-                const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-      );
+    padding: const EdgeInsets.only(bottom: 8, left: 2),
+    child: Text(
+      t,
+      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+    ),
+  );
 
-  Widget _field(TextEditingController c, IconData icon,
-      {String? hint,
-      TextInputType? keyboard,
-      TextCapitalization textCap = TextCapitalization.none}) {
+  Widget _field(
+    TextEditingController c,
+    IconData icon, {
+    String? hint,
+    TextInputType? keyboard,
+    TextCapitalization textCap = TextCapitalization.none,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
@@ -1571,15 +1793,15 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
   }
 
   Widget _shell({required Widget child}) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        height: 50,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.line),
-        ),
-        child: child,
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 14),
+    height: 50,
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: AppColors.line),
+    ),
+    child: child,
+  );
 
   Widget _genderSelector() {
     return Row(
@@ -1605,11 +1827,14 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: sel ? AppColors.primary : AppColors.line),
           ),
-          child: Text(label,
-              style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w600,
-                  color: sel ? Colors.white : AppColors.ink)),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w600,
+              color: sel ? Colors.white : AppColors.ink,
+            ),
+          ),
         ),
       ),
     );
@@ -1626,10 +1851,13 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
             child: GestureDetector(
               onTap: _pickDate,
               behavior: HitTestBehavior.opaque,
-              child: Text(has ? _formatTr(_dogumGunu) : 'Tarih seç',
-                  style: TextStyle(
-                      fontSize: 14,
-                      color: has ? AppColors.ink : AppColors.muted)),
+              child: Text(
+                has ? _formatTr(_dogumGunu) : 'Tarih seç',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: has ? AppColors.ink : AppColors.muted,
+                ),
+              ),
             ),
           ),
           if (has)
@@ -1675,17 +1903,24 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
       return _shell(
         child: Row(
           children: const [
-            Icon(Icons.location_city_outlined,
-                size: 19, color: AppColors.primary),
+            Icon(
+              Icons.location_city_outlined,
+              size: 19,
+              color: AppColors.primary,
+            ),
             SizedBox(width: 12),
-            Text('İlçeler yükleniyor…',
-                style: TextStyle(fontSize: 14, color: AppColors.muted)),
+            Text(
+              'İlçeler yükleniyor…',
+              style: TextStyle(fontSize: 14, color: AppColors.muted),
+            ),
             Spacer(),
             SizedBox(
               width: 16,
               height: 16,
               child: CircularProgressIndicator(
-                  strokeWidth: 2, color: AppColors.primary),
+                strokeWidth: 2,
+                color: AppColors.primary,
+              ),
             ),
           ],
         ),
@@ -1709,12 +1944,14 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
         behavior: HitTestBehavior.opaque,
         child: Row(
           children: [
-            const Icon(Icons.location_city_outlined,
-                size: 19, color: AppColors.primary),
+            const Icon(
+              Icons.location_city_outlined,
+              size: 19,
+              color: AppColors.primary,
+            ),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(label,
-                  style: TextStyle(fontSize: 14, color: color)),
+              child: Text(label, style: TextStyle(fontSize: 14, color: color)),
             ),
             const Icon(Icons.keyboard_arrow_down, color: AppColors.primary),
           ],
