@@ -1127,6 +1127,27 @@ class ApiPlace {
   );
 }
 
+/// Ana sayfa sponsorlu (ERP "Ana Sayfa Popüler") kaydı: mekan + reklam
+/// bitişi. [bitis] yoksa (eski kayıt) süresiz sayılır.
+class PopulerMekan {
+  final ApiPlace place;
+  final DateTime? bitis;
+  const PopulerMekan(this.place, {this.bitis});
+
+  /// Reklam süresi dolmadı mı (cache'ten gösterirken kontrol edilir).
+  bool get aktif => bitis == null || bitis!.isAfter(DateTime.now());
+
+  Map<String, dynamic> toCacheJson() => {
+    ...place.toCacheJson(),
+    if (bitis != null) 'reklam_bitis': bitis!.toUtc().toIso8601String(),
+  };
+
+  factory PopulerMekan.fromCache(Map<String, dynamic> j) => PopulerMekan(
+    ApiPlace.fromCache(j),
+    bitis: DateTime.tryParse('${j['reklam_bitis'] ?? ''}'),
+  );
+}
+
 /// Çoklu sıralama (ARAMA_COKLU_SIRALAMA.md): öncelik sırası KORUNARAK virgüllü
 /// (`distance,likes`). Yalnız 2+ kriter seçiliyse gönderilir; tek kriterde
 /// mevcut `sort=` yeterli olduğu için '' döner.
@@ -1407,16 +1428,24 @@ class HomeRepository {
   /// Kategori detayı: kategori + alt kategoriler + sabit restoran + mekanlar.
   /// Önce tam detay `GET /kategoriler/{id}` denenir; yayında değilse
   /// `GET /kategoriler/{id}/mekanlar` (yalnızca mekan listesi) kullanılır.
+  ///
+  /// [filtreler] / [ozellikler] (AND) ve [bolge] (ilçe id) verilirse süzme
+  /// SUNUCUDA yapılır; `meta.total` / `pages` süzülmüş kümeye aittir
+  /// (LISTE_BOLGE_FILTRE.md, canlıda doğrulandı).
   Future<CategoryDetail> kategoriDetay(
     int id, {
     int page = 1,
     int limit = 20,
+    List<int>? filtreler,
+    List<int>? ozellikler,
+    int? bolge,
   }) async {
+    final q = _kategoriFiltreQuery(filtreler, ozellikler, bolge);
     // 1) Tam detay endpoint'i (alt kategoriler + sabit restoran dahil).
     try {
       final res = await _dio.get(
         '/kategoriler/$id',
-        queryParameters: {'page': page, 'limit': limit, ..._locQuery()},
+        queryParameters: {'page': page, 'limit': limit, ...q, ..._locQuery()},
       );
       final body = res.data as Map<String, dynamic>;
       if (body['success'] == true && body['data'] is Map<String, dynamic>) {
@@ -1426,7 +1455,22 @@ class HomeRepository {
       // detay endpoint'i yok → mekan listesine düş
     }
     // 2) Yedek: sadece kategori mekanları.
-    return _kategoriMekanlar(id, page: page, limit: limit);
+    return _kategoriMekanlar(id, page: page, limit: limit, query: q);
+  }
+
+  /// Kategori uçları için filtre sorgusu (boş olanlar gönderilmez).
+  Map<String, dynamic> _kategoriFiltreQuery(
+    List<int>? filtreler,
+    List<int>? ozellikler,
+    int? bolge,
+  ) {
+    final fq = idsCsv(filtreler);
+    final oq = idsCsv(ozellikler);
+    return {
+      if (fq.isNotEmpty) 'filtreler': fq,
+      if (oq.isNotEmpty) 'ozellikler': oq,
+      if (bolge != null && bolge > 0) 'bolge': bolge,
+    };
   }
 
   CategoryDetail _parseCategoryDetail(Map<String, dynamic> body, int page) {
@@ -1480,10 +1524,11 @@ class HomeRepository {
     int id, {
     int page = 1,
     int limit = 20,
+    Map<String, dynamic> query = const {},
   }) async {
     final res = await _dio.get(
       '/kategoriler/$id/mekanlar',
-      queryParameters: {'page': page, 'limit': limit, ..._locQuery()},
+      queryParameters: {'page': page, 'limit': limit, ...query, ..._locQuery()},
     );
     final body = res.data as Map<String, dynamic>;
     if (body['success'] != true) {
@@ -1758,6 +1803,52 @@ class HomeRepository {
       rethrow;
     } on DioException {
       throw AuthException('Sunucuya ulaşılamadı. Lütfen tekrar dene.');
+    }
+  }
+
+  /// Ana sayfa sponsorlu mekanları — ERP "Reklam → Ana Sayfa Popüler"
+  /// (`GET /reklam/ana-sayfa-populer`, ANA_SAYFA_POPULER_API.md). Sunucu
+  /// süresi dolan / yayında olmayan mekanları zaten eler; sıra `sira`.
+  /// Bilinen gerçek konum varsa gönderilir (`mesafe_m`).
+  ///
+  /// Başarılı yanıtta liste döner (BOŞ olabilir → bölüm gizlenir); ağ /
+  /// sunucu hatasında `null` (çağıran cache'e düşer).
+  Future<List<PopulerMekan>?> anaSayfaPopuler() async {
+    try {
+      final res = await _dio.get(
+        '/reklam/ana-sayfa-populer',
+        queryParameters: _locQuery(),
+      );
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return null;
+      final data = body['data'];
+      if (data is! List) return const [];
+      final rows = data.whereType<Map<String, dynamic>>().toList()
+        ..sort(
+          (a, b) => ((a['sira'] as num?) ?? 1 << 30).compareTo(
+            (b['sira'] as num?) ?? 1 << 30,
+          ),
+        );
+      final seen = <int>{};
+      final out = <PopulerMekan>[];
+      for (final r in rows) {
+        final m = r['mekan'];
+        if (m is! Map<String, dynamic>) continue;
+        final p = _parsePlace(m);
+        if (p.id <= 0 || !seen.add(p.id)) continue;
+        final sure = r['sure'];
+        out.add(
+          PopulerMekan(
+            p,
+            bitis: sure is Map
+                ? DateTime.tryParse('${sure['bitis'] ?? ''}')
+                : null,
+          ),
+        );
+      }
+      return out;
+    } catch (_) {
+      return null;
     }
   }
 

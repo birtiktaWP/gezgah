@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
-import 'home_config.dart';
 import 'models.dart';
 
 /// Ana sayfa verisini önbellekler — amaç: ana sayfa **hızlı** açılsın ve ağ
@@ -20,14 +19,16 @@ class HomeStore {
   static final HomeStore instance = HomeStore._();
 
   static const _kCategories = 'home_c_categories';
-  static const _kSponsored = 'home_c_sponsored';
+  // v2: kaynak ERP reklam alanı oldu (eski elle girilmiş listenin cache'i
+  // okunmasın).
+  static const _kSponsored = 'home_c_sponsored_v2';
   static const _kNearby = 'home_c_nearby';
   static const _kNewest = 'home_c_newest';
   static const _kEvents = 'home_c_events';
 
   // Diskten önyüklenen anlık (senkron) cache — initialData için.
   List<Category> cachedCategories = const [];
-  List<ApiPlace> cachedSponsored = const [];
+  List<PopulerMekan> cachedSponsored = const [];
   List<ApiPlace> cachedNearby = const [];
   List<ApiPlace> cachedNewest = const [];
   List<FeaturedEvent> cachedEvents = const [];
@@ -45,7 +46,7 @@ class HomeStore {
   Future<void> preload() async {
     _prefs = await SharedPreferences.getInstance();
     cachedCategories = _read(_kCategories, Category.fromJson);
-    cachedSponsored = _read(_kSponsored, ApiPlace.fromCache);
+    cachedSponsored = _read(_kSponsored, PopulerMekan.fromCache);
     cachedNearby = _read(_kNearby, ApiPlace.fromCache);
     cachedNewest = _read(_kNewest, ApiPlace.fromCache);
     cachedEvents = _read(_kEvents, FeaturedEvent.fromJson);
@@ -55,21 +56,35 @@ class HomeStore {
   /// (`/home-page-settings/one_cikan_kategoriler`). `/kategoriler` yedeğine
   /// düşülmez; uç boşsa bölüm gizlenir.
   Future<List<Category>> categories() => _catF ??= _fetch(
-        _kCategories,
-        () => HomeRepository.instance.oneCikanKategoriler(),
-        (c) => c.toJson(),
-        () => cachedCategories,
-        (v) => cachedCategories = v,
-      );
+    _kCategories,
+    () => HomeRepository.instance.oneCikanKategoriler(),
+    (c) => c.toJson(),
+    () => cachedCategories,
+    (v) => cachedCategories = v,
+  );
 
-  Future<List<ApiPlace>> sponsorlu() => _spoF ??= _fetch(
-        _kSponsored,
-        () => HomeRepository.instance
-            .sponsorluRestoranlar(HomeConfig.sponsorluRestoranlar),
-        (p) => p.toCacheJson(),
-        () => cachedSponsored,
-        (v) => cachedSponsored = v,
-      );
+  /// Sponsorlu mekanlar — ERP "Reklam → Ana Sayfa Popüler"
+  /// (`/reklam/ana-sayfa-populer`, ANA_SAYFA_POPULER_API.md).
+  ///
+  /// Genel [_fetch]'ten farkı: sunucu BOŞ liste dönerse (aktif reklam yok)
+  /// cache'e düşülmez, boş döner → bölüm gizlenir. Yalnız ağ/sunucu hatasında
+  /// son başarılı liste gösterilir; o listede de süresi dolanlar elenir.
+  Future<List<ApiPlace>> sponsorlu() => _spoF ??= () async {
+    const retryDelays = [Duration(seconds: 2), Duration(seconds: 5)];
+    List<ApiPlace> fromCache() =>
+        cachedSponsored.where((p) => p.aktif).map((p) => p.place).toList();
+    for (var attempt = 0; ; attempt++) {
+      final r = await HomeRepository.instance.anaSayfaPopuler();
+      if (r != null) {
+        cachedSponsored = r;
+        await _save(_kSponsored, r, (p) => p.toCacheJson());
+        return r.map((p) => p.place).toList();
+      }
+      final cache = fromCache();
+      if (cache.isNotEmpty || attempt >= retryDelays.length) return cache;
+      await Future<void>.delayed(retryDelays[attempt]);
+    }
+  }();
 
   /// Yakındakiler. [lat]/[lng] yalnız gerçek cihaz konumu olmalı; verilirse
   /// sunucu mesafeye göre sıralı ve `mesafe_km`'li döner (MESAFE-MOBIL.md §2).
@@ -88,20 +103,20 @@ class HomeStore {
       );
 
   Future<List<ApiPlace>> yeniEklenenler() => _newF ??= _fetch(
-        _kNewest,
-        () => HomeRepository.instance.yeniEklenenler(limit: 10),
-        (p) => p.toCacheJson(),
-        () => cachedNewest,
-        (v) => cachedNewest = v,
-      );
+    _kNewest,
+    () => HomeRepository.instance.yeniEklenenler(limit: 10),
+    (p) => p.toCacheJson(),
+    () => cachedNewest,
+    (v) => cachedNewest = v,
+  );
 
   Future<List<FeaturedEvent>> etkinlikler() => _evtF ??= _fetch(
-        _kEvents,
-        () => HomeRepository.instance.sponsorluEtkinlikler(),
-        (e) => e.toJson(),
-        () => cachedEvents,
-        (v) => cachedEvents = v,
-      );
+    _kEvents,
+    () => HomeRepository.instance.sponsorluEtkinlikler(),
+    (e) => e.toJson(),
+    () => cachedEvents,
+    (v) => cachedEvents = v,
+  );
 
   // --- iç yardımcılar --------------------------------------------------------
 
@@ -131,7 +146,7 @@ class HomeStore {
     // boş kalıyordu (kapatıp açınca düzeliyordu). Cache boşken kısa
     // aralıklarla iki kez daha denenir.
     const retryDelays = [Duration(seconds: 2), Duration(seconds: 5)];
-    for (var attempt = 0;; attempt++) {
+    for (var attempt = 0; ; attempt++) {
       try {
         final data = await run();
         if (data.isNotEmpty) {
@@ -151,8 +166,11 @@ class HomeStore {
     }
   }
 
-  Future<void> _save<T>(String key, List<T> items,
-      Map<String, dynamic> Function(T) toJson) async {
+  Future<void> _save<T>(
+    String key,
+    List<T> items,
+    Map<String, dynamic> Function(T) toJson,
+  ) async {
     try {
       final prefs = _prefs ?? await SharedPreferences.getInstance();
       await prefs.setString(key, jsonEncode(items.map(toJson).toList()));

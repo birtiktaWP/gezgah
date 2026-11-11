@@ -368,8 +368,20 @@ class _CategoryScreenState extends State<CategoryScreen> {
       _impressions = ImpressionScope(kaynak: 'kategori', kaynakId: '${c.id}');
     });
     _revealPill(c.id);
+    await _loadCategoryTab(c.id, seq);
+  }
+
+  /// Kategori modunda seçili sekmenin listesini (filtreler sunucuda
+  /// uygulanarak) 1. sayfadan yükler; sekmeler yerinde kalır.
+  Future<void> _loadCategoryTab(int id, int seq) async {
     try {
-      final d = await HomeRepository.instance.kategoriDetay(c.id, limit: 20);
+      final d = await HomeRepository.instance.kategoriDetay(
+        id,
+        limit: 20,
+        filtreler: _selectedFilters.toList(),
+        ozellikler: _selectedOzellikler.toList(),
+        bolge: _selectedBolge,
+      );
       if (!mounted || seq != _reqSeq) return; // bu arada başka sekme seçildi
       _applyLabels(d.places);
       if (d.pinned != null) _applyLabels([d.pinned!]);
@@ -382,7 +394,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
         _nextPage = d.nextPage;
         _sortPlaces();
       });
-      _fillFilteredResults();
     } catch (_) {
       if (!mounted || seq != _reqSeq) return;
       setState(() {
@@ -482,6 +493,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
         id!,
         page: _nextPage!,
         limit: 20,
+        filtreler: _selectedFilters.toList(),
+        ozellikler: _selectedOzellikler.toList(),
+        bolge: _selectedBolge,
       );
       if (!mounted) return;
       if (seq != _reqSeq) return; // sekme değişti; eski kategorinin sayfası
@@ -505,28 +519,15 @@ class _CategoryScreenState extends State<CategoryScreen> {
       _selectedOzellikler.isNotEmpty ||
       _selectedBolge != null;
 
-  /// Süzme sunucuda mı yapılıyor? Type modunda (`/yerler`) `filtreler=`
-  /// gönderiliyor; kategori modunda (`/kategoriler/{id}`) böyle bir parametre
-  /// olmadığı için istemci tarafında süzülür (YERLER_FILTRE_IDS.md §8).
-  bool get _serverFiltered => widget.type != null;
-
-  /// Kategori modunda süzme istemci tarafında ve yalnız yüklenmiş kayıtlara
-  /// uygulandığı için, filtreli sonuç ekranı doldurmuyorsa sonraki sayfalar
-  /// otomatik çekilir. Aksi halde liste kaydırılamaz ve `_loadMore` tetiklenmez.
-  Future<void> _fillFilteredResults() async {
-    if (_serverFiltered) return; // sunucu süzüyor, sayfa doldurmaya gerek yok
-    var guard = 0; // en fazla 5 ek sayfa (100 kayıt) — istek yağmuru olmasın
-    while (mounted &&
-        _hasActiveFilter &&
-        _hasMore &&
-        _visiblePlaces.length < 10 &&
-        guard < 5) {
-      guard++;
-      final before = _places.length;
-      await _loadMore();
-      if (!mounted || _places.length == before) break; // ilerleme yoksa dur
-    }
-  }
+  /// Süzme sunucuda mı yapılıyor? Artık her iki modda da evet: tip modunda
+  /// `/yerler`, kategori modunda `/kategoriler/{id}` `filtreler`, `ozellikler`
+  /// ve `bolge` parametrelerini sunucuda süzüyor (canlıda doğrulandı).
+  ///
+  /// Eskiden kategori modunda yalnız yüklenmiş sayfalar istemcide süzülüyor,
+  /// en fazla 5 ek sayfa çekiliyordu: sonuç kaç sayfa yüklendiğine bağlıydı
+  /// (ör. Kafe & Kahve'de Şömine önce 1, başka filtre eklenip kaldırılınca 6
+  /// mekan gösteriyordu) ve "N mekan (filtreli)" sayısı eksik çıkıyordu.
+  bool get _serverFiltered => true;
 
   bool _matchesFilters(Place p) {
     // Sunucu süzdüyse gelen kayıtlar zaten uygun.
@@ -584,14 +585,23 @@ class _CategoryScreenState extends State<CategoryScreen> {
   /// çekilir (total/pages filtreli kümeye ait olur); kategori modunda mevcut
   /// kayıtlar üzerinde süzülüp gerekiyorsa sayfa doldurulur.
   void _onFilterChanged() {
-    if (_serverFiltered) {
-      _reqSeq++; // süren eski istek (sekme/filtre) yanıtı yok sayılsın
-      _nextPage = null;
-      _hasMore = false;
+    final seq =
+        ++_reqSeq; // süren eski istek (sekme/filtre) yanıtı yok sayılsın
+    _nextPage = null;
+    _hasMore = false;
+    if (widget.type != null) {
       _load();
-    } else {
-      _fillFilteredResults();
+      return;
     }
+    // Kategori modu: seçili sekmenin listesi sunucuda süzülerek yeniden
+    // çekilir (sekmeler ve kök kategori yerinde kalır).
+    final id = _currentId;
+    if (id == null) return;
+    setState(() {
+      _switching = true;
+      _loadingMore = false;
+    });
+    _loadCategoryTab(id, seq);
   }
 
   /// Sıralama bottom sheet'i.

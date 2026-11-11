@@ -71,7 +71,10 @@ class _HomeScreenState extends State<HomeScreen> {
     // ağ isteği yalnızca bu soğuk başlangıçta yapılır (bkz. HomeStore).
     final store = HomeStore.instance;
     _catInit = _prepCategories(store.cachedCategories);
-    _spoInit = _cachedPlaces(store.cachedSponsored);
+    // Cache'teki sponsorlulardan süresi dolanlar ilk çizimde de gösterilmez.
+    _spoInit = _cachedPlaces(
+      store.cachedSponsored.where((p) => p.aktif).map((p) => p.place).toList(),
+    );
     _nearInit = _cachedPlaces(store.cachedNearby.take(10).toList());
     _newInit = _cachedPlaces(store.cachedNewest);
     _evtInit = store.cachedEvents;
@@ -559,51 +562,34 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Sponsorlu Restoranlar — silinen "Yaklaşan Etkinlikler" büyük kart
   /// tasarımı burada kullanılır (görsel + karartma + sponsor rozeti + isim).
+  /// Sponsorlu mekanlar (ERP → Reklam → Ana Sayfa Popüler). Aktif reklam
+  /// yoksa (boş liste) ya da yüklenirken başlık dahil bölüm hiç çizilmez.
   Widget _sponsoredSection() {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 22),
-          child: SectionHead('Sponsorlu Restoranlar'),
-        ),
-        SizedBox(
-          height: 150,
-          child: FutureBuilder<List<Place>>(
-            future: _sponsoredFuture,
-            initialData: _spoInit,
-            builder: (context, snapshot) {
-              final places = snapshot.data ?? const <Place>[];
-              if (places.isEmpty) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: SizedBox(
-                      width: 26,
-                      height: 26,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  );
-                }
-                return const Center(
-                  child: Text(
-                    'Şu an sponsorlu restoran yok',
-                    style: TextStyle(fontSize: 13, color: AppColors.muted),
-                  ),
-                );
-              }
-              return ListView.separated(
+    return FutureBuilder<List<Place>>(
+      future: _sponsoredFuture,
+      initialData: _spoInit,
+      builder: (context, snapshot) {
+        final places = snapshot.data ?? const <Place>[];
+        if (places.isEmpty) return const SizedBox.shrink();
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 22),
+              child: SectionHead('Sponsorlu Restoranlar'),
+            ),
+            SizedBox(
+              height: 150,
+              child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 22),
                 itemCount: places.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 14),
                 itemBuilder: (_, i) => _sponsoredCard(places[i]),
-              );
-            },
-          ),
-        ),
-      ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
