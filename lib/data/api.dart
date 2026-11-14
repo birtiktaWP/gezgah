@@ -3187,7 +3187,17 @@ class RezervasyonRepository {
     if (err is! Map) return null;
     final d = err['details'];
     if (d is String && d.trim().isNotEmpty) return d;
-    if (d is Map && d['code'] is String) return d['code'] as String;
+    if (d is Map) {
+      if (d['code'] is String) return d['code'] as String;
+      // REZERVASYON_SAATLERI.md §3: `{closed: true, rez_saat_disi: true}`.
+      // Rezervasyon ayarı dışı daha özel olduğu için önce o.
+      if (d['rez_saat_disi'] == true) return 'rez_saat_disi';
+      if (d['closed'] == true) return 'closed';
+      // Diğer bayrak biçimli ayrıntılar (`{need_code: true}` gibi).
+      for (final e in d.entries) {
+        if (e.value == true) return '${e.key}';
+      }
+    }
     return null;
   }
 }

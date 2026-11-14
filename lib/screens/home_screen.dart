@@ -10,6 +10,7 @@ import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
 import '../widgets/place_cards.dart';
 import '../widgets/typewriter.dart';
+import 'campaigns_screen.dart';
 import 'category_screen.dart';
 import 'detail_screen.dart';
 import 'event_detail_screen.dart';
@@ -421,10 +422,24 @@ class _HomeScreenState extends State<HomeScreen> {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 22),
-        // 0: Gezi Rotaları (keşfet) kısayolu; sonrası "Tümü" post type'ları.
-        itemCount: HomeConfig.tumu.length + 1,
+        // 0: Kampanyalar (turuncu), 1: Gezi Rotaları (keşfet); sonrası
+        // "Tümü" post type'ları. Kampanyalar uygulamada yalnız bu haptan
+        // açılır (KAMPANYALAR.md).
+        itemCount: HomeConfig.tumu.length + 2,
         separatorBuilder: (_, __) => const SizedBox(width: 10),
-        itemBuilder: (_, i) {
+        itemBuilder: (_, idx) {
+          if (idx == 0) {
+            return CategoryPill(
+              icon: Icons.local_offer_rounded,
+              label: 'Kampanyalar',
+              accent: PillAccent.orange,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CampaignsScreen()),
+              ),
+            );
+          }
+          final i = idx - 1;
           if (i == 0) {
             return CategoryPill(
               icon: Icons.explore, // yedek; asıl ikon iconWidget ile çizilir

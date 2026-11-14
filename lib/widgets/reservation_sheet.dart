@@ -9,6 +9,7 @@ import '../data/auth_service.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
 import 'common.dart';
+import 'rez_time_picker.dart';
 
 /// İşletme rezervasyonunu alttan açılan panelde üç adımda alır
 /// (rezervasyon-api.md):
@@ -58,76 +59,19 @@ String normalizeReservationPhone(String raw) {
 // Çalışma saatlerinden gün / saat dilimleri
 // ---------------------------------------------------------------------------
 
-/// Saat dilimi aralığı (dakika).
-const int _slotStep = 15;
+// Kurallar ve parçalar `rez_time_picker.dart`'ta (değiştir paneliyle ortak):
+// yalnız işletmenin açık olduğu saatler, 15 dk arayla, kapanıştan 30 dk
+// öncesine kadar.
 
-/// Bugün için en erken rezervasyon: şimdiden en az bu kadar sonra.
-const Duration _minLead = Duration(minutes: 30);
-
-/// Kapanıştan en geç bu kadar önce rezervasyon alınır.
-const int _lastBeforeClose = 30;
-
-/// Çalışma saati bilinmeyen günlerde varsayılan aralık (08:00 – 24:00).
-const (int, int) _defaultRange = (8 * 60, 24 * 60);
-
-const _gunKisa = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
-const _gunUzun = [
-  'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar',
-];
-const _ayUzun = [
-  'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', //
-  'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
-];
-
-DateTime _dayOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+DateTime _dayOnly(DateTime d) => rezDayOnly(d);
 
 String _p2(int n) => n.toString().padLeft(2, '0');
 
-String _hm(DateTime d) => '${_p2(d.hour)}:${_p2(d.minute)}';
+String _hm(DateTime d) => rezHm(d);
 
-/// "Cumartesi, 16 Kasım"
-String _gunTarih(DateTime d) =>
-    '${_gunUzun[d.weekday - 1]}, ${d.day} ${_ayUzun[d.month - 1]}';
+String _gunTarih(DateTime d) => rezGunTarih(d);
 
-/// Seçilen günün rezervasyon saatleri (15 dk). Çalışma saati yoksa
-/// varsayılan aralık; "Kapalı" gün boş liste. Gece yarısını aşan aralıkta
-/// (18:00 – 02:00) ertesi güne taşan saatler de gelir. Bugünse şimdiden
-/// [_minLead] sonrası.
-List<DateTime> _slotsFor(DateTime day, Map<String, String?> hours) {
-  final d = _dayOnly(day);
-  (int, int)? range;
-  if (hours.isEmpty) {
-    range = _defaultRange;
-  } else {
-    final raw = (hours[kGunAnahtarlari[d.weekday - 1]] ?? '').trim();
-    final m = RegExp(r'(\d{1,2}):(\d{2})\D+(\d{1,2}):(\d{2})').firstMatch(raw);
-    if (m != null) {
-      final s = int.parse(m.group(1)!) * 60 + int.parse(m.group(2)!);
-      var e = int.parse(m.group(3)!) * 60 + int.parse(m.group(4)!);
-      if (e == s) {
-        range = (0, 24 * 60); // 24 saat açık
-      } else {
-        if (e < s) e += 24 * 60; // gece yarısını aşıyor
-        range = (s, e);
-      }
-    } else if (raw.toLowerCase().startsWith('kapal')) {
-      return const []; // yalnız açıkça "Kapalı" yazan gün kapalı
-    } else {
-      // Gün boş/null ya da biçim tanınmadı: bilinmiyor, kapalı sayma
-      // (sunucu kapalı saatte `closed` ile reddeder).
-      range = _defaultRange;
-    }
-  }
-  final (s, e) = range;
-  final start = ((s + _slotStep - 1) ~/ _slotStep) * _slotStep;
-  final last = e == 24 * 60 && s == 0 ? e - _slotStep : e - _lastBeforeClose;
-  final earliest = DateTime.now().add(_minLead);
-  return [
-    for (var m = start; m <= last; m += _slotStep)
-      if (!d.add(Duration(minutes: m)).isBefore(earliest))
-        d.add(Duration(minutes: m)),
-  ];
-}
+
 
 // ---------------------------------------------------------------------------
 
@@ -175,6 +119,10 @@ class _ReservationSheetState extends State<_ReservationSheet> {
   bool _busy = false; // kod gönderiliyor / rezervasyon oluşturuluyor
   String? _error;
 
+  // İşletme seçenekleri (çalışma + rezervasyon saatleri, bölge/masa).
+  // Sunucu saati reddederse yeniden çekilir.
+  late RezervasyonSecenekler _opts = widget.options;
+
   @override
   void initState() {
     super.initState();
@@ -186,8 +134,8 @@ class _ReservationSheetState extends State<_ReservationSheet> {
       }
     }
     // Tek bölge varsa otomatik seç.
-    if (widget.options.bolgeler.length == 1) {
-      _bolgeId = widget.options.bolgeler.first.id;
+    if (_opts.bolgeler.length == 1) {
+      _bolgeId = _opts.bolgeler.first.id;
     }
   }
 
@@ -204,27 +152,44 @@ class _ReservationSheetState extends State<_ReservationSheet> {
 
   // ---- türetilmiş değerler -------------------------------------------------
 
-  Map<String, String?> get _hours => widget.options.calismaSaatleri;
+  Map<String, String?> get _hours => _opts.calismaSaatleri;
+
+  /// İşletmenin rezervasyon gün/saat ayarı (REZERVASYON_SAATLERI.md).
+  Map<String, RezGunKurali> get _rez => _opts.rezervasyonSaatleri;
+
+  /// Çalışma saati + rezervasyon ayarına uyan saatler.
+  List<DateTime> _slotsFor(DateTime day, Map<String, String?> hours) =>
+      rezSaatleri(day, hours, rez: _rez);
+
+  /// Sunucu seçilen zamanı reddettiyse (işletme ayarı değişmiş olabilir)
+  /// seçenekleri yeniden çeker; seçili saat artık uygun değilse temizler.
+  Future<void> _refreshOptions() async {
+    final o = await RezervasyonRepository.instance.secenekler(widget.mekanId);
+    if (!mounted || o == null) return;
+    setState(() {
+      _opts = o;
+      final day = _gun, t = _tarih;
+      if (day != null &&
+          t != null &&
+          !_slotsFor(day, _hours).any((s) => s.isAtSameMomentAs(t))) {
+        _tarih = null;
+      }
+    });
+  }
 
   String get _telefon => normalizeReservationPhone(_telC.text);
 
   bool get _bolgeGerekli =>
-      widget.options.bolgeZorunlu || widget.options.bolgeler.isNotEmpty;
+      _opts.bolgeZorunlu || _opts.bolgeler.isNotEmpty;
 
   List<String> get _masalar => _bolgeId == null
       ? const []
-      : (widget.options.masalar[_bolgeId] ?? const []);
+      : (_opts.masalar[_bolgeId] ?? const []);
 
-  String? get _bolgeAdi => widget.options.bolgeler
+  String? get _bolgeAdi => _opts.bolgeler
       .where((b) => b.id == _bolgeId)
       .map((b) => b.isim)
       .firstOrNull;
-
-  /// Gün şeridi: bugünden itibaren 14 gün.
-  List<DateTime> get _days {
-    final today = _dayOnly(DateTime.now());
-    return [for (var i = 0; i < 14; i++) today.add(Duration(days: i))];
-  }
 
   bool get _codeValid =>
       _codePhone == _telefon &&
@@ -273,7 +238,8 @@ class _ReservationSheetState extends State<_ReservationSheet> {
       setState(() {
         _gun = _dayOnly(date);
         _tarih = null;
-        _error = 'İşletme ${_gunTarih(date)} günü kapalı. Başka bir gün seç.';
+        _error =
+            '${_gunTarih(date)} günü rezervasyon alınmıyor. Başka bir gün seç.';
       });
       return;
     }
@@ -284,18 +250,12 @@ class _ReservationSheetState extends State<_ReservationSheet> {
     final day = _gun;
     if (day == null) return;
     _hideKeyboard();
-    final picked = await showModalBottomSheet<DateTime>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (_) => _TimeSlotSheet(
-        day: day,
-        slots: _slotsFor(day, _hours),
-        selected: _tarih,
-      ),
+    final picked = await showRezTimeSelect(
+      context,
+      day: day,
+      slots: _slotsFor(day, _hours),
+      selected: _tarih,
+      rez: _rez,
     );
     if (picked != null && mounted) {
       setState(() {
@@ -312,12 +272,12 @@ class _ReservationSheetState extends State<_ReservationSheet> {
       title: 'Bölge seç',
       selected: _bolgeId,
       options: [
-        for (final b in widget.options.bolgeler)
+        for (final b in _opts.bolgeler)
           (
             value: b.id,
             label: b.isim,
-            sub: (widget.options.masalar[b.id]?.isNotEmpty ?? false)
-                ? '${widget.options.masalar[b.id]!.length} masa / oda'
+            sub: (_opts.masalar[b.id]?.isNotEmpty ?? false)
+                ? '${_opts.masalar[b.id]!.length} masa / oda'
                 : null,
           ),
       ],
@@ -536,6 +496,15 @@ class _ReservationSheetState extends State<_ReservationSheet> {
             _codeSentAt = null;
             _error = 'Kodun süresi doldu. Yeni kod iste.';
           });
+        case 'closed' || 'rez_saat_disi':
+          // Seçilen zaman uygun değil (işletme ayarı değişmiş olabilir):
+          // forma dön, sunucunun mesajını göster, seçenekleri tazele
+          // (REZERVASYON_SAATLERI.md §2.4).
+          setState(() {
+            _step = _Step.form;
+            _error = _detailMessage(e);
+          });
+          _refreshOptions();
         default:
           // Formla ilgili hata: forma dön, mesajı orada göster.
           setState(() {
@@ -561,8 +530,12 @@ class _ReservationSheetState extends State<_ReservationSheet> {
     switch (e.detail) {
       case 'need_consent':
         return 'KVKK onayı gerekli.';
-      case 'closed':
-        return 'Seçtiğin gün/saat işletme kapalı. Farklı bir zaman seç.';
+      case 'closed' || 'rez_saat_disi':
+        // Sunucu hangi gün/aralık olduğunu yazıyor ("Salı günü rezervasyon
+        // saatleri 12:00 – 22:00 arasıdır…"); yoksa genel metin.
+        return e.message.trim().isNotEmpty
+            ? e.message
+            : 'Seçtiğin gün/saatte rezervasyon alınmıyor. Farklı bir zaman seç.';
       case 'need_bolge':
         return 'Bölge seçmelisin.';
       default:
@@ -713,7 +686,13 @@ class _ReservationSheetState extends State<_ReservationSheet> {
         _kisiStepper(),
         const SizedBox(height: 24),
         _section('Hangi gün?'),
-        _dayStrip(),
+        RezDayStrip(
+          selected: _gun,
+          hours: _hours,
+          rez: _rez,
+          onSelect: _selectDay,
+          onOther: _pickOtherDay,
+        ),
         const SizedBox(height: 14),
         // Saat, gün seçilince gelir.
         AnimatedSize(
@@ -726,7 +705,7 @@ class _ReservationSheetState extends State<_ReservationSheet> {
         ),
         if (_bolgeGerekli) ...[
           const SizedBox(height: 24),
-          _section(widget.options.bolgeZorunlu ? 'Bölge *' : 'Bölge'),
+          _section(_opts.bolgeZorunlu ? 'Bölge *' : 'Bölge'),
           _selectField(
             icon: Icons.map_outlined,
             text: _bolgeAdi ?? 'Bölge seç',
@@ -860,132 +839,6 @@ class _ReservationSheetState extends State<_ReservationSheet> {
     );
   }
 
-  /// Yatay gün şeridi (14 gün) + "Diğer" (takvim). Kapalı günler pasif.
-  Widget _dayStrip() {
-    final today = _dayOnly(DateTime.now());
-    final days = _days;
-    final sel = _gun;
-    final selOutside =
-        sel != null && !days.any((d) => d.isAtSameMomentAs(sel));
-    return SizedBox(
-      height: 74,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        clipBehavior: Clip.none,
-        children: [
-          for (final d in days) ...[
-            _dayChip(
-              top: d == today
-                  ? 'Bugün'
-                  : d == today.add(const Duration(days: 1))
-                  ? 'Yarın'
-                  : _gunKisa[d.weekday - 1],
-              mid: '${d.day}',
-              bottom: _ayUzun[d.month - 1].substring(0, 3),
-              selected: sel != null && d.isAtSameMomentAs(sel),
-              enabled: _slotsFor(d, _hours).isNotEmpty,
-              onTap: () => _selectDay(d),
-            ),
-            const SizedBox(width: 8),
-          ],
-          if (selOutside) ...[
-            _dayChip(
-              top: _gunKisa[sel.weekday - 1],
-              mid: '${sel.day}',
-              bottom: _ayUzun[sel.month - 1].substring(0, 3),
-              selected: true,
-              enabled: true,
-              onTap: _pickOtherDay,
-            ),
-            const SizedBox(width: 8),
-          ],
-          _dayChip(
-            top: 'Diğer',
-            icon: Icons.calendar_month_outlined,
-            bottom: 'Takvim',
-            selected: false,
-            enabled: true,
-            onTap: _pickOtherDay,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _dayChip({
-    required String top,
-    String? mid,
-    IconData? icon,
-    required String bottom,
-    required bool selected,
-    required bool enabled,
-    required VoidCallback onTap,
-  }) {
-    final fg = selected
-        ? Colors.white
-        : enabled
-        ? AppColors.ink
-        : const Color(0xFFB9B9C6);
-    final sub = selected
-        ? Colors.white70
-        : enabled
-        ? AppColors.muted
-        : const Color(0xFFC9C9D4);
-    return Semantics(
-      button: true,
-      selected: selected,
-      enabled: enabled,
-      label: enabled ? null : '$top kapalı',
-      child: GestureDetector(
-        onTap: enabled ? onTap : null,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          width: 58,
-          decoration: BoxDecoration(
-            color: selected ? AppColors.primary : Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: selected ? AppColors.primary : AppColors.line,
-            ),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                top,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: sub,
-                ),
-              ),
-              const SizedBox(height: 3),
-              if (icon != null)
-                Icon(icon, size: 20, color: fg)
-              else
-                Text(
-                  mid ?? '',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: fg,
-                    height: 1.1,
-                    decoration: enabled ? null : TextDecoration.lineThrough,
-                    decorationColor: fg,
-                  ),
-                ),
-              const SizedBox(height: 2),
-              Text(
-                enabled ? bottom : 'Kapalı',
-                style: TextStyle(fontSize: 10.5, color: sub),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _timeField() {
     final day = _gun!;
     final slots = _slotsFor(day, _hours);
@@ -995,7 +848,7 @@ class _ReservationSheetState extends State<_ReservationSheet> {
         child: Text(
           _dayOnly(DateTime.now()).isAtSameMomentAs(day)
               ? 'Bugün için uygun saat kalmadı. Başka bir gün seç.'
-              : 'İşletme bu gün kapalı. Başka bir gün seç.',
+              : 'Bu gün rezervasyon alınmıyor. Başka bir gün seç.',
           style: const TextStyle(fontSize: 12.5, color: AppColors.closing),
         ),
       );
@@ -1272,8 +1125,10 @@ class _ReservationSheetState extends State<_ReservationSheet> {
         const SizedBox(height: 22),
         _primaryButton(label: 'Onayla', busy: _busy, onTap: _submit),
         const SizedBox(height: 14),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        // Büyük yazı boyutunda iki düğme alt alta geçsin (taşmasın).
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             TextButton(
               onPressed: _busy
@@ -1517,156 +1372,6 @@ class _SelectRow extends StatelessWidget {
                   ),
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Saat seçici: seçilen günün 15 dk aralıklı saatleri, gün bölümlerine göre
-/// gruplu ızgara. Ertesi güne taşan saatlerde "+1" yazar.
-class _TimeSlotSheet extends StatelessWidget {
-  final DateTime day;
-  final List<DateTime> slots;
-  final DateTime? selected;
-
-  const _TimeSlotSheet({
-    required this.day,
-    required this.slots,
-    required this.selected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final d0 = _dayOnly(day);
-    String group(DateTime s) {
-      if (!_dayOnly(s).isAtSameMomentAs(d0)) return 'Gece';
-      if (s.hour < 12) return 'Sabah';
-      if (s.hour < 17) return 'Öğle';
-      if (s.hour < 21) return 'Akşam';
-      return 'Gece';
-    }
-
-    final groups = <String, List<DateTime>>{};
-    for (final s in slots) {
-      groups.putIfAbsent(group(s), () => []).add(s);
-    }
-    final maxH = MediaQuery.sizeOf(context).height * 0.75;
-    return SafeArea(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: maxH),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const _Grabber(),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(22, 4, 22, 6),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Saat seç',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    _gunTarih(day),
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.muted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Flexible(
-              child: ListView(
-                shrinkWrap: true,
-                padding: const EdgeInsets.fromLTRB(22, 6, 22, 18),
-                children: [
-                  for (final e in groups.entries) ...[
-                    Padding(
-                      padding: const EdgeInsets.only(top: 10, bottom: 8),
-                      child: Text(
-                        e.key,
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.muted,
-                        ),
-                      ),
-                    ),
-                    GridView.count(
-                      crossAxisCount: 4,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      mainAxisSpacing: 8,
-                      crossAxisSpacing: 8,
-                      childAspectRatio: 2.1,
-                      children: [
-                        for (final s in e.value)
-                          _slotChip(
-                            context,
-                            s,
-                            next: !_dayOnly(s).isAtSameMomentAs(d0),
-                          ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _slotChip(BuildContext context, DateTime s, {required bool next}) {
-    final sel = selected != null && selected!.isAtSameMomentAs(s);
-    return Semantics(
-      button: true,
-      selected: sel,
-      label: next ? '${_hm(s)}, ertesi gün' : _hm(s),
-      excludeSemantics: true,
-      child: GestureDetector(
-        onTap: () => Navigator.pop(context, s),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: sel ? AppColors.primary : Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: sel ? AppColors.primary : AppColors.line,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _hm(s),
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: sel ? Colors.white : AppColors.ink,
-                ),
-              ),
-              if (next)
-                Text(
-                  '+1',
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w700,
-                    color: sel ? Colors.white70 : AppColors.muted,
-                  ),
-                ),
             ],
           ),
         ),

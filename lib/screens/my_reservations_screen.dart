@@ -3,10 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data/api.dart';
+import '../data/models.dart' show RezGunKurali;
 import '../data/uye_aktivite.dart';
 import '../theme/app_theme.dart';
 import '../widgets/account_page.dart';
 import '../widgets/common.dart';
+import '../widgets/rez_time_picker.dart';
 import 'detail_screen.dart';
 
 /// Rezervasyonlarım — Yaklaşan / Geçmiş sekmeleri (`GET /uye/rezervasyonlar`,
@@ -794,8 +796,22 @@ class _EditReservationSheet extends StatefulWidget {
 }
 
 class _EditReservationSheetState extends State<_EditReservationSheet> {
-  late DateTime _tarih =
-      widget.rez.tarih ?? DateTime.now().add(const Duration(days: 1));
+  // Gün + saat: oluşturma paneliyle aynı seçim (rez_time_picker.dart).
+  // Gece yarısından sonraki saat (ör. 00:30) önceki günün listesinde yer
+  // aldığı için gün, saatten değil kullanıcının seçtiği günden tutulur.
+  late DateTime? _gun = _initialDay();
+  late DateTime? _tarih = widget.rez.tarih;
+  // İşletmenin çalışma saatleri (`/rezervasyon/secenekler`). Yüklenene
+  // kadar gün/saat seçimi beklenir; hiç bilgi yoksa ortak varsayılan aralık.
+  Map<String, String?> _hours = const {};
+  // İşletmenin rezervasyon gün/saat ayarı (REZERVASYON_SAATLERI.md).
+  Map<String, RezGunKurali> _rez = const {};
+  bool _hoursLoading = true;
+
+  /// Çalışma saati + rezervasyon ayarına uyan saatler.
+  List<DateTime> _slots(DateTime day) =>
+      rezSaatleri(day, _hours, rez: _rez);
+
   // Sunucu PATCH'te 1–100 kabul eder (dışı 422).
   static const _maxKisi = 100;
   late int _kisi = widget.rez.kisi.clamp(1, _maxKisi);
@@ -805,47 +821,122 @@ class _EditReservationSheetState extends State<_EditReservationSheet> {
   bool _saving = false;
   String? _error;
 
+  DateTime? _initialDay() {
+    final t = widget.rez.tarih;
+    if (t == null) return null;
+    // 00:00–05:59 arası saat, gece açık işletmede önceki günün listesindedir.
+    final d = rezDayOnly(t);
+    return t.hour < 6 ? d.subtract(const Duration(days: 1)) : d;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHours();
+  }
+
+  Future<void> _loadHours() async {
+    final o = await RezervasyonRepository.instance.secenekler(
+      widget.rez.mekan.id,
+    );
+    if (!mounted) return;
+    setState(() {
+      _hours = o?.calismaSaatleri ?? const {};
+      _rez = o?.rezervasyonSaatleri ?? const {};
+      _hoursLoading = false;
+      // Önceki günün listesinde değilse (gündüz saati) kendi günü.
+      final t = _tarih;
+      if (t != null &&
+          _gun != null &&
+          !_slots(_gun!).any((s) => s.isAtSameMomentAs(t))) {
+        _gun = rezDayOnly(t);
+      }
+    });
+  }
+
   @override
   void dispose() {
     _not.dispose();
     super.dispose();
   }
 
-  Future<void> _pickDate() async {
+  bool get _unchangedTime =>
+      _tarih != null &&
+      widget.rez.tarih != null &&
+      _tarih!.isAtSameMomentAs(widget.rez.tarih!);
+
+  /// Gün seçildi → saat listesi kendiliğinden açılır. Önceki saat yeni günde
+  /// de varsa korunur.
+  Future<void> _selectDay(DateTime day) async {
+    final prev = _tarih;
+    final slots = _slots(day);
+    setState(() {
+      _gun = day;
+      _error = null;
+      _tarih = prev == null
+          ? null
+          : slots
+                .where((s) => s.hour == prev.hour && s.minute == prev.minute)
+                .firstOrNull;
+    });
+    if (slots.isNotEmpty) await _pickTime();
+  }
+
+  Future<void> _pickOtherDay() async {
     final now = DateTime.now();
-    final d = await showDatePicker(
-      context: context,
-      initialDate: _tarih.isBefore(now) ? now : _tarih,
-      firstDate: DateTime(now.year, now.month, now.day),
+    final d = await showNativeDatePicker(
+      context,
+      initialDate: _gun ?? now,
+      firstDate: rezDayOnly(now),
       lastDate: now.add(const Duration(days: 180)),
+      helpText: 'Rezervasyon günü',
     );
     if (d == null || !mounted) return;
-    setState(
-      () =>
-          _tarih = DateTime(d.year, d.month, d.day, _tarih.hour, _tarih.minute),
-    );
+    if (_slots(d).isEmpty) {
+      setState(() {
+        _gun = rezDayOnly(d);
+        _tarih = null;
+        _error =
+            '${rezGunTarih(d)} günü rezervasyon alınmıyor. Başka bir gün seç.';
+      });
+      return;
+    }
+    await _selectDay(rezDayOnly(d));
   }
 
   Future<void> _pickTime() async {
-    final t = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(_tarih),
+    final day = _gun;
+    if (day == null) return;
+    final picked = await showRezTimeSelect(
+      context,
+      day: day,
+      slots: _slots(day),
+      selected: _tarih,
+      rez: _rez,
     );
-    if (t == null || !mounted) return;
-    setState(
-      () => _tarih = DateTime(
-        _tarih.year,
-        _tarih.month,
-        _tarih.day,
-        t.hour,
-        t.minute,
-      ),
-    );
+    if (picked != null && mounted) {
+      setState(() {
+        _tarih = picked;
+        _error = null;
+      });
+    }
   }
 
   Future<void> _save() async {
-    if (_tarih.isBefore(DateTime.now())) {
+    final t = _tarih;
+    if (_gun == null || t == null) {
+      setState(() => _error = 'Rezervasyon günü ve saati seç.');
+      return;
+    }
+    if (t.isBefore(DateTime.now())) {
       setState(() => _error = 'Geçmiş bir tarih seçilemez.');
+      return;
+    }
+    // Saat değiştiyse işletmenin açık olduğu bir saat olmalı (liste zaten
+    // yalnız onları sunar; eski saat aynen kalırsa dokunulmaz).
+    if (!_unchangedTime &&
+        !_slots(_gun!).any((s) => s.isAtSameMomentAs(t))) {
+      setState(() => _error = 'Seçtiğin saatte işletme kapalı.');
       return;
     }
     setState(() {
@@ -855,7 +946,7 @@ class _EditReservationSheetState extends State<_EditReservationSheet> {
     try {
       await UyeAktiviteRepository.instance.rezervasyonGuncelle(
         widget.rez.id,
-        tarih: TrTarih.api(_tarih),
+        tarih: TrTarih.api(t),
         kisi: _kisi,
         not: _not.text.trim(),
       );
@@ -871,8 +962,13 @@ class _EditReservationSheetState extends State<_EditReservationSheet> {
       if (mounted) {
         setState(() {
           _saving = false;
+          // Sunucunun metni gösterilir ("Salı günü rezervasyon saatleri
+          // 12:00 – 22:00 arasıdır…"); saat reddedildiyse işletme ayarı
+          // değişmiş olabilir → saatler yeniden çekilir
+          // (REZERVASYON_SAATLERI.md §2.4).
           _error = e.message;
         });
+        _loadHours();
       }
     } catch (_) {
       if (mounted) {
@@ -945,19 +1041,52 @@ class _EditReservationSheetState extends State<_EditReservationSheet> {
                 style: const TextStyle(fontSize: 13.5, color: AppColors.muted),
               ),
               const SizedBox(height: 16),
-              _field(
-                Icons.event_outlined,
-                'Tarih',
-                TrTarih.kisa(_tarih),
-                _pickDate,
-              ),
-              const SizedBox(height: 10),
-              _field(
-                Icons.schedule_outlined,
-                'Saat',
-                TrTarih.saat(_tarih),
-                _pickTime,
-              ),
+              if (_hoursLoading)
+                const SizedBox(
+                  height: 74,
+                  child: Center(
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                )
+              else ...[
+                RezDayStrip(
+                  selected: _gun,
+                  hours: _hours,
+                  rez: _rez,
+                  onSelect: (d) {
+                    if (!_saving) _selectDay(d);
+                  },
+                  onOther: () {
+                    if (!_saving) _pickOtherDay();
+                  },
+                ),
+                const SizedBox(height: 10),
+                if (_gun != null && _slots(_gun!).isEmpty && !_unchangedTime)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 6),
+                    child: Text(
+                      'Bu gün için uygun saat yok. Başka bir gün seç.',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.closing,
+                      ),
+                    ),
+                  )
+                else if (_gun != null)
+                  _field(
+                    Icons.schedule_outlined,
+                    'Saat',
+                    _tarih == null ? 'Seç' : TrTarih.saat(_tarih!),
+                    _pickTime,
+                  ),
+              ],
               const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.fromLTRB(14, 4, 4, 4),

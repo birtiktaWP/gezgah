@@ -354,6 +354,29 @@ class SectionHead extends StatelessWidget {
 }
 
 /// Yatay kaydırılan kategori hapı.
+/// [CategoryPill] vurgu renkleri: zemin, kenar, ikon dairesi (ikon beyaz) ve
+/// yazı.
+class PillAccent {
+  final Color bg;
+  final Color border;
+  final Color icon;
+  final Color text;
+  const PillAccent({
+    required this.bg,
+    required this.border,
+    required this.icon,
+    required this.text,
+  });
+
+  /// Yumuşak turuncu (Kampanyalar).
+  static const orange = PillAccent(
+    bg: Color(0xFFFFF1E6),
+    border: Color(0xFFFFD2B0),
+    icon: Color(0xFFFF8A3D),
+    text: Color(0xFFB8480C),
+  );
+}
+
 class CategoryPill extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -370,6 +393,10 @@ class CategoryPill extends StatelessWidget {
   /// true ise ikon dairesi hiç çizilmez, yalnız metin (gerçek ikon yoksa).
   final bool noIcon;
 
+  /// Verilirse hap bu renk ailesiyle çizilir (ör. ana sayfadaki turuncu
+  /// "Kampanyalar" hapı). null → standart beyaz hap.
+  final PillAccent? accent;
+
   const CategoryPill({
     super.key,
     this.icon = Icons.circle,
@@ -379,6 +406,7 @@ class CategoryPill extends StatelessWidget {
     this.iconWidget,
     this.svg,
     this.noIcon = false,
+    this.accent,
   });
 
   /// API kategori ikonundan (SVG ya da emoji) hap üretir; ikon yoksa ya da
@@ -412,11 +440,15 @@ class CategoryPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final a = active ? null : accent;
     final text = Text(label,
         style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: active ? Colors.white : AppColors.ink));
+            color: active
+                ? Colors.white
+                : (a?.text ?? AppColors.ink)));
+    final iconColor = active || a != null ? Colors.white : AppColors.primary;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -426,10 +458,12 @@ class CategoryPill extends StatelessWidget {
             ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
             : const EdgeInsets.fromLTRB(9, 8, 14, 8),
         decoration: BoxDecoration(
-          color: active ? AppColors.primary : Colors.white,
+          color: active ? AppColors.primary : (a?.bg ?? Colors.white),
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
-              color: active ? AppColors.primary : AppColors.line),
+              color: active
+                  ? AppColors.primary
+                  : (a?.border ?? AppColors.line)),
         ),
         child: noIcon
             ? text
@@ -443,7 +477,7 @@ class CategoryPill extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: active
                     ? Colors.white.withValues(alpha: 0.2)
-                    : AppColors.primarySoft,
+                    : (a?.icon ?? AppColors.primarySoft),
               ),
               alignment: Alignment.center,
               child: iconWidget ??
@@ -452,13 +486,10 @@ class CategoryPill extends StatelessWidget {
                           svg!,
                           width: 15,
                           height: 15,
-                          colorFilter: ColorFilter.mode(
-                              active ? Colors.white : AppColors.primary,
-                              BlendMode.srcIn),
+                          colorFilter:
+                              ColorFilter.mode(iconColor, BlendMode.srcIn),
                         )
-                      : Icon(icon,
-                          size: 15,
-                          color: active ? Colors.white : AppColors.primary)),
+                      : Icon(icon, size: 15, color: iconColor)),
             ),
             const SizedBox(width: 7),
             text,

@@ -1830,6 +1830,11 @@ class RezervasyonSecenekler {
   /// Gün anahtarı → çalışma saati metni ("09:00 - 23:00" / "Kapalı" / null).
   final Map<String, String?> calismaSaatleri;
 
+  /// Gün anahtarı → işletmenin rezervasyon aldığı gün/saat ayarı
+  /// (REZERVASYON_SAATLERI.md). Çalışma saatlerine EK kısıttır. Gelmezse
+  /// boş (kısıt yok).
+  final Map<String, RezGunKurali> rezervasyonSaatleri;
+
   const RezervasyonSecenekler({
     required this.mekanId,
     this.aktif = false,
@@ -1837,6 +1842,7 @@ class RezervasyonSecenekler {
     this.bolgeler = const [],
     this.masalar = const {},
     this.calismaSaatleri = const {},
+    this.rezervasyonSaatleri = const {},
   });
 
   factory RezervasyonSecenekler.fromJson(Map<String, dynamic> j) {
@@ -1871,6 +1877,14 @@ class RezervasyonSecenekler {
       });
     }
 
+    final rezRaw = j['rezervasyon_saatleri'];
+    final rez = <String, RezGunKurali>{};
+    if (rezRaw is Map) {
+      rezRaw.forEach((k, v) {
+        if (v is Map) rez[k.toString().toLowerCase()] = RezGunKurali.fromJson(v);
+      });
+    }
+
     return RezervasyonSecenekler(
       mekanId: (j['mekan_id'] as num?)?.toInt() ?? 0,
       aktif: j['rezervasyon_aktif'] == true,
@@ -1878,6 +1892,40 @@ class RezervasyonSecenekler {
       bolgeler: bolgeler,
       masalar: masalar,
       calismaSaatleri: saatler,
+      rezervasyonSaatleri: rez,
+    );
+  }
+}
+
+/// Bir günün rezervasyon ayarı (`rezervasyon_saatleri[gun]`,
+/// REZERVASYON_SAATLERI.md §1). [acik] false → o gün rezervasyon alınmaz.
+/// [baslangic]/[bitis] dakika (gün başından); ikisi de null → saat kısıtı
+/// yok (çalışma saatleri geçerli). [bitis] ≤ [baslangic] → gece yarısını
+/// aşar (ertesi günün 00:00–bitis kısmı da bu güne sayılır). Uçlar dahil.
+class RezGunKurali {
+  final bool acik;
+  final int? baslangic;
+  final int? bitis;
+
+  const RezGunKurali({this.acik = true, this.baslangic, this.bitis});
+
+  bool get kisitli => baslangic != null && bitis != null;
+  bool get geceAsar => kisitli && bitis! <= baslangic!;
+
+  static int? _dk(dynamic v) {
+    final m = RegExp(r'^(\d{1,2}):(\d{2})').firstMatch('${v ?? ''}'.trim());
+    if (m == null) return null;
+    return int.parse(m.group(1)!) * 60 + int.parse(m.group(2)!);
+  }
+
+  factory RezGunKurali.fromJson(Map j) {
+    final b = _dk(j['baslangic']);
+    final e = _dk(j['bitis']);
+    return RezGunKurali(
+      acik: j['acik'] != false,
+      // Yalnız biri doluysa kısıt sayılmaz (sunucu ikisini birlikte yazar).
+      baslangic: b != null && e != null ? b : null,
+      bitis: b != null && e != null ? e : null,
     );
   }
 }
