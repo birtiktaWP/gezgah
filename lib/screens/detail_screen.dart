@@ -1613,96 +1613,14 @@ class _DetailScreenState extends State<DetailScreen> {
     );
   }
 
-  /// Rezervasyon formunu (bottom sheet) açar; başarılıysa başarı modalını
-  /// gösterir (rezervasyon-api.md).
+  /// Rezervasyon panelini açar (rezervasyon-api.md). Form → SMS doğrulama →
+  /// başarı ekranı panelin içinde; ayrıca başarı modalı açılmaz.
   Future<void> _openReservationSheet(RezervasyonSecenekler rez) async {
-    final result = await showReservationSheet(
+    await showReservationSheet(
       context,
       mekanId: widget.place.id,
       placeName: _name,
       options: rez,
-    );
-    if (result != null && mounted) {
-      _showReservationSuccess(result.tarih, result.kisi);
-    }
-  }
-
-  /// Rezervasyon oluşturulduğunda gösterilen başarı modalı.
-  void _showReservationSuccess(DateTime tarih, int kisi) {
-    String p(int n) => n.toString().padLeft(2, '0');
-    final tarihStr =
-        '${p(tarih.day)}.${p(tarih.month)}.${tarih.year} · ${p(tarih.hour)}:${p(tarih.minute)}';
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 28, 24, 22),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFF0FBF4),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.event_available_rounded,
-                  size: 34,
-                  color: AppColors.open,
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Rezervasyon talebin alındı!',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.primary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '$_name\n$tarihStr · $kisi kişi\n\n'
-                'Talebin işletmeye iletildi. Onaylandığında seni '
-                'bilgilendireceğiz.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 13.5,
-                  color: AppColors.muted,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 20),
-              GestureDetector(
-                onTap: () => Navigator.pop(ctx),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 13),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'Tamam',
-                      style: TextStyle(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
