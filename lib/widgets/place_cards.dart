@@ -362,76 +362,108 @@ class ListTileCard extends StatelessWidget {
     );
   }
 
+  /// Kategori listesinin en üstüne sabitlenen mekan (ERP Reklam → Kategori
+  /// Sabitleme / kategorinin `sabit_restoran`'ı). Normal satırdan farkı:
+  /// geniş görsel, üstünde "Sponsorlu" etiketi ve kalp; altında ad +
+  /// doğrulanmış rozeti (yalnız gerçekten doğrulanmışsa — eskiden her
+  /// sabit mekanda sabit bir lacivert tik vardı), tür · açık/kapalı satırı ve
+  /// konum + "İncele".
   Widget _sponsored(BuildContext context) {
+    final status = place.acikDurum;
+    final type = place.subtitle.trim();
     return GestureDetector(
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: AppColors.primarySoft,
-          borderRadius: BorderRadius.circular(18),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: AppShadows.listTile,
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
-              height: 160,
+              height: 176,
               width: double.infinity,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
                   heroImage(heroTag, place.thumb(ThumbSize.wide)),
+                  const Positioned(top: 12, left: 12, child: _Tag('Sponsorlu')),
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: FavHeart(postId: place.id),
+                  ),
                 ],
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 11, 12, 13),
+              padding: const EdgeInsets.fromLTRB(16, 13, 14, 14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Text(place.name,
-                          style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600)),
-                      const SizedBox(width: 7),
-                      Container(
-                        width: 22,
-                        height: 22,
-                        decoration: const BoxDecoration(
-                            color: AppColors.primary, shape: BoxShape.circle),
-                        child: const Icon(Icons.check,
-                            size: 13, color: Colors.white),
+                      Flexible(
+                        child: Text(place.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 16.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.ink)),
                       ),
+                      if (place.verified) ...[
+                        const SizedBox(width: 5),
+                        const VerifiedTick(size: 17),
+                      ],
                     ],
                   ),
-                  if (place.acikDurum != null) ...[
-                    const SizedBox(height: 6),
-                    OpenStatusLine(status: place.acikDurum!),
+                  if (type.isNotEmpty || status != null) ...[
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        if (type.isNotEmpty)
+                          Text(type,
+                              style: const TextStyle(
+                                  fontSize: 12.5, color: AppColors.muted)),
+                        if (type.isNotEmpty && status != null)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 7),
+                            child: Text('·',
+                                style: TextStyle(
+                                    fontSize: 12.5, color: AppColors.muted)),
+                          ),
+                        if (status != null)
+                          Flexible(child: OpenStatusLine(status: status)),
+                      ],
+                    ),
                   ],
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
+                  const Divider(height: 1, thickness: 1, color: AppColors.line),
+                  const SizedBox(height: 11),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: AppColors.primarySoft2,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: const Text('SPONSORLU',
-                            style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.primary)),
+                      const AppSvgIcon(AppIcons.pin,
+                          size: 12, color: AppColors.primary),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(place.distance,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 12.5, color: AppColors.ink)),
                       ),
-                      Text(place.price,
-                          style: const TextStyle(
-                              fontSize: 11.5,
+                      const SizedBox(width: 8),
+                      const Text('İncele',
+                          style: TextStyle(
+                              fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: AppColors.ink)),
+                              color: AppColors.primary)),
+                      const Icon(Icons.chevron_right,
+                          size: 18, color: AppColors.primary),
                     ],
                   ),
                 ],

@@ -2579,7 +2579,10 @@ class HomeRepository {
       '/etkinlikler',
       queryParameters: {
         'status': 1,
-        if (upcoming) 'upcoming': 1,
+        // Sunucu yalnız `upcoming=true`'yu tanıyor; `upcoming=1` yok sayılıyor
+        // ve tarihi gelmemiş etkinlik olsa da 0 kayıt dönüyordu (canlıda
+        // doğrulandı, 14.11.2026).
+        if (upcoming) 'upcoming': 'true',
         'page': page,
         'limit': limit,
       },
