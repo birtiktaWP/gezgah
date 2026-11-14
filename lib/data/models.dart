@@ -32,6 +32,10 @@ class Place {
   final Map<String, String> calismaSaatleri;
   bool favorite;
 
+  /// Aktif kampanyanın en yüksek indirim oranı (% — `kampanya
+  /// .en_yuksek_indirim`, KAMPANYA_LISTE_ROZET.md). Kampanya yoksa null.
+  final int? kampanyaIndirim;
+
   /// Şu an açık mı (çalışma saatlerinden). Bilinmiyorsa null.
   ({bool open, String? until})? get acikDurum => acikDurumu(calismaSaatleri);
 
@@ -64,6 +68,7 @@ class Place {
     this.bolgeId,
     this.calismaSaatleri = const {},
     this.favorite = false,
+    this.kampanyaIndirim,
     this.thumbnail,
     this.thumbSquare,
     this.thumbCard,
@@ -1786,6 +1791,25 @@ Map<String, String> parseCalismaSaatleri(dynamic raw) {
   return (open: false, until: null);
 }
 
+/// Liste / arama kaydındaki `kampanya` özeti (KAMPANYA_LISTE_ROZET.md).
+/// Mekan satırında `{en_yuksek_indirim, kampanya_sayisi}`, ürün satırında
+/// `{id, indirim_orani, indirimli_fiyat}` gelir. Alan yok / null / oran 0 →
+/// kampanya yok.
+({int oran, int? id, num? indirimliFiyat, int sayi})? parseKampanyaOzet(
+  dynamic v,
+) {
+  if (v is! Map) return null;
+  num? n(dynamic x) => x is num ? x : num.tryParse('${x ?? ''}');
+  final oran = (n(v['en_yuksek_indirim']) ?? n(v['indirim_orani']))?.toInt();
+  if (oran == null || oran <= 0) return null;
+  return (
+    oran: oran,
+    id: n(v['id'])?.toInt(),
+    indirimliFiyat: n(v['indirimli_fiyat']),
+    sayi: n(v['kampanya_sayisi'])?.toInt() ?? 1,
+  );
+}
+
 /// Sunucunun tahmini yol mesafesi (metre): önce `mesafe_m`, yoksa
 /// `mesafe_km` × 1000. Alan yok/null ise null (MESAFE-MOBIL.md §1–3).
 /// `kus_ucusu_km` bilinçli olarak okunmaz.
@@ -1955,6 +1979,12 @@ class FoodResult {
   final List<FoodResult> diger;
   final int? eslesenSayisi;
 
+  /// Ürünü kapsayan en yüksek aktif kampanya (%) ve indirimli fiyat (TL)
+  /// (`kampanya{indirim_orani, indirimli_fiyat}`, KAMPANYA_LISTE_ROZET.md).
+  /// Kampanya yoksa null.
+  final int? kampanyaIndirim;
+  final num? indirimliFiyat;
+
   const FoodResult({
     required this.urunId,
     this.urun = '',
@@ -1969,6 +1999,8 @@ class FoodResult {
     this.kalori,
     this.diger = const [],
     this.eslesenSayisi,
+    this.kampanyaIndirim,
+    this.indirimliFiyat,
   });
 
   /// Ürün modalı (`showMenuItemSheet`) için menü ürünü karşılığı.

@@ -11,6 +11,7 @@ import 'package:video_player/video_player.dart';
 import '../data/api.dart';
 import '../data/auth_service.dart';
 import '../data/favorites_service.dart';
+import '../data/kampanya.dart';
 import '../data/location_service.dart';
 import '../data/models.dart';
 import '../data/view_tracker.dart';
@@ -19,10 +20,12 @@ import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
 import '../widgets/onayli_modal.dart';
 import '../widgets/confetti.dart';
+import '../widgets/kampanya_widgets.dart';
 import '../widgets/kedy_chat.dart';
 import '../widgets/reservation_sheet.dart';
 import '../widgets/skeleton.dart';
 import '../widgets/tabbar.dart';
+import 'campaign_detail_screen.dart';
 import 'event_detail_screen.dart';
 import 'login_screen.dart';
 import 'menu_screen.dart';
@@ -76,6 +79,10 @@ class _DetailScreenState extends State<DetailScreen> {
   // Rezervasyon seçenekleri (rezervasyon-api.md). `aktif` (Gezgah Plus) ise
   // footer'daki "Rezerve" butonu etkinleşir. Detay ile birlikte çekilir.
   RezervasyonSecenekler? _rez;
+
+  // Bu işletmenin aktif kampanyaları (`GET /kampanyalar?mekan_id=`,
+  // KAMPANYALAR.md). Etkinliklerin üstünde; boşsa bölüm gizli.
+  List<Kampanya> _kampanyalar = const [];
 
   // Aynı kategoriden benzer mekanlar (en altta ray). Detay yüklendikten sonra
   // ayrıca çekilir; boşken bölüm gizli kalır.
@@ -154,6 +161,31 @@ class _DetailScreenState extends State<DetailScreen> {
     _fetchSimilar(d);
     _fetchRezervasyon();
     _fetchOzellikIkonlari(d);
+    _fetchKampanyalar();
+  }
+
+  Future<void> _fetchKampanyalar() async {
+    final list = await KampanyaRepository.instance.mekanKampanyalari(
+      widget.place.id,
+    );
+    if (!mounted || list.isEmpty) return;
+    setState(() => _kampanyalar = list);
+  }
+
+  /// Kampanya detayı. İşletme görseli bu sayfadaki büyük görselle aynı olsun
+  /// diye (kampanya yanıtında yalnız küçük görseller var) o adres verilir.
+  void _openKampanya(Kampanya k) {
+    final hero = _heroImages.firstOrNull;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CampaignDetailScreen(
+          kampanyaId: k.id,
+          onizleme: k,
+          kapakGorseli: hero,
+        ),
+      ),
+    );
   }
 
   /// İkonsuz özellik varsa özellik ikon eşlemesini çeker.
@@ -847,6 +879,13 @@ class _DetailScreenState extends State<DetailScreen> {
         const SizedBox(height: 16),
       ],
       _venueCard(d),
+      // Bu işletmedeki aktif kampanyalar (etkinliklerin üstünde).
+      if (_kampanyalar.isNotEmpty) ...[
+        _divider(),
+        _sectionH('Kampanyalar'),
+        for (final k in _kampanyalar)
+          KampanyaSatiri(kampanya: k, onTap: () => _openKampanya(k)),
+      ],
       // Etkinlikler yalnızca mekana ait aktif etkinlik varsa gösterilir
       // (sunucu süresi geçmişleri zaten eliyor).
       if (d.etkinlikler.isNotEmpty) ...[

@@ -17,6 +17,60 @@ class VerifiedTick extends StatelessWidget {
       Icon(Icons.verified, size: size, color: kOnayliMavi);
 }
 
+/// Kampanya / indirim etiketi: turuncu hap, "%30" (ya da "%30 indirim").
+/// Liste kartlarında, arama sonuçlarında ve yemek satırlarında aynı
+/// (KAMPANYA_LISTE_ROZET.md).
+class KampanyaEtiket extends StatelessWidget {
+  final int oran;
+  final String? label;
+  final double fontSize;
+  const KampanyaEtiket(
+    this.oran, {
+    super.key,
+    this.label,
+    this.fontSize = 11,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final text = label == null ? '%$oran' : '%$oran $label';
+    return Semantics(
+      label: '%$oran indirim',
+      excludeSemantics: true,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: fontSize * 0.6,
+          vertical: fontSize * 0.25,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.kampanya,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.local_offer_rounded,
+              size: fontSize,
+              color: Colors.white,
+            ),
+            SizedBox(width: fontSize * 0.3),
+            Text(
+              text,
+              style: TextStyle(
+                fontSize: fontSize,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+                height: 1.15,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Yatay rail'deki kompakt popüler mekan kartı (.pop)
 class PopCard extends StatelessWidget {
   final Place place;
@@ -333,23 +387,33 @@ class ListTileCard extends StatelessWidget {
                     ],
                     const SizedBox(height: 10),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            const AppSvgIcon(AppIcons.pin,
-                                size: 11, color: AppColors.primary),
-                            const SizedBox(width: 3),
-                            Text(place.distance,
-                                style: const TextStyle(
-                                    fontSize: 11.5, color: AppColors.muted)),
-                          ],
+                        const AppSvgIcon(AppIcons.pin,
+                            size: 11, color: AppColors.primary),
+                        const SizedBox(width: 3),
+                        // Konum uzunsa kısalır; sağdaki indirim her zaman
+                        // görünür kalsın.
+                        Expanded(
+                          child: Text(place.distance,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 11.5, color: AppColors.muted)),
                         ),
-                        Text(place.price,
-                            style: const TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.ink)),
+                        // Sağ alt: aktif kampanyanın en yüksek indirimi
+                        // (KAMPANYA_LISTE_ROZET.md); yoksa fiyat bilgisi.
+                        // Kısa ("%90"): konum satırındaki km kaybolmasın.
+                        if (place.kampanyaIndirim != null) ...[
+                          const SizedBox(width: 6),
+                          KampanyaEtiket(place.kampanyaIndirim!),
+                        ] else if (place.price.isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          Text(place.price,
+                              style: const TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.ink)),
+                        ],
                       ],
                     ),
                   ],
@@ -390,7 +454,22 @@ class ListTileCard extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   heroImage(heroTag, place.thumb(ThumbSize.wide)),
-                  const Positioned(top: 12, left: 12, child: _Tag('Sponsorlu')),
+                  Positioned(
+                    top: 12,
+                    left: 12,
+                    child: Row(
+                      children: [
+                        const _Tag('Sponsorlu'),
+                        if (place.kampanyaIndirim != null) ...[
+                          const SizedBox(width: 6),
+                          KampanyaEtiket(
+                            place.kampanyaIndirim!,
+                            label: 'indirim',
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                   Positioned(
                     top: 10,
                     right: 10,

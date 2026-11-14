@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/services.dart';
 
 import '../data/kampanya.dart';
@@ -24,11 +25,16 @@ class CampaignDetailScreen extends StatefulWidget {
   final Kampanya? onizleme;
   final KampanyaMekan? mekan;
 
+  /// Mekan detayından gelinirse oradaki büyük görselin adresi (aynı fotoğraf,
+  /// önbellekte). Verilmezse tam boy görsel küçük görselin adından bulunur.
+  final String? kapakGorseli;
+
   const CampaignDetailScreen({
     super.key,
     required this.kampanyaId,
     this.onizleme,
     this.mekan,
+    this.kapakGorseli,
   });
 
   @override
@@ -209,28 +215,41 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
     );
   }
 
+  /// Üst görsel — mekan detayındaki mantıkla: önce önbellekteki küçük görsel
+  /// anında, üstüne tam boy görsel indirilince yumuşakça. Eskiden yalnız
+  /// `thumbnails.wide` (1080×500) 250 px yüksekliğe büyütülüp kırpılıyor,
+  /// bulanık görünüyordu. Kampanya yanıtında tam boy `image` olmadığı için
+  /// adres mekan detayından gelir ya da küçük görselin adından türetilir
+  /// (sırayla .jpg / .webp / .png denenir).
   Widget _hero(Kampanya k) {
     final m = _mekan;
-    final img = m?.thumbWide ?? '';
+    final preview = m?.thumbWide ?? '';
+    final full = [
+      if ((widget.kapakGorseli ?? '').isNotEmpty) widget.kapakGorseli!,
+      ...?m?.tamGorselAdaylari,
+    ];
     return SizedBox(
       height: 250,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          img.isNotEmpty
-              ? NetImage(img)
-              : const ColoredBox(
-                  color: AppColors.primarySoft,
-                  child: Icon(
-                    Icons.local_offer_outlined,
-                    size: 56,
-                    color: AppColors.primary,
-                  ),
-                ),
+          if (preview.isEmpty && full.isEmpty)
+            const ColoredBox(
+              color: AppColors.primarySoft,
+              child: Icon(
+                Icons.local_offer_outlined,
+                size: 56,
+                color: AppColors.primary,
+              ),
+            )
+          else ...[
+            if (preview.isNotEmpty) NetImage(preview, fadeIn: Duration.zero),
+            if (full.isNotEmpty) _ZincirGorsel(full),
+          ],
           Positioned(
             right: 16,
-            bottom: 36,
-            child: KampanyaRozet(k.oran, fontSize: 22),
+            bottom: 34,
+            child: KampanyaRozet(k.oran, fontSize: 15),
           ),
         ],
       ),
@@ -509,7 +528,7 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.closing,
+                    color: AppColors.kampanya,
                   ),
                 ),
               ],
@@ -629,5 +648,56 @@ class _CampaignDetailScreenState extends State<CampaignDetailScreen> {
   static String _tarih(DateTime d) {
     String p(int n) => n.toString().padLeft(2, '0');
     return '${p(d.day)}.${p(d.month)}.${d.year} ${p(d.hour)}:${p(d.minute)}';
+  }
+}
+
+/// Tam boy görseli [urls] sırasıyla dener: biri açılamazsa (404) sonrakine
+/// geçer; hiçbiri açılmazsa hiçbir şey çizmez (alttaki küçük görsel kalır).
+/// Yüklenirken saydamdır, açılınca 350 ms'de belirir (mekan detayındaki
+/// önizleme → büyük görsel geçişiyle aynı).
+class _ZincirGorsel extends StatefulWidget {
+  final List<String> urls;
+  const _ZincirGorsel(this.urls);
+
+  @override
+  State<_ZincirGorsel> createState() => _ZincirGorselState();
+}
+
+class _ZincirGorselState extends State<_ZincirGorsel> {
+  int _i = 0;
+
+  void _next() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _i < widget.urls.length) setState(() => _i++);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_i >= widget.urls.length) return const SizedBox.shrink();
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    return LayoutBuilder(
+      builder: (context, c) {
+        // NetImage ile aynı küçültme: kutuyu dolduracak kadar, en çok 2400.
+        final w = c.hasBoundedWidth ? c.maxWidth : 0.0;
+        final h = c.hasBoundedHeight ? c.maxHeight * 1.34 : 0.0;
+        final target = (w > h ? w : h) * dpr;
+        final cw = target <= 0
+            ? null
+            : ((target / 100).ceil() * 100).clamp(100, 2400);
+        return CachedNetworkImage(
+          key: ValueKey(widget.urls[_i]),
+          imageUrl: widget.urls[_i],
+          fit: BoxFit.cover,
+          memCacheWidth: cw,
+          fadeInDuration: const Duration(milliseconds: 350),
+          placeholder: (_, __) => const SizedBox.expand(),
+          errorWidget: (_, __, ___) {
+            _next();
+            return const SizedBox.expand();
+          },
+        );
+      },
+    );
   }
 }

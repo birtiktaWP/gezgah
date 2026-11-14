@@ -240,6 +240,10 @@ class KampanyaMekan {
   final int id;
   final String type;
   final String ad;
+
+  /// Tam boy görsel (`image`). Kampanya yanıtları bugün göndermiyor
+  /// (KAMPANYA_MEKAN_GORSEL.md); gelirse doğrudan kullanılır.
+  final String image;
   final String thumbSquare;
   final String thumbCard;
   final String thumbWide;
@@ -254,6 +258,7 @@ class KampanyaMekan {
     required this.id,
     this.type = '',
     this.ad = '',
+    this.image = '',
     this.thumbSquare = '',
     this.thumbCard = '',
     this.thumbWide = '',
@@ -286,6 +291,7 @@ class KampanyaMekan {
       id: (j['id'] as num?)?.toInt() ?? 0,
       type: (j['type'] ?? '').toString(),
       ad: (j['name'] ?? '').toString().trim(),
+      image: _abs(j['image']),
       thumbSquare: t('square').isNotEmpty ? t('square') : thumb,
       thumbCard: t('card').isNotEmpty ? t('card') : thumb,
       thumbWide: t('wide').isNotEmpty ? t('wide') : thumb,
@@ -296,6 +302,25 @@ class KampanyaMekan {
       telefon: (j['telefon'] ?? '').toString().trim(),
       mesafeM: parseMesafeM(j),
     );
+  }
+
+  /// Tam boy görsel adres adayları (sırayla denenir). `image` varsa yalnız o.
+  /// Yoksa küçük görselin dosya adından türetilir: sunucu küçükleri
+  /// `/uploads/thumbs/{square|card|wide}/{ad}.webp`, orijinali
+  /// `/uploads/{ad}.{jpg|webp|png}` olarak saklıyor (250 mekanda ölçüldü:
+  /// 197 jpg, 38 webp, 15 png).
+  List<String> get tamGorselAdaylari {
+    if (image.isNotEmpty) return [image];
+    for (final t in [thumbWide, thumbCard, thumbSquare]) {
+      final m = RegExp(
+        r'^(https?://[^/]+/uploads/)thumbs/(?:square|card|wide)/([^/?#]+)\.webp$',
+      ).firstMatch(t);
+      if (m != null) {
+        final base = '${m.group(1)}${m.group(2)}';
+        return ['$base.jpg', '$base.webp', '$base.png'];
+      }
+    }
+    return const [];
   }
 
   /// "Beşiktaş · 14,2 km"

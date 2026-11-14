@@ -30,12 +30,23 @@ Future<KampanyaQrSonuc?> openKampanyaQr(BuildContext context) async {
       return null;
     }
   }
-  final sonuc = await Navigator.of(context).push<KampanyaQrSonuc>(
-    MaterialPageRoute(
-      fullscreenDialog: true,
-      builder: (_) => const CampaignQrScanScreen(),
-    ),
-  );
+  // Tam ekran, opak rota. `MaterialPageRoute(fullscreenDialog: true)` iOS'ta
+  // üstten boşluklu kart (sheet) gibi açılıyor, kamera ekranın ~%10 kısa
+  // görünüyordu. Kök navigator: alttaki sayfa/tab bar hiç görünmesin.
+  final sonuc = await Navigator.of(context, rootNavigator: true)
+      .push<KampanyaQrSonuc>(
+        PageRouteBuilder<KampanyaQrSonuc>(
+          opaque: true,
+          barrierColor: Colors.black,
+          transitionDuration: const Duration(milliseconds: 260),
+          reverseTransitionDuration: const Duration(milliseconds: 200),
+          pageBuilder: (_, __, ___) => const CampaignQrScanScreen(),
+          transitionsBuilder: (_, anim, __, child) => FadeTransition(
+            opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
+            child: child,
+          ),
+        ),
+      );
   if (sonuc == null || !context.mounted) return null;
   await Navigator.of(context).push(
     MaterialPageRoute(builder: (_) => CampaignQrSuccessScreen(sonuc: sonuc)),
@@ -167,131 +178,140 @@ class _CampaignQrScanScreenState extends State<CampaignQrScanScreen> {
     final side = (mq.size.width * 0.68).clamp(200.0, 320.0);
     final center = Offset(mq.size.width / 2, mq.size.height * 0.42);
     final window = Rect.fromCenter(center: center, width: side, height: side);
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: MobileScanner(
-              controller: _ctrl,
-              onDetect: _onDetect,
-              errorBuilder: (context, error) => _cameraError(error),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        resizeToAvoidBottomInset: false,
+        extendBody: true,
+        extendBodyBehindAppBar: true,
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Kamera tüm ekranı kaplar (güvenli alanlar dahil, kırparak).
+            SizedBox.expand(
+              child: MobileScanner(
+                controller: _ctrl,
+                fit: BoxFit.cover,
+                onDetect: _onDetect,
+                errorBuilder: (context, error) => _cameraError(error),
+              ),
             ),
-          ),
-          // Çerçeve dışı karartma + köşeli çerçeve.
-          Positioned.fill(
-            child: IgnorePointer(
-              child: CustomPaint(painter: _FramePainter(window)),
+            // Çerçeve dışı karartma + köşeli çerçeve.
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(painter: _FramePainter(window)),
+              ),
             ),
-          ),
-          // Üst çubuk: kapat + fener.
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              child: Row(
+            // Üst çubuk: kapat + fener.
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                child: Row(
+                  children: [
+                    _roundBtn(
+                      Icons.close,
+                      'Kapat',
+                      () => Navigator.of(context).pop(),
+                    ),
+                    const Spacer(),
+                    ValueListenableBuilder<MobileScannerState>(
+                      valueListenable: _ctrl,
+                      builder: (_, st, __) {
+                        if (st.torchState == TorchState.unavailable) {
+                          return const SizedBox.shrink();
+                        }
+                        final on = st.torchState == TorchState.on;
+                        return _roundBtn(
+                          on ? Icons.flash_on : Icons.flash_off,
+                          on ? 'Feneri kapat' : 'Feneri aç',
+                          _ctrl.toggleTorch,
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Çerçevenin üstünde başlık, altında açıklama / durum.
+            Positioned(
+              left: 24,
+              right: 24,
+              bottom: mq.size.height - window.top + 22,
+              child: const Text(
+                'Kampanya QR’ını okut',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+            Positioned(
+              left: 28,
+              right: 28,
+              top: window.bottom + 22,
+              child: Column(
                 children: [
-                  _roundBtn(
-                    Icons.close,
-                    'Kapat',
-                    () => Navigator.of(context).pop(),
+                  const Text(
+                    'İşletmedeki ekranda gösterilen QR kodunu çerçevenin içine '
+                    'getir.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.45,
+                      color: Colors.white70,
+                    ),
                   ),
-                  const Spacer(),
-                  ValueListenableBuilder<MobileScannerState>(
-                    valueListenable: _ctrl,
-                    builder: (_, st, __) {
-                      if (st.torchState == TorchState.unavailable) {
-                        return const SizedBox.shrink();
-                      }
-                      final on = st.torchState == TorchState.on;
-                      return _roundBtn(
-                        on ? Icons.flash_on : Icons.flash_off,
-                        on ? 'Feneri kapat' : 'Feneri aç',
-                        _ctrl.toggleTorch,
-                      );
-                    },
-                  ),
+                  const SizedBox(height: 16),
+                  if (_busy)
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(width: 10),
+                        Text(
+                          'Doğrulanıyor…',
+                          style: TextStyle(fontSize: 14, color: Colors.white),
+                        ),
+                      ],
+                    )
+                  else if (_message != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 11,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _messageError
+                            ? const Color(0xE6E0533D)
+                            : const Color(0xE616A34A),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _message!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
-          ),
-          // Çerçevenin üstünde başlık, altında açıklama / durum.
-          Positioned(
-            left: 24,
-            right: 24,
-            bottom: mq.size.height - window.top + 22,
-            child: const Text(
-              'Kampanya QR’ını okut',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-            ),
-          ),
-          Positioned(
-            left: 28,
-            right: 28,
-            top: window.bottom + 22,
-            child: Column(
-              children: [
-                const Text(
-                  'İşletmedeki ekranda gösterilen QR kodunu çerçevenin içine '
-                  'getir.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    height: 1.45,
-                    color: Colors.white70,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                if (_busy)
-                  const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.2,
-                          color: Colors.white,
-                        ),
-                      ),
-                      SizedBox(width: 10),
-                      Text(
-                        'Doğrulanıyor…',
-                        style: TextStyle(fontSize: 14, color: Colors.white),
-                      ),
-                    ],
-                  )
-                else if (_message != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 11,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _messageError
-                          ? const Color(0xE6E0533D)
-                          : const Color(0xE616A34A),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      _message!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                        height: 1.35,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -531,7 +551,7 @@ class CampaignQrSuccessScreen extends StatelessWidget {
                     ),
                     child: Column(
                       children: [
-                        if (k != null) KampanyaRozet(k.oran, fontSize: 26),
+                        if (k != null) KampanyaRozet(k.oran, fontSize: 18),
                         if (mekan.isNotEmpty) ...[
                           const SizedBox(height: 12),
                           Text(

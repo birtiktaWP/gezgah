@@ -19,6 +19,9 @@ class AppColors {
   static const Color heart = Color(0xFFFF3D6E);
 
   static const Color plus = Color(0xFFFF7A00); // Plus işletme (harita pini)
+  // Kampanya / indirim rozeti (beyaz yazı okunur kalsın diye koyu turuncu).
+  static const Color kampanya = Color(0xFFF26B1D);
+  static const Color kampanyaSoft = Color(0xFFFFF1E6);
   static const Color plus2 = Color(0xFFE06A00); // seçili Plus pini
 }
 

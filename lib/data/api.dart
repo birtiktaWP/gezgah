@@ -1029,6 +1029,10 @@ class ApiPlace {
   /// İlçe id'si (`bolge`; `/ilceler` id'leriyle aynı). Bölge filtresi için.
   final int? bolgeId;
 
+  /// Aktif kampanyanın en yüksek indirimi (%) — `kampanya` özeti
+  /// (KAMPANYA_LISTE_ROZET.md). Yoksa null.
+  final int? kampanyaIndirim;
+
   const ApiPlace({
     required this.id,
     required this.name,
@@ -1051,6 +1055,7 @@ class ApiPlace {
     this.calismaSaatleri = const {},
     this.date = '',
     this.bolgeId,
+    this.kampanyaIndirim,
   });
 
   /// Ekran alanına göre en uygun görsel: istenen boyut → `thumbnail` → `image`.
@@ -1089,6 +1094,7 @@ class ApiPlace {
     verified: verified,
     filterIds: filterIds,
     ozellikIds: ozellikIds,
+    kampanyaIndirim: kampanyaIndirim,
     thumbnail: thumbnail,
     thumbSquare: thumbSquare,
     thumbCard: thumbCard,
@@ -1598,6 +1604,8 @@ class HomeRepository {
       mesafeM: ap.mesafeM,
       bolgeId: ap.bolgeId,
       calismaSaatleri: ap.calismaSaatleri,
+
+      kampanyaIndirim: ap.kampanyaIndirim,
       thumbnail: ap.thumbnail,
       thumbSquare: ap.thumbSquare,
       thumbCard: ap.thumbCard,
@@ -2145,6 +2153,8 @@ class HomeRepository {
     ozellikIds: ap.ozellikIds,
     mesafeM: ap.mesafeM,
     calismaSaatleri: ap.calismaSaatleri,
+
+    kampanyaIndirim: ap.kampanyaIndirim,
     date: ap.date,
     bolgeId: ap.bolgeId,
     thumbnail: ap.thumbnail,
@@ -2467,6 +2477,7 @@ class HomeRepository {
       // Bugün `mekan` içinde gelmiyor (ACIK_SIMDI_FILTRE.md); gelirse
       // "Şu an açık olanlar" istemcide de uygulanır.
       calismaSaatleri: parseCalismaSaatleri(m['calisma_saatleri']),
+      kampanyaIndirim: parseKampanyaOzet(m['kampanya'])?.oran,
     );
 
     FoodResult build(
@@ -2483,6 +2494,9 @@ class HomeRepository {
       fiyat: u['fiyat']?.toString().trim() ?? '',
       gorsel: img(u['gorsel']),
       begeni: (u['begeni'] as num?)?.toInt() ?? 0,
+      // Ürünü kapsayan en yüksek aktif kampanya (KAMPANYA_LISTE_ROZET.md §2).
+      kampanyaIndirim: parseKampanyaOzet(u['kampanya'])?.oran,
+      indirimliFiyat: parseKampanyaOzet(u['kampanya'])?.indirimliFiyat,
       mekan: place,
       // Canlıda `mekan.mesafe_m`; doküman ürün düzeyinde `mesafe` (metre) diyor.
       mesafeM: parseMesafeM(m) ?? (j['mesafe'] as num?)?.round(),
@@ -2858,6 +2872,7 @@ class HomeRepository {
         final v? when v > 0 => v,
         _ => null,
       },
+      kampanyaIndirim: parseKampanyaOzet(j['kampanya'])?.oran,
     );
   }
 
@@ -3034,6 +3049,8 @@ class FavRepository {
       ozellikIds: ap.ozellikIds,
       mesafeM: ap.mesafeM,
       calismaSaatleri: ap.calismaSaatleri,
+
+      kampanyaIndirim: ap.kampanyaIndirim,
       date: ap.date,
       bolgeId: ap.bolgeId,
       thumbnail: ap.thumbnail,

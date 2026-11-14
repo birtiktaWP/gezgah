@@ -1612,15 +1612,26 @@ class _SearchModalState extends State<_SearchModal>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            p.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.ink,
-                            ),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  p.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.ink,
+                                  ),
+                                ),
+                              ),
+                              // İşletmenin aktif kampanyası (en yüksek oran).
+                              if (p.kampanyaIndirim != null) ...[
+                                const SizedBox(width: 6),
+                                KampanyaEtiket(p.kampanyaIndirim!),
+                              ],
+                            ],
                           ),
                           if (meta.isNotEmpty) ...[
                             const SizedBox(height: 2),
@@ -1688,6 +1699,11 @@ class _SearchModalState extends State<_SearchModal>
     );
   }
 
+  /// "1400" / "154,5" — tam sayıysa kuruşsuz.
+  static String _tl(num v) => v == v.roundToDouble()
+      ? v.round().toString()
+      : v.toStringAsFixed(2).replaceAll('.', ',');
+
   /// Ürün satırı: görsel + ad (aranan kısım vurgulu) + fiyat / beğeni.
   /// Dokununca ürün modalı (menüdeki ürün paneliyle aynı) açılır; modalın
   /// altındaki işletme satırı işletme detayına götürür.
@@ -1741,6 +1757,11 @@ class _SearchModalState extends State<_SearchModal>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _highlighted(f.urun),
+                    // Ürünü kapsayan kampanya (KAMPANYA_LISTE_ROZET.md §2).
+                    if (f.kampanyaIndirim != null) ...[
+                      const SizedBox(height: 4),
+                      KampanyaEtiket(f.kampanyaIndirim!, label: 'indirim'),
+                    ],
                     if (f.begeni > 0) ...[
                       const SizedBox(height: 4),
                       Row(
@@ -1764,7 +1785,34 @@ class _SearchModalState extends State<_SearchModal>
                   ],
                 ),
               ),
-              if (f.fiyat.isNotEmpty) ...[
+              if (f.fiyat.isNotEmpty && f.indirimliFiyat != null) ...[
+                // İndirimli: eski fiyat üstü çizili, yenisi turuncu.
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '${f.fiyat} ₺',
+                      softWrap: false,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.muted,
+                        decoration: TextDecoration.lineThrough,
+                        decorationColor: AppColors.muted,
+                      ),
+                    ),
+                    Text(
+                      '${_tl(f.indirimliFiyat!)} ₺',
+                      softWrap: false,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.kampanya,
+                      ),
+                    ),
+                  ],
+                ),
+              ] else if (f.fiyat.isNotEmpty) ...[
                 const SizedBox(width: 10),
                 Text(
                   '${f.fiyat} ₺',
@@ -1994,6 +2042,11 @@ class _SearchModalState extends State<_SearchModal>
                       if (p.verified) ...[
                         const SizedBox(width: 4),
                         const VerifiedTick(size: 13),
+                      ],
+                      // Aktif kampanya (KAMPANYA_LISTE_ROZET.md).
+                      if (p.kampanyaIndirim != null) ...[
+                        const SizedBox(width: 6),
+                        KampanyaEtiket(p.kampanyaIndirim!),
                       ],
                     ],
                   ),

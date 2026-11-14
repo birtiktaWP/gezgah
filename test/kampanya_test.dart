@@ -62,6 +62,30 @@ void main() {
     expect(g.kalanSure(), isNull);
   });
 
+  test('tam boy görsel adayları (küçük görselin adından)', () {
+    final m = KampanyaMekan.fromJson({
+      'id': 2,
+      'thumbnail':
+          'https://gezgah.com/uploads/thumbs/square/3eabf2303cdae290e32a536cc9f10da5.webp',
+      'thumbnails': {
+        'wide':
+            'https://gezgah.com/uploads/thumbs/wide/3eabf2303cdae290e32a536cc9f10da5.webp',
+      },
+    });
+    expect(m.tamGorselAdaylari, [
+      'https://gezgah.com/uploads/3eabf2303cdae290e32a536cc9f10da5.jpg',
+      'https://gezgah.com/uploads/3eabf2303cdae290e32a536cc9f10da5.webp',
+      'https://gezgah.com/uploads/3eabf2303cdae290e32a536cc9f10da5.png',
+    ]);
+    // `image` gelirse yalnız o.
+    expect(
+      KampanyaMekan.fromJson({'id': 2, 'image': 'https://x/a.jpg'})
+          .tamGorselAdaylari,
+      ['https://x/a.jpg'],
+    );
+    expect(const KampanyaMekan(id: 1).tamGorselAdaylari, isEmpty);
+  });
+
   test('kalan süre', () {
     final k = Kampanya(id: 1, bitis: DateTime(2026, 11, 21, 23, 59, 59));
     expect(k.kalanSure(now: DateTime(2026, 11, 21, 10)), 'Bugün son gün');

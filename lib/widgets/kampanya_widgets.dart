@@ -27,7 +27,7 @@ class KampanyaRozet extends StatelessWidget {
         vertical: fontSize * 0.28,
       ),
       decoration: BoxDecoration(
-        color: AppColors.closing,
+        color: AppColors.kampanya,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text.rich(
@@ -91,7 +91,7 @@ class KampanyaSatiri extends StatelessWidget {
                 height: box,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: const Color(0x14E0533D),
+                  color: AppColors.kampanyaSoft,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
@@ -99,7 +99,7 @@ class KampanyaSatiri extends StatelessWidget {
                   style: TextStyle(
                     fontSize: dense ? 15 : 17,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.closing,
+                    color: AppColors.kampanya,
                   ),
                 ),
               ),

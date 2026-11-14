@@ -12,8 +12,8 @@ import 'detail_screen.dart';
 
 /// Kampanyalar — aktif kampanyası olan işletmeler (`GET /kampanyalar`,
 /// KAMPANYALAR.md §1). Konum izni varsa en yakın önce, yoksa en yüksek
-/// indirim önce. Üstte "Tümü / Tüm menü / Ürün bazlı" sekmeleri (`tip`).
-/// Kaydırınca sonraki sayfa yüklenir.
+/// indirim önce. Sekme yok (tüm kampanyalar tek listede). Kaydırınca sonraki
+/// sayfa yüklenir.
 class CampaignsScreen extends StatefulWidget {
   const CampaignsScreen({super.key});
 
@@ -22,14 +22,7 @@ class CampaignsScreen extends StatefulWidget {
 }
 
 class _CampaignsScreenState extends State<CampaignsScreen> {
-  static const _tabs = [
-    (label: 'Tümü', tip: null),
-    (label: 'Tüm menü', tip: 'genel'),
-    (label: 'Ürün bazlı', tip: 'urun'),
-  ];
-
   final ScrollController _scroll = ScrollController();
-  int _tab = 0;
   int _seq = 0;
 
   bool _loading = true;
@@ -56,8 +49,6 @@ class _CampaignsScreenState extends State<CampaignsScreen> {
     super.dispose();
   }
 
-  String? get _tip => _tabs[_tab].tip;
-
   Future<void> _load() async {
     final seq = ++_seq;
     setState(() {
@@ -65,7 +56,7 @@ class _CampaignsScreenState extends State<CampaignsScreen> {
       _error = false;
     });
     try {
-      final r = await KampanyaRepository.instance.liste(tip: _tip);
+      final r = await KampanyaRepository.instance.liste();
       if (!mounted || seq != _seq) return;
       setState(() {
         _items = r.items;
@@ -87,10 +78,7 @@ class _CampaignsScreenState extends State<CampaignsScreen> {
     final seq = _seq;
     setState(() => _loadingMore = true);
     try {
-      final r = await KampanyaRepository.instance.liste(
-        tip: _tip,
-        page: _nextPage!,
-      );
+      final r = await KampanyaRepository.instance.liste(page: _nextPage!);
       if (!mounted || seq != _seq) return;
       final seen = {for (final i in _items) i.mekan.id};
       setState(() {
@@ -102,12 +90,6 @@ class _CampaignsScreenState extends State<CampaignsScreen> {
     } catch (_) {
       if (mounted) setState(() => _loadingMore = false);
     }
-  }
-
-  void _selectTab(int i) {
-    if (i == _tab) return;
-    setState(() => _tab = i);
-    _load();
   }
 
   void _openKampanya(Kampanya k, KampanyaMekan m) {
@@ -316,54 +298,8 @@ class _CampaignsScreenState extends State<CampaignsScreen> {
               'İndirimi işletmede, kasadaki QR’ı okutarak kullan',
               style: TextStyle(fontSize: 13, color: Colors.white70),
             ),
-            const SizedBox(height: 16),
-            _tabsBar(),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _tabsBar() {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: const Color(0x26FFFFFF),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        children: [
-          for (var i = 0; i < _tabs.length; i++)
-            Expanded(
-              child: Semantics(
-                button: true,
-                selected: _tab == i,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _selectTab(i),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: _tab == i ? Colors.white : Colors.transparent,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      _tabs[i].label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w600,
-                        color: _tab == i ? AppColors.primary : Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
       ),
     );
   }
