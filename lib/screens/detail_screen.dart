@@ -1152,7 +1152,7 @@ class _DetailScreenState extends State<DetailScreen> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    NetImage(e.image),
+                    NetImage(e.thumbWide.isNotEmpty ? e.thumbWide : e.image),
                     if (e.kisaTarih.isNotEmpty)
                       Positioned(
                         left: 10,
@@ -2260,7 +2260,9 @@ class _EventsSheet extends StatelessWidget {
                               color: AppColors.primary,
                             ),
                           )
-                        : NetImage(e.image),
+                        : NetImage(
+                            e.thumbSquare.isNotEmpty ? e.thumbSquare : e.image,
+                          ),
                   ),
                 ),
                 const SizedBox(width: 12),

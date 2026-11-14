@@ -1925,7 +1925,8 @@ class HomeRepository {
         final id = (e['id'] as num?)?.toInt() ?? 0;
         if (id <= 0 || !seen.add(id)) continue;
         final img = e['image'];
-        final mekan = e['mekan'];
+        final mekan = parseEtkinlikMekan(e['mekan']);
+        final thumbs = parseEtkinlikThumbs(e['thumbnails'], kApiHost);
         final name = (e['name'] as String?)?.trim() ?? '';
         out.add(
           FeaturedEvent(
@@ -1938,10 +1939,12 @@ class HomeRepository {
                 : '',
             description: (e['description'] as String?)?.trim() ?? '',
             price: e['price']?.toString().trim() ?? '',
-            mekanId: mekan is Map ? (mekan['id'] as num?)?.toInt() : null,
-            mekanAd: mekan is Map
-                ? (mekan['name'] as String?)?.trim() ?? ''
-                : '',
+            mekanId: mekan.id,
+            mekanAd: mekan.ad,
+            mekanIlce: mekan.ilce,
+            mekanYayinda: mekan.yayinda,
+            thumbSquare: thumbs.square,
+            thumbWide: thumbs.wide,
           ),
         );
       }
@@ -2571,6 +2574,24 @@ class HomeRepository {
     }
   }
 
+  /// Etkinlik detayı (`GET /etkinlikler/{id}`). Listede olmayan alanları
+  /// (bugün `mekan`) tamamlamak için detay ekranı açılınca çağrılır.
+  /// Bulunamazsa / hatada `null`.
+  Future<Etkinlik?> etkinlikDetay(int id) async {
+    if (id <= 0) return null;
+    try {
+      final res = await _dio.get('/etkinlikler/$id');
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return null;
+      final data = body['data'];
+      return data is Map<String, dynamic>
+          ? Etkinlik.fromJson(data, host: kApiHost)
+          : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Etkinlikler (`GET /etkinlikler`). Sayfalı; `upcoming=true` yalnızca
   /// bugünden sonrasını getirir. Sonuç + sayfalama meta'sı döner.
   Future<({List<Event> items, bool hasMore, int? nextPage, int total})>
@@ -2713,7 +2734,15 @@ class HomeRepository {
           'bolge',
         ]) ??
         '';
-    final place = [loc, time].where((s) => s.isNotEmpty).join(' · ');
+    // `mekan` metin değil `{id, name, sehir, ilce, yayinda}` objesi gelir
+    // (ETKINLIK_EKSIKLER.md §1; bugün listede yok, detayda var).
+    final mekan = parseEtkinlikMekan(j['mekan']);
+    final mekanAd = mekan.ad;
+    final thumbs = parseEtkinlikThumbs(j['thumbnails'], kApiHost);
+    final place = [
+      loc.isNotEmpty ? loc : mekanAd,
+      time,
+    ].where((s) => s.isNotEmpty).join(' · ');
 
     final tag = pick(['kategori', 'category', 'type', 'tur']) ?? '';
 
@@ -2725,6 +2754,16 @@ class HomeRepository {
       tag: tag,
       day: day,
       month: month,
+      date: dateStr,
+      time: time,
+      description: (j['description'] as String?)?.trim() ?? '',
+      price: j['price']?.toString().trim() ?? '',
+      mekanAd: mekanAd,
+      mekanId: mekan.id,
+      mekanIlce: mekan.ilce,
+      mekanYayinda: mekan.yayinda,
+      thumbSquare: thumbs.square,
+      thumbWide: thumbs.wide,
     );
   }
 

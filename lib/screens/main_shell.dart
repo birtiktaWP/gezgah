@@ -150,9 +150,11 @@ class _MainShellState extends State<MainShell> {
     }
   }
 
-  Future<void> _openKedy() async {
+  /// Kedy sohbetini açar. [message] verilirse (sesli soru) Kedy'ye otomatik
+  /// gönderilir; giriş yoksa önce giriş kapısı çıkar, giriş yapılınca gider.
+  Future<void> _openKedy({String? message}) async {
     setState(() => _kedyOpen = true);
-    await showKedyChat(context);
+    await showKedyChat(context, initialMessage: message);
     if (mounted) setState(() => _kedyOpen = false);
   }
 
@@ -175,11 +177,14 @@ class _MainShellState extends State<MainShell> {
   /// Ana sayfadaki arama kutusu için gelişmiş arama modalı.
   void _openSearch() => showSearchModal(context, onOpenDetail: _openDetail);
 
-  /// Mikrofon: izin + dinleme paneli; tanınan metinle arama sonuçlarını açar.
+  /// Mikrofon: izin + dinleme paneli; tanınan metin Kedy'ye mesaj olarak
+  /// gider (sohbet açılır, soru otomatik gönderilir). Eskiden arama
+  /// sayfasını bu metinle açıyordu:
+  /// `showSearchModal(context, onOpenDetail: _openDetail, initialQuery: q)`.
   Future<void> _openVoiceSearch() async {
     final q = await showVoiceSearch(context);
     if (!mounted || q == null || q.trim().isEmpty) return;
-    showSearchModal(context, onOpenDetail: _openDetail, initialQuery: q);
+    await _openKedy(message: q.trim());
   }
 
   void _openDetail(Place p) {

@@ -137,6 +137,10 @@ class FeaturedEvent {
   final String price; // ham metin; boş = ücretsiz/yok
   final int? mekanId; // etkinliğin mekanı (yoksa null)
   final String mekanAd;
+  final String mekanIlce;
+  final bool mekanYayinda;
+  final String thumbSquare;
+  final String thumbWide; // geniş kart görseli (yoksa [image])
 
   const FeaturedEvent({
     required this.id,
@@ -148,6 +152,10 @@ class FeaturedEvent {
     this.price = '',
     this.mekanId,
     this.mekanAd = '',
+    this.mekanIlce = '',
+    this.mekanYayinda = true,
+    this.thumbSquare = '',
+    this.thumbWide = '',
   });
 
   /// Etkinlik detay ekranı (`EventDetailScreen`) için karşılığı.
@@ -159,6 +167,12 @@ class FeaturedEvent {
     date: date,
     time: time,
     image: image,
+    mekanAd: mekanAd,
+    mekanId: mekanId,
+    mekanIlce: mekanIlce,
+    mekanYayinda: mekanYayinda,
+    thumbSquare: thumbSquare,
+    thumbWide: thumbWide,
   );
 
   factory FeaturedEvent.fromJson(Map<String, dynamic> j) => FeaturedEvent(
@@ -171,6 +185,10 @@ class FeaturedEvent {
     price: j['price']?.toString().trim() ?? '',
     mekanId: (j['mekan_id'] as num?)?.toInt(),
     mekanAd: (j['mekan_ad'] as String?)?.trim() ?? '',
+    mekanIlce: (j['mekan_ilce'] as String?)?.trim() ?? '',
+    mekanYayinda: j['mekan_yayinda'] != false,
+    thumbSquare: (j['thumb_square'] as String?)?.trim() ?? '',
+    thumbWide: (j['thumb_wide'] as String?)?.trim() ?? '',
   );
 
   Map<String, dynamic> toJson() => {
@@ -183,6 +201,10 @@ class FeaturedEvent {
     'price': price,
     if (mekanId != null) 'mekan_id': mekanId,
     'mekan_ad': mekanAd,
+    'mekan_ilce': mekanIlce,
+    'mekan_yayinda': mekanYayinda,
+    'thumb_square': thumbSquare,
+    'thumb_wide': thumbWide,
   };
 }
 
@@ -196,6 +218,17 @@ class Event {
   final String tag; // kategori/tür etiketi
   final String day; // "14"
   final String month; // "Haz"
+  // Detay ekranı için ham alanlar (`/etkinlikler` kaydı).
+  final String date; // "YYYY-MM-DD"
+  final String time; // "HH:MM"
+  final String description;
+  final String price;
+  final String mekanAd;
+  final int? mekanId;
+  final String mekanIlce;
+  final bool mekanYayinda;
+  final String thumbSquare; // liste satırı (kare küçük görsel)
+  final String thumbWide;
 
   const Event({
     required this.id,
@@ -205,7 +238,34 @@ class Event {
     this.tag = '',
     this.day = '',
     this.month = '',
+    this.date = '',
+    this.time = '',
+    this.description = '',
+    this.price = '',
+    this.mekanAd = '',
+    this.mekanId,
+    this.mekanIlce = '',
+    this.mekanYayinda = true,
+    this.thumbSquare = '',
+    this.thumbWide = '',
   });
+
+  /// Etkinlik detay ekranı (`EventDetailScreen`) için karşılığı.
+  Etkinlik toEtkinlik() => Etkinlik(
+    id: id,
+    name: title,
+    description: description,
+    price: price,
+    date: date,
+    time: time,
+    image: image,
+    mekanAd: mekanAd,
+    mekanId: mekanId,
+    mekanIlce: mekanIlce,
+    mekanYayinda: mekanYayinda,
+    thumbSquare: thumbSquare,
+    thumbWide: thumbWide,
+  );
 
   /// Mock [EventItem]'dan üretir (API hatasında yedek vitrin için).
   factory Event.fromItem(EventItem e) => Event(
@@ -1885,6 +1945,14 @@ class Etkinlik {
   final String date; // "YYYY-MM-DD"
   final String time; // "HH:MM" (boş olabilir)
   final String image; // tam URL; boş = yok
+  final String mekanAd; // etkinliğin mekanı (`mekan.name`); boş = bilinmiyor
+  // ETKINLIK_EKSIKLER.md: mekan özeti ve hazır küçük görseller. Gelmezse
+  // boş/null; ekran tam görsele ve yalnız mekan adına düşer.
+  final int? mekanId;
+  final String mekanIlce;
+  final bool mekanYayinda; // false → mekan detayına gidilmez
+  final String thumbSquare;
+  final String thumbWide;
 
   const Etkinlik({
     required this.id,
@@ -1894,7 +1962,36 @@ class Etkinlik {
     this.date = '',
     this.time = '',
     this.image = '',
+    this.mekanAd = '',
+    this.mekanId,
+    this.mekanIlce = '',
+    this.mekanYayinda = true,
+    this.thumbSquare = '',
+    this.thumbWide = '',
   });
+
+  /// Mekan detayına gidilebilir mi (id var, mekan yayında).
+  bool get mekanAcilir => (mekanId ?? 0) > 0 && mekanYayinda;
+
+  /// Boş alanları [o]'dan tamamlar (liste kaydı + `/etkinlikler/{id}`).
+  Etkinlik merge(Etkinlik o) {
+    String pick(String a, String b) => a.isNotEmpty ? a : b;
+    return Etkinlik(
+      id: id,
+      name: pick(o.name, name),
+      description: pick(o.description, description),
+      price: pick(o.price, price),
+      date: pick(o.date, date),
+      time: pick(o.time, time),
+      image: pick(o.image, image),
+      mekanAd: pick(o.mekanAd, mekanAd),
+      mekanId: o.mekanId ?? mekanId,
+      mekanIlce: pick(o.mekanIlce, mekanIlce),
+      mekanYayinda: o.mekanId != null ? o.mekanYayinda : mekanYayinda,
+      thumbSquare: pick(o.thumbSquare, thumbSquare),
+      thumbWide: pick(o.thumbWide, thumbWide),
+    );
+  }
 
   static const List<String> _ay = [
     '', 'Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', //
@@ -1920,19 +2017,60 @@ class Etkinlik {
     return '${d.day} $m';
   }
 
-  /// "150 ₺" / boşsa "Ücretsiz".
-  String get fiyatLabel => price.trim().isEmpty ? 'Ücretsiz' : '$price ₺';
+  /// "150 ₺" / boş ya da 0 ise "Ücretsiz".
+  String get fiyatLabel => etkinlikFiyatEtiketi(price);
 
-  factory Etkinlik.fromJson(Map<String, dynamic> j, {String host = ''}) =>
-      Etkinlik(
-        id: (j['id'] as num?)?.toInt() ?? 0,
-        name: (j['name'] as String?)?.trim() ?? '',
-        description: (j['description'] as String?)?.trim() ?? '',
-        price: j['price']?.toString().trim() ?? '',
-        date: (j['date'] as String?)?.trim() ?? '',
-        time: (j['time'] as String?)?.trim() ?? '',
-        image: _absUrl(j['image'], host),
-      );
+  factory Etkinlik.fromJson(Map<String, dynamic> j, {String host = ''}) {
+    final m = parseEtkinlikMekan(j['mekan']);
+    final t = parseEtkinlikThumbs(j['thumbnails'], host);
+    return Etkinlik(
+      id: (j['id'] as num?)?.toInt() ?? 0,
+      name: (j['name'] as String?)?.trim() ?? '',
+      description: (j['description'] as String?)?.trim() ?? '',
+      price: j['price']?.toString().trim() ?? '',
+      date: (j['date'] as String?)?.trim() ?? '',
+      time: (j['time'] as String?)?.trim() ?? '',
+      image: _absUrl(j['image'], host),
+      mekanAd: m.ad,
+      mekanId: m.id,
+      mekanIlce: m.ilce,
+      mekanYayinda: m.yayinda,
+      thumbSquare: t.square,
+      thumbWide: t.wide,
+    );
+  }
+}
+
+/// Etkinlik fiyatı: TL cinsinden sayı metni ("500", "1"). Boş / null / 0 →
+/// "Ücretsiz" (ETKINLIK_EKSIKLER.md §4).
+String etkinlikFiyatEtiketi(String price) {
+  final p = price.trim();
+  if (p.isEmpty) return 'Ücretsiz';
+  final n = double.tryParse(p.replaceAll(',', '.'));
+  if (n != null && n <= 0) return 'Ücretsiz';
+  return '$p ₺';
+}
+
+/// Etkinlik kaydındaki `mekan` objesi (`{id, name, sehir, ilce, yayinda}`;
+/// ETKINLIK_EKSIKLER.md §1). Obje yoksa id null.
+({int? id, String ad, String ilce, bool yayinda}) parseEtkinlikMekan(
+  dynamic m,
+) {
+  if (m is! Map) return (id: null, ad: '', ilce: '', yayinda: true);
+  final id = (m['id'] as num?)?.toInt();
+  return (
+    id: id != null && id > 0 ? id : null,
+    ad: (m['name'] as String?)?.trim() ?? '',
+    ilce: (m['ilce'] as String?)?.trim() ?? '',
+    yayinda: m['yayinda'] != false,
+  );
+}
+
+/// Etkinlik görselinin hazır küçükleri (`thumbnails{square, wide}`;
+/// ETKINLIK_EKSIKLER.md §2). Yoksa boş metin.
+({String square, String wide}) parseEtkinlikThumbs(dynamic t, String host) {
+  if (t is! Map) return (square: '', wide: '');
+  return (square: _absUrl(t['square'], host), wide: _absUrl(t['wide'], host));
 }
 
 /// Kedy sohbet mesajı (`/kedy/gecmis` ve yerel geçmiş için). [role] "user"

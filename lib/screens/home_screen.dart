@@ -388,7 +388,7 @@ class _HomeScreenState extends State<HomeScreen> {
             // (kutunun geri kalanı yazılı aramayı açar).
             Semantics(
               button: true,
-              label: 'Sesli arama',
+              label: "Kedy'ye sesle sor",
               child: GestureDetector(
                 onTap: widget.onVoiceSearch,
                 behavior: HitTestBehavior.opaque,
@@ -679,7 +679,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              NetImage(e.image),
+              NetImage(e.thumbWide.isNotEmpty ? e.thumbWide : e.image),
               Container(
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
