@@ -17,6 +17,8 @@ import '../widgets/common.dart';
 import 'favorites_screen.dart';
 import 'follow_screen.dart';
 import 'login_screen.dart';
+import 'my_reservations_screen.dart';
+import 'my_reviews_screen.dart';
 import 'plus_screen.dart';
 import 'routes_screen.dart';
 
@@ -121,6 +123,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 'Favorilerim',
                 'Kaydettiğin mekanlar',
                 onTap: _openFavorites,
+              ),
+              _row(
+                Icons.star_border_rounded,
+                'Değerlendirmelerim',
+                'Mekanlara verdiğin puan ve yorumlar',
+                onTap: () => _openMemberPage(const MyReviewsScreen()),
+              ),
+              _row(
+                Icons.event_available_outlined,
+                'Rezervasyonlarım',
+                'Yaklaşan ve geçmiş rezervasyonların',
+                onTap: () => _openMemberPage(const MyReservationsScreen()),
               ),
               _row(
                 Icons.route_outlined,
@@ -619,6 +633,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => _ProfileEditSheet(user: u),
     );
+  }
+
+  /// Üyeye özel sayfayı açar (giriş yoksa önce giriş).
+  Future<void> _openMemberPage(Widget page) async {
+    if (_user == null) {
+      final ok = await openLogin(context);
+      if (ok != true || !mounted || _user == null) return;
+    }
+    if (!mounted) return;
+    Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 
   void _openFavorites() {

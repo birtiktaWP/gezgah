@@ -1439,8 +1439,9 @@ class HomeRepository {
     List<int>? filtreler,
     List<int>? ozellikler,
     int? bolge,
+    bool acik = false,
   }) async {
-    final q = _kategoriFiltreQuery(filtreler, ozellikler, bolge);
+    final q = _kategoriFiltreQuery(filtreler, ozellikler, bolge, acik: acik);
     // 1) Tam detay endpoint'i (alt kategoriler + sabit restoran dahil).
     try {
       final res = await _dio.get(
@@ -1462,14 +1463,18 @@ class HomeRepository {
   Map<String, dynamic> _kategoriFiltreQuery(
     List<int>? filtreler,
     List<int>? ozellikler,
-    int? bolge,
-  ) {
+    int? bolge, {
+    bool acik = false,
+  }) {
     final fq = idsCsv(filtreler);
     final oq = idsCsv(ozellikler);
     return {
       if (fq.isNotEmpty) 'filtreler': fq,
       if (oq.isNotEmpty) 'ozellikler': oq,
       if (bolge != null && bolge > 0) 'bolge': bolge,
+      // "Şu an açık olanlar" (ACIK_SIMDI_FILTRE.md). Sunucu bugün yok
+      // sayıyor; ekran yüklenen kayıtları çalışma saatlerine göre de süzer.
+      if (acik) 'acik': 1,
     };
   }
 
@@ -1852,6 +1857,41 @@ class HomeRepository {
     }
   }
 
+  /// Haritada öne çıkan mekan — ERP "Reklam → Haritada Öne Çıkartma"
+  /// (`GET /reklam/harita-one-cikan`, HARITA_ONE_CIKAN_API.md). Alan en fazla
+  /// 1 kayıt alır; `data` tek obje ya da tek elemanlı liste olabilir, her
+  /// kayıt `/reklam/ana-sayfa-populer` ile aynı yapıda (`sure` + `mekan`).
+  /// Kayıt yoksa / süresi dolduysa / uç yoksa / koordinatsızsa `null`.
+  Future<ApiPlace?> haritaOneCikan() async {
+    try {
+      final res = await _dio.get(
+        '/reklam/harita-one-cikan',
+        queryParameters: _locQuery(),
+      );
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return null;
+      final data = body['data'];
+      final row = data is List
+          ? data.whereType<Map<String, dynamic>>().firstOrNull
+          : (data is Map<String, dynamic> ? data : null);
+      if (row == null) return null;
+      final m = row['mekan'] is Map<String, dynamic>
+          ? row['mekan'] as Map<String, dynamic>
+          : row;
+      final p = _parsePlace(m);
+      if (p.id <= 0 || !p.hasCoord) return null;
+      // Sunucu süresi dolanı zaten elemeli; yine de bitiş geçtiyse gösterme.
+      final sure = row['sure'];
+      final bitis = sure is Map
+          ? DateTime.tryParse('${sure['bitis'] ?? ''}')
+          : null;
+      if (bitis != null && bitis.isBefore(DateTime.now())) return null;
+      return p;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Sponsorlu restoranlar — id'lere göre paralel detay çekimi.
   Future<List<ApiPlace>> sponsorluRestoranlar(List<int> ids) async {
     final results = await Future.wait(ids.map(mekan));
@@ -1936,6 +1976,7 @@ class HomeRepository {
     List<int>? filtreler,
     int? kategori,
     int? bolge,
+    bool acik = false,
   }) async {
     final fq = (filtreler == null || filtreler.isEmpty)
         ? ''
@@ -1950,6 +1991,8 @@ class HomeRepository {
           if (fq.isNotEmpty) 'filtreler': fq,
           if (kategori != null && kategori > 0) 'kategori': kategori,
           if (bolge != null && bolge > 0) 'bolge': bolge,
+          if (acik) 'acik': 1, // ACIK_SIMDI_FILTRE.md
+
           ..._locQuery(),
         },
       );
@@ -2098,6 +2141,7 @@ class HomeRepository {
     List<int>? ozellikler,
     String? type,
     int? bolge,
+    bool acik = false,
   }) async {
     const empty = (
       items: <SearchResult>[],
@@ -2112,7 +2156,7 @@ class HomeRepository {
     final oq = idsCsv(ozellikler);
     final sq = siralarCsv(siralar);
     final key =
-        '$term|$page|$limit|${sort ?? ''}|$sq|$fq|$oq|${_coordKey(lat, lng)}|${type ?? ''}|${bolge ?? ''}';
+        '$term|$page|$limit|${sort ?? ''}|$sq|$fq|$oq|${_coordKey(lat, lng)}|${type ?? ''}|${bolge ?? ''}|$acik';
     final c = _mekanCache[key];
     if (c != null && DateTime.now().difference(c.at) < _searchTtl) {
       return (
@@ -2131,6 +2175,8 @@ class HomeRepository {
         'page': page,
         'limit': limit,
         if (type != null && type.isNotEmpty) 'type': type,
+        if (acik) 'acik': 1, // ACIK_SIMDI_FILTRE.md
+
         if (lat != null && lng != null) 'lat': lat,
         if (lat != null && lng != null) 'lng': lng,
         if (sort != null && sort.isNotEmpty) 'sort': sort,
@@ -2210,6 +2256,7 @@ class HomeRepository {
     List<int>? filtreler,
     List<int>? ozellikler,
     int? bolge,
+    bool acik = false,
   }) async {
     const empty = (
       items: <FoodResult>[],
@@ -2224,7 +2271,7 @@ class HomeRepository {
     final oq = idsCsv(ozellikler);
     final sq = siralarCsv(siralar);
     final key =
-        '$term|$page|$limit|${sort ?? ''}|$sq|$fq|$oq|${_coordKey(lat, lng)}|${bolge ?? ''}';
+        '$term|$page|$limit|${sort ?? ''}|$sq|$fq|$oq|${_coordKey(lat, lng)}|${bolge ?? ''}|$acik';
     final c = _yemekCache[key];
     if (c != null && DateTime.now().difference(c.at) < _searchTtl) {
       return (
@@ -2242,6 +2289,7 @@ class HomeRepository {
         'tab': 'yemek',
         'page': page,
         'limit': limit,
+        if (acik) 'acik': 1, // ACIK_SIMDI_FILTRE.md
         if (lat != null && lng != null) 'lat': lat,
         if (lat != null && lng != null) 'lng': lng,
         if (sort != null && sort.isNotEmpty) 'sort': sort,
@@ -2318,6 +2366,9 @@ class HomeRepository {
         final v? when v > 0 => v,
         _ => null,
       },
+      // Bugün `mekan` içinde gelmiyor (ACIK_SIMDI_FILTRE.md); gelirse
+      // "Şu an açık olanlar" istemcide de uygulanır.
+      calismaSaatleri: parseCalismaSaatleri(m['calisma_saatleri']),
     );
 
     FoodResult build(
@@ -2770,7 +2821,12 @@ class FavRepository {
   }) async {
     final res = await _dio.get(
       '/uye/favoriler',
-      queryParameters: {'page': page, 'limit': limit},
+      // Konum: sunucu `mesafe_m` eklerse kart km'yi gösterir (kategoriyle aynı).
+      queryParameters: {
+        'page': page,
+        'limit': limit,
+        ...HomeRepository.instance._locQuery(),
+      },
       options: await _auth(),
     );
     final body = res.data;
@@ -2804,66 +2860,47 @@ class FavRepository {
     return ids;
   }
 
-  /// Favori listesi kaydını [Place]'e çevirir (kategori mekan özetiyle aynı).
+  /// Favori listesi kaydını [Place]'e çevirir. Kategori listesiyle aynı
+  /// ayrıştırıcıyı ([HomeRepository._parsePlace]) kullanır; böylece çalışma
+  /// saatleri (açık/kapalı), `mesafe_m`, doğrulanmış rozeti ve thumbnail'ler
+  /// kategori kartındaki gibi gelir. Etiketler de kategori ekranındakiyle
+  /// aynıdır: alt yazı tür adı, konum satırı "İl · İlçe · km".
   Place _favToPlace(Map<String, dynamic> j) {
-    String? abs(dynamic v) {
-      if (v is String && v.isNotEmpty) {
-        return v.startsWith('http') ? v : '$kApiHost$v';
-      }
-      return null;
-    }
-
-    final image = abs(j['image']) ?? abs(j['thumbnail']) ?? '';
-    final thumbnail = abs(j['thumbnail']);
-    final tn = j['thumbnails'];
-    final tSquare = tn is Map ? abs(tn['square']) : null;
-    final tCard = tn is Map ? abs(tn['card']) : null;
-    final tWide = tn is Map ? abs(tn['wide']) : null;
-
-    final sehir = (j['sehir'] ?? '').toString().trim();
-    final ilce = (j['ilce'] ?? '').toString().trim();
-    final loc = [sehir, ilce].where((s) => s.isNotEmpty).join(' · ');
-
-    double lat = double.nan, lng = double.nan;
-    final raw = j['kordinat'];
-    if (raw is String && raw.contains(',')) {
-      final parts = raw.split(',');
-      lat = double.tryParse(parts[0].trim()) ?? double.nan;
-      lng = double.tryParse(parts[1].trim()) ?? double.nan;
-    }
-
+    final ap = HomeRepository.instance._parsePlace(j);
+    final type = (j['type'] as String?)?.trim() ?? '';
+    final label = switch (type) {
+      'plaj' => 'Plaj',
+      'mesire' => 'Mesire',
+      'otopark' => 'Otopark',
+      'muze' => 'Müze',
+      _ => 'Restoran',
+    };
+    final km = LocationService.formatM(ap.mesafeM);
+    final parts = [ap.cityDistrict, km].where((s) => s.isNotEmpty).toList();
     return Place(
-      id: (j['id'] as num?)?.toInt() ?? 0,
-      name: (j['name'] as String?)?.trim().isNotEmpty == true
-          ? j['name'] as String
-          : 'İsimsiz Mekan',
-      category: 'Restoran',
-      subtitle: loc,
+      id: ap.id,
+      name: ap.name,
+      category: label,
+      subtitle: label,
       rating: 0,
-      distance: loc,
+      distance: parts.isEmpty ? 'Konum bilgisi yok' : parts.join(' · '),
       price: '',
-      image: image,
-      lat: lat,
-      lng: lng,
-      tags: const ['restoran'],
-      verified: j['dogrulanmis'] == true,
+      image: ap.image,
+      lat: ap.lat ?? double.nan,
+      lng: ap.lng ?? double.nan,
+      tags: [type.isEmpty ? 'restoran' : type],
+      verified: ap.verified,
       favorite: true,
-      filterIds:
-          (j['filtre_ids'] as List<dynamic>?)
-              ?.whereType<num>()
-              .map((e) => e.toInt())
-              .toList() ??
-          const [],
-      ozellikIds:
-          (j['ozellik_ids'] as List<dynamic>?)
-              ?.whereType<num>()
-              .map((e) => e.toInt())
-              .toList() ??
-          const [],
-      thumbnail: thumbnail,
-      thumbSquare: tSquare,
-      thumbCard: tCard,
-      thumbWide: tWide,
+      filterIds: ap.filterIds,
+      ozellikIds: ap.ozellikIds,
+      mesafeM: ap.mesafeM,
+      calismaSaatleri: ap.calismaSaatleri,
+      date: ap.date,
+      bolgeId: ap.bolgeId,
+      thumbnail: ap.thumbnail,
+      thumbSquare: ap.thumbSquare,
+      thumbCard: ap.thumbCard,
+      thumbWide: ap.thumbWide,
     );
   }
 }
@@ -2954,6 +2991,9 @@ class RezervasyonRepository {
           if (masa != null && masa.isNotEmpty) 'masa': masa,
           if (not != null && not.trim().isNotEmpty) 'not': not.trim(),
         },
+        // Üye girişliyse rezervasyon üyeye bağlansın ("Rezervasyonlarım",
+        // UYE_DEGERLENDIRME_REZERVASYON.md §2). Değilse cihaz token'ı gider.
+        options: await _uyeAuthOpt(),
       );
       final body = res.data;
       if (body is Map && body['success'] == true) {
@@ -2970,6 +3010,12 @@ class RezervasyonRepository {
     } on DioException catch (e) {
       throw _mapRezError(e, 'Rezervasyon oluşturulamadı.');
     }
+  }
+
+  Future<Options?> _uyeAuthOpt() async {
+    final token = await Api.instance.uyeToken;
+    if (token == null || token.isEmpty) return null;
+    return Options(headers: {'Authorization': 'Bearer $token'});
   }
 
   Exception _mapRezError(DioException e, String fallback) {

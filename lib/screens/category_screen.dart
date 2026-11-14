@@ -87,6 +87,10 @@ class _CategoryScreenState extends State<CategoryScreen> {
   // süzülür (`/kategoriler/{id}` henüz `bolge=` almıyor, LISTE_BOLGE_FILTRE.md).
   List<Ilce> _bolgeler = const [];
   int? _selectedBolge;
+  // "Şu an açık olanlar": `acik=1` gönderilir (sunucu bugün yok sayıyor,
+  // ACIK_SIMDI_FILTRE.md); yüklenen kayıtlar çalışma saatlerine göre de
+  // istemcide süzülür.
+  bool _acik = false;
 
   @override
   void initState() {
@@ -243,6 +247,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
             filtreler: _selectedFilters.toList(),
             kategori: _activeId,
             bolge: _selectedBolge,
+            acik: _acik,
           ),
           HomeRepository.instance.filtreler(type: type),
           HomeRepository.instance.kategorilerTip(type),
@@ -274,6 +279,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
           _nextPage = r.nextPage;
         });
         _applyLocationWhenReady(locFuture);
+        _fillOpen();
       } catch (_) {
         if (!mounted || seqAtStart != _reqSeq) return;
         if (_subs.isEmpty) {
@@ -381,6 +387,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
         filtreler: _selectedFilters.toList(),
         ozellikler: _selectedOzellikler.toList(),
         bolge: _selectedBolge,
+        acik: _acik,
       );
       if (!mounted || seq != _reqSeq) return; // bu arada başka sekme seçildi
       _applyLabels(d.places);
@@ -394,6 +401,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
         _nextPage = d.nextPage;
         _sortPlaces();
       });
+      _fillOpen();
     } catch (_) {
       if (!mounted || seq != _reqSeq) return;
       setState(() {
@@ -471,6 +479,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
           filtreler: _selectedFilters.toList(),
           kategori: _activeId,
           bolge: _selectedBolge,
+          acik: _acik,
         );
         if (!mounted) return;
         if (seq != _reqSeq) return; // sekme değişti; eski sekmenin sayfası
@@ -496,6 +505,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
         filtreler: _selectedFilters.toList(),
         ozellikler: _selectedOzellikler.toList(),
         bolge: _selectedBolge,
+        acik: _acik,
       );
       if (!mounted) return;
       if (seq != _reqSeq) return; // sekme değişti; eski kategorinin sayfası
@@ -517,7 +527,28 @@ class _CategoryScreenState extends State<CategoryScreen> {
   bool get _hasActiveFilter =>
       _selectedFilters.isNotEmpty ||
       _selectedOzellikler.isNotEmpty ||
-      _selectedBolge != null;
+      _selectedBolge != null ||
+      _acik;
+
+  /// Çalışma saatlerine göre şu an açık mı (saat bilgisi yoksa hayır).
+  static bool _acikMi(Place p) => p.acikDurum?.open == true;
+
+  /// "Şu an açık" istemcide süzüldüğü için yüklenen sayfalarda az açık mekan
+  /// kaldıysa sonraki sayfalar otomatik çekilir (en fazla 8 sayfa). Sunucu
+  /// `acik=1`'i uygulamaya başlayınca ilk sayfa zaten dolu gelir.
+  Future<void> _fillOpen() async {
+    var guard = 0;
+    while (mounted &&
+        _acik &&
+        _hasMore &&
+        _visiblePlaces.length < 10 &&
+        guard < 8) {
+      guard++;
+      final before = _places.length;
+      await _loadMore();
+      if (!mounted || _places.length == before) break;
+    }
+  }
 
   /// Süzme sunucuda mı yapılıyor? Artık her iki modda da evet: tip modunda
   /// `/yerler`, kategori modunda `/kategoriler/{id}` `filtreler`, `ozellikler`
@@ -541,19 +572,34 @@ class _CategoryScreenState extends State<CategoryScreen> {
   }
 
   /// Seçili filtre/özelliklere göre görünecek mekanlar.
-  List<Place> get _visiblePlaces => (_serverFiltered || !_hasActiveFilter)
-      ? _places
-      : _places.where(_matchesFilters).toList();
+  /// "Şu an açık" seçiliyse ayrıca yalnız açık olanlar.
+  List<Place> get _visiblePlaces {
+    final list = (_serverFiltered || !_hasActiveFilter)
+        ? _places
+        : _places.where(_matchesFilters).toList();
+    return _acik ? list.where(_acikMi).toList() : list;
+  }
 
   Place? get _visiblePinned {
     final p = _pinned;
     if (p == null) return null;
+    if (_acik && !_acikMi(p)) return null;
     return _matchesFilters(p) ? p : null;
   }
 
+  /// "Şu an açık olanlar" satırı gösterilsin mi: listedeki mekanların çalışma
+  /// saati varsa (ör. plajlarda hiç yok, satır anlamsız olurdu).
+  bool get _showAcik =>
+      _acik ||
+      _places.any((p) => p.calismaSaatleri.isNotEmpty) ||
+      (_pinned?.calismaSaatleri.isNotEmpty ?? false);
+
   /// Filtre modalı açılabilir mi (filtre, özellik ya da bölge listesi var).
   bool get _canFilter =>
-      _filters.isNotEmpty || _ozellikler.isNotEmpty || _bolgeler.isNotEmpty;
+      _filters.isNotEmpty ||
+      _ozellikler.isNotEmpty ||
+      _bolgeler.isNotEmpty ||
+      _showAcik;
 
   /// Filtre bottom sheet'i (ortak `showFilterSheet`) — çoklu seçim + bölge.
   Future<void> _openFilterSheet() async {
@@ -566,6 +612,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
       selectedOzellikler: _selectedOzellikler,
       bolgeler: _bolgeler,
       selectedBolge: _selectedBolge,
+      showAcik: _showAcik,
+      acik: _acik,
     );
     if (result != null && mounted) {
       setState(() {
@@ -576,6 +624,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
           ..clear()
           ..addAll(result.ozellikler);
         _selectedBolge = result.bolge;
+        _acik = result.acik;
       });
       _onFilterChanged();
     }
@@ -993,7 +1042,11 @@ class _CategoryScreenState extends State<CategoryScreen> {
         children: [
           Text(
             // Sunucu süzmeli modda `_total` filtreli kümenin toplamıdır.
-            !_hasActiveFilter
+            // "Şu an açık" istemcide süzüldüğünden sunucu toplamı ona ait
+            // değil: yüklenenlerden açık olanlar sayılır (+ = devamı var).
+            _acik
+                ? '${_visiblePlaces.length}${_hasMore ? '+' : ''} açık mekan'
+                : !_hasActiveFilter
                 ? '$_total mekan bulundu'
                 : (_serverFiltered
                       ? '$_total mekan (filtreli)'
@@ -1033,8 +1086,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
   /// gösterir; her badge'deki × ile o filtre/özellik kaldırılır.
   Widget _selectedChips() {
     // Seçili id'leri (bölge + filtre + özellik) ad + kaynak türüyle eşle.
-    // kind: 0 = filtre, 1 = özellik, 2 = bölge.
+    // kind: 0 = filtre, 1 = özellik, 2 = bölge, 3 = şu an açık.
     final chips = <({int id, String name, int kind})>[];
+    if (_acik) chips.add((id: 0, name: 'Şu an açık', kind: 3));
     final bolge = _selectedBolge;
     if (bolge != null) {
       final ad = _bolgeler.where((b) => b.id == bolge).map((b) => b.ad);
@@ -1062,6 +1116,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
               onTap: () {
                 setState(() {
                   switch (c.kind) {
+                    case 3:
+                      _acik = false;
                     case 2:
                       _selectedBolge = null;
                     case 1:

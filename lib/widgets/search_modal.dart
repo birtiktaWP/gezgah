@@ -153,6 +153,15 @@ class _SearchModalState extends State<_SearchModal>
   List<Ilce> _bolgeler = const [];
   int? _placeBolge;
   int? _foodBolge;
+  // "Şu an açık olanlar" — `acik=1` gönderilir (sunucu bugün yok sayıyor,
+  // ACIK_SIMDI_FILTRE.md); yüklenen sonuçlar çalışma saatlerine göre de
+  // istemcide süzülür.
+  bool _placeAcik = false;
+  bool _foodAcik = false;
+
+  /// Çalışma saatlerine göre şu an açık mı (saat bilgisi yoksa hayır).
+  static bool _acikMi(Map<String, String> calismaSaatleri) =>
+      acikDurumu(calismaSaatleri)?.open == true;
 
   /// Aranan mekan tipi (ARAMA_TIP_BAZLI.md). `mekan` dışındaki tiplerde QR menü
   /// bulunmadığı için Yemekler sekmesi gösterilmez.
@@ -230,31 +239,53 @@ class _SearchModalState extends State<_SearchModal>
       _bolgeler.where((b) => b.id == id).map((b) => b.ad).firstOrNull;
 
   /// Bölge seçiliyse yalnız o ilçedeki mekan sonuçları (istemci süzmesi).
+  /// "Şu an açık" seçiliyse ayrıca yalnız açık mekanlar.
   List<SearchResult> get _visiblePlaceItems {
     final b = _placeBolge;
-    if (b == null) return _placeItems;
-    return _placeItems.where((r) => r.place.bolgeId == b).toList();
+    if (b == null && !_placeAcik) return _placeItems;
+    return _placeItems
+        .where(
+          (r) =>
+              (b == null || r.place.bolgeId == b) &&
+              (!_placeAcik || _acikMi(r.place.calismaSaatleri)),
+        )
+        .toList();
   }
 
   /// Bölge seçiliyse yalnız o ilçedeki mekanların ürünleri. Yemek yanıtında
   /// ilçe id'si yok; varsa id, yoksa ilçe adı eşleştirilir.
   List<FoodResult> get _visibleFoodItems {
     final b = _foodBolge;
-    if (b == null) return _foodItems;
+    if (b == null && !_foodAcik) return _foodItems;
     final ad = _norm(_bolgeAdi(b) ?? '');
     return _foodItems.where((f) {
+      if (_foodAcik && !_acikMi(f.mekan.calismaSaatleri)) return false;
+      if (b == null) return true;
       final id = f.mekan.bolgeId;
       if (id != null) return id == b;
       return ad.isNotEmpty && _norm(f.ilce) == ad;
     }).toList();
   }
 
+  /// Yemek sonuçlarında mekanın çalışma saati geliyor mu? Bugün `/arama
+  /// ?tab=yemek` `mekan.calisma_saatleri` göndermiyor; o zaman "Şu an açık"
+  /// istemcide uygulanamaz ve satır gösterilmez (ACIK_SIMDI_FILTRE.md).
+  bool get _foodHasHours =>
+      _foodItems.any((f) => f.mekan.calismaSaatleri.isNotEmpty);
+
+  /// Mekan sonuçlarında çalışma saati var mı. Sonuç yüklenmeden de bilinsin
+  /// diye tipten çıkarılır: plajlarda saat hiç yok, diğer tiplerde var
+  /// (canlıda: kahve 50/50, mesire 32/43, otopark 50/50, plaj 0/50).
+  bool get _placeHasHours =>
+      _type != _SearchType.plaj ||
+      _placeItems.any((r) => r.place.calismaSaatleri.isNotEmpty);
+
   /// İstemci süzmesi yüklenmiş sayfalara uygulandığı için seçili ilçede az
   /// sonuç kaldıysa sonraki sayfalar otomatik çekilir (en fazla 5 sayfa).
   Future<void> _fillPlaces() async {
     var guard = 0;
     while (mounted &&
-        _placeBolge != null &&
+        (_placeBolge != null || _placeAcik) &&
         _placeHasMore &&
         _visiblePlaceItems.length < 10 &&
         guard < 5) {
@@ -556,6 +587,7 @@ class _SearchModalState extends State<_SearchModal>
         ozellikler: _placeOzellikler.toList(),
         type: _type.slug,
         bolge: _placeBolge,
+        acik: _placeAcik,
       );
       if (!mounted || _controller.text.trim() != term) return;
       setState(() {
@@ -603,6 +635,7 @@ class _SearchModalState extends State<_SearchModal>
         filtreler: _foodFilters.toList(),
         ozellikler: _foodOzellikler.toList(),
         bolge: _foodBolge,
+        acik: _foodAcik,
       );
       if (!mounted || _controller.text.trim() != term) return;
       setState(() {
@@ -649,6 +682,7 @@ class _SearchModalState extends State<_SearchModal>
         ozellikler: _placeOzellikler.toList(),
         type: _type.slug,
         bolge: _placeBolge,
+        acik: _placeAcik,
       );
       if (!mounted) return;
       setState(() {
@@ -680,6 +714,7 @@ class _SearchModalState extends State<_SearchModal>
         filtreler: _foodFilters.toList(),
         ozellikler: _foodOzellikler.toList(),
         bolge: _foodBolge,
+        acik: _foodAcik,
       );
       if (!mounted) return;
       setState(() {
@@ -866,6 +901,8 @@ class _SearchModalState extends State<_SearchModal>
       selectedOzellikler: _foodOzellikler,
       bolgeler: _bolgeler,
       selectedBolge: _foodBolge,
+      showAcik: _foodAcik || _foodHasHours,
+      acik: _foodAcik,
     );
     if (result != null && mounted) {
       setState(() {
@@ -876,6 +913,7 @@ class _SearchModalState extends State<_SearchModal>
           ..clear()
           ..addAll(result.ozellikler);
         _foodBolge = result.bolge;
+        _foodAcik = result.acik;
       });
       final term = _query.trim();
       if (term.length >= 2) _runFood(term);
@@ -903,6 +941,9 @@ class _SearchModalState extends State<_SearchModal>
       selectedOzellikler: _placeOzellikler,
       bolgeler: _bolgeler,
       selectedBolge: _placeBolge,
+      // Plaj gibi saat bilgisi olmayan tiplerde satır anlamsız; gizlenir.
+      showAcik: _placeAcik || _placeHasHours,
+      acik: _placeAcik,
     );
     if (result != null && mounted) {
       setState(() {
@@ -913,6 +954,7 @@ class _SearchModalState extends State<_SearchModal>
           ..clear()
           ..addAll(result.ozellikler);
         _placeBolge = result.bolge;
+        _placeAcik = result.acik;
       });
       final term = _query.trim();
       if (term.length >= 2) _runMekan(term);
@@ -1109,6 +1151,8 @@ class _SearchModalState extends State<_SearchModal>
       _type = t;
       _placeFilters.clear();
       _foodFilters.clear();
+      _placeAcik = false;
+      _foodAcik = false;
       _allFilters = const [];
       _placeOzellikler.clear();
       _foodOzellikler.clear();
@@ -1214,6 +1258,8 @@ class _SearchModalState extends State<_SearchModal>
           _placeOzellikler,
           _placeBolge,
           () => setState(() => _placeBolge = null),
+          acik: _placeAcik,
+          clearAcik: () => setState(() => _placeAcik = false),
           () {
             final term = _query.trim();
             if (term.length >= 2) _runMekan(term);
@@ -1232,11 +1278,14 @@ class _SearchModalState extends State<_SearchModal>
     Set<int> ozellikler,
     int? bolge,
     VoidCallback clearBolge,
-    VoidCallback onChanged,
-  ) {
+    VoidCallback onChanged, {
+    bool acik = false,
+    VoidCallback? clearAcik,
+  }) {
     // Seçili id'leri (bölge + filtre + özellik) ad + kaynak kümesiyle eşle.
-    // Bölge çipi id = -1 ile işaretlenir.
+    // Özel çipler: "Şu an açık" id = -2, bölge id = -1.
     final chips = <({int id, String name, bool ozellik})>[
+      if (acik) (id: -2, name: 'Şu an açık', ozellik: false),
       if (bolge != null)
         (id: -1, name: _bolgeAdi(bolge) ?? 'Bölge', ozellik: false),
     ];
@@ -1262,6 +1311,11 @@ class _SearchModalState extends State<_SearchModal>
             for (final f in chips)
               GestureDetector(
                 onTap: () {
+                  if (f.id == -2) {
+                    clearAcik?.call();
+                    onChanged();
+                    return;
+                  }
                   if (f.id == -1) {
                     clearBolge();
                     onChanged();
@@ -1337,7 +1391,8 @@ class _SearchModalState extends State<_SearchModal>
               active:
                   _placeFilters.isNotEmpty ||
                   _placeOzellikler.isNotEmpty ||
-                  _placeBolge != null,
+                  _placeBolge != null ||
+                  _placeAcik,
             ),
           ),
         ],
@@ -1350,7 +1405,8 @@ class _SearchModalState extends State<_SearchModal>
     final items = _visiblePlaceItems;
     if (items.isEmpty) {
       // Bölge süzmesi sürerken (sonraki sayfalar çekiliyor) boş deme.
-      return (_placeBolge != null && (_placeHasMore || _placeMoreLoading))
+      return ((_placeBolge != null || _placeAcik) &&
+              (_placeHasMore || _placeMoreLoading))
           ? _searchSpinner()
           : _emptyResults();
     }
@@ -1385,7 +1441,8 @@ class _SearchModalState extends State<_SearchModal>
     final filtered =
         _placeFilters.isNotEmpty ||
         _placeOzellikler.isNotEmpty ||
-        _placeBolge != null;
+        _placeBolge != null ||
+        _placeAcik;
     final key = '$term|${_type.slug}|$filtered';
     if (key == _searchScopeKey) return;
     _searchScopeKey = key;
@@ -1406,6 +1463,8 @@ class _SearchModalState extends State<_SearchModal>
           _foodOzellikler,
           _foodBolge,
           () => setState(() => _foodBolge = null),
+          acik: _foodAcik,
+          clearAcik: () => setState(() => _foodAcik = false),
           () {
             final term = _query.trim();
             if (term.length >= 2) _runFood(term);
@@ -1425,7 +1484,8 @@ class _SearchModalState extends State<_SearchModal>
     }
     final groups = _foodGroups;
     if (groups.isEmpty) {
-      return (_foodBolge != null && (_foodHasMore || _foodMoreLoading))
+      return ((_foodBolge != null || _foodAcik) &&
+              (_foodHasMore || _foodMoreLoading))
           ? _searchSpinner()
           : _emptyResults();
     }
@@ -1794,7 +1854,8 @@ class _SearchModalState extends State<_SearchModal>
               active:
                   _foodFilters.isNotEmpty ||
                   _foodOzellikler.isNotEmpty ||
-                  _foodBolge != null,
+                  _foodBolge != null ||
+                  _foodAcik,
             ),
           ),
         ],

@@ -34,25 +34,25 @@ enum _MapType { mekan, otopark, mesire, plaj }
 extension _MapTypeX on _MapType {
   /// API'deki post type slug'ı.
   String get slug => switch (this) {
-        _MapType.mekan => 'restoran',
-        _MapType.otopark => 'otopark',
-        _MapType.mesire => 'mesire',
-        _MapType.plaj => 'plaj',
-      };
+    _MapType.mekan => 'restoran',
+    _MapType.otopark => 'otopark',
+    _MapType.mesire => 'mesire',
+    _MapType.plaj => 'plaj',
+  };
 
   String get label => switch (this) {
-        _MapType.mekan => 'Mekan',
-        _MapType.otopark => 'Otopark',
-        _MapType.mesire => 'Mesire',
-        _MapType.plaj => 'Plaj',
-      };
+    _MapType.mekan => 'Mekan',
+    _MapType.otopark => 'Otopark',
+    _MapType.mesire => 'Mesire',
+    _MapType.plaj => 'Plaj',
+  };
 
   IconData get icon => switch (this) {
-        _MapType.mekan => Icons.restaurant_outlined,
-        _MapType.otopark => Icons.local_parking_outlined,
-        _MapType.mesire => Icons.park_outlined,
-        _MapType.plaj => Icons.beach_access_outlined,
-      };
+    _MapType.mekan => Icons.restaurant_outlined,
+    _MapType.otopark => Icons.local_parking_outlined,
+    _MapType.mesire => Icons.park_outlined,
+    _MapType.plaj => Icons.beach_access_outlined,
+  };
 }
 
 class _MapScreenState extends State<MapScreen> {
@@ -85,7 +85,6 @@ class _MapScreenState extends State<MapScreen> {
 
   // İkon marker cache'i (codePoint + seçili + Plus durumuna göre).
   final Map<String, BitmapDescriptor> _iconCache = {};
-
 
   static const CameraPosition _initial = CameraPosition(
     target: LatLng(40.9875, 29.0270),
@@ -158,8 +157,29 @@ class _MapScreenState extends State<MapScreen> {
         _revealCat(_activeCat, animate: false);
       }
     }
+    // Haritada öne çıkan mekan pinlerle paralel çekilir (beklemeyi uzatmasın).
+    final featuredF = HomeRepository.instance.haritaOneCikan();
     await _loadPlaces();
     _updateLabel();
+    _showFeatured(await featuredF);
+  }
+
+  /// ERP "Haritada Öne Çıkartma" mekanını açılışta alttaki kartta gösterir
+  /// (pine dokununca açılan kartın aynısı) ve pinini seçili yapar.
+  ///
+  /// Yalnız mekan (restoran) tipinde ve kullanıcı henüz bir pin seçmediyse.
+  /// Harita bir kategoriden açıldıysa öne çıkan mekan o kategoride değilse
+  /// gösterilmez. Kamera kullanıcının konumunda kalır; karta dokununca detay
+  /// açılır, haritaya dokununca kart kapanır.
+  void _showFeatured(ApiPlace? f) {
+    if (!mounted || f == null || _selected != null) return;
+    if (_type != _MapType.mekan) return;
+    final cat = _activeCategoryId;
+    if (cat != null && !f.categoryIds.contains(cat)) return;
+    // Pinlerdeki aynı kayıt varsa onu seç (pin vurgusu `identical` ile).
+    final p = _all.where((x) => x.id == f.id).firstOrNull ?? f;
+    setState(() => _selected = p);
+    _refreshVisible(); // görünür kümede değilse de pini eklensin + vurgulansın
   }
 
   /// Seçili tipe ait kategori çiplerini yükler.
@@ -223,33 +243,36 @@ class _MapScreenState extends State<MapScreen> {
                 width: 42,
                 height: 4,
                 decoration: BoxDecoration(
-                    color: AppColors.line,
-                    borderRadius: BorderRadius.circular(999)),
+                  color: AppColors.line,
+                  borderRadius: BorderRadius.circular(999),
+                ),
               ),
               const Padding(
                 padding: EdgeInsets.fromLTRB(20, 14, 20, 4),
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: Text('Göster',
-                      style:
-                          TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                  child: Text(
+                    'Göster',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                  ),
                 ),
               ),
               for (final t in _MapType.values)
                 Column(
                   children: [
                     ListTile(
-                      leading: Icon(t.icon,
-                          color: t == _type
-                              ? AppColors.primary
-                              : AppColors.muted),
-                      title: Text(t.label,
-                          style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: t == _type
-                                  ? AppColors.primary
-                                  : AppColors.ink)),
+                      leading: Icon(
+                        t.icon,
+                        color: t == _type ? AppColors.primary : AppColors.muted,
+                      ),
+                      title: Text(
+                        t.label,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: t == _type ? AppColors.primary : AppColors.ink,
+                        ),
+                      ),
                       trailing: t == _type
                           ? const Icon(Icons.check, color: AppColors.primary)
                           : null,
@@ -260,7 +283,10 @@ class _MapScreenState extends State<MapScreen> {
                     ),
                     if (t != _MapType.values.last)
                       const Divider(
-                          height: 1, thickness: 1, color: AppColors.line),
+                        height: 1,
+                        thickness: 1,
+                        color: AppColors.line,
+                      ),
                   ],
                 ),
               const SizedBox(height: 8),
@@ -279,9 +305,11 @@ class _MapScreenState extends State<MapScreen> {
     final loc = _loc;
     final c = _controller;
     if (loc != null && loc.real && c != null) {
-      c.animateCamera(CameraUpdate.newCameraPosition(
-        CameraPosition(target: LatLng(loc.lat, loc.lng), zoom: 15),
-      ));
+      c.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: LatLng(loc.lat, loc.lng), zoom: 15),
+        ),
+      );
     }
   }
 
@@ -387,22 +415,24 @@ class _MapScreenState extends State<MapScreen> {
     final markers = <Marker>{};
     for (final p in _places) {
       final isSel = identical(p, _selected);
-      final icon =
-          await _markerIcon(_iconForPlace(p), isSel, plus: p.isPlus);
-      markers.add(Marker(
-        markerId: MarkerId(p.id.toString()),
-        position: LatLng(p.lat!, p.lng!),
-        icon: icon,
-        anchor: const Offset(0.5, 0.5),
-        // Seçili en üstte; Plus pinleri normal pinlerin üstünde.
-        zIndexInt: isSel ? 3 : (p.isPlus ? 2 : 1),
-        onTap: () {
-          setState(() => _selected = p);
-          _rebuildMarkers();
-          _controller?.animateCamera(
-              CameraUpdate.newLatLng(LatLng(p.lat!, p.lng!)));
-        },
-      ));
+      final icon = await _markerIcon(_iconForPlace(p), isSel, plus: p.isPlus);
+      markers.add(
+        Marker(
+          markerId: MarkerId(p.id.toString()),
+          position: LatLng(p.lat!, p.lng!),
+          icon: icon,
+          anchor: const Offset(0.5, 0.5),
+          // Seçili en üstte; Plus pinleri normal pinlerin üstünde.
+          zIndexInt: isSel ? 3 : (p.isPlus ? 2 : 1),
+          onTap: () {
+            setState(() => _selected = p);
+            _rebuildMarkers();
+            _controller?.animateCamera(
+              CameraUpdate.newLatLng(LatLng(p.lat!, p.lng!)),
+            );
+          },
+        ),
+      );
     }
     // Daha yeni bir kurulum başladıysa bu sonucu at.
     if (!mounted || seq != _buildSeq) return;
@@ -436,8 +466,11 @@ class _MapScreenState extends State<MapScreen> {
     return Icons.restaurant;
   }
 
-  Future<BitmapDescriptor> _markerIcon(IconData icon, bool active,
-      {bool plus = false}) async {
+  Future<BitmapDescriptor> _markerIcon(
+    IconData icon,
+    bool active, {
+    bool plus = false,
+  }) async {
     final key = '${icon.codePoint}_${active}_$plus';
     final cached = _iconCache[key];
     if (cached != null) return cached;
@@ -448,8 +481,11 @@ class _MapScreenState extends State<MapScreen> {
 
   /// Yuvarlak konum işaretçisi — beyaz kenarlı, içinde kategori ikonu.
   /// [plus] ise (Gezgah Plus işletme) iç daire turuncu ([AppColors.plus]).
-  Future<BitmapDescriptor> _buildPin(IconData icon, bool active,
-      {bool plus = false}) async {
+  Future<BitmapDescriptor> _buildPin(
+    IconData icon,
+    bool active, {
+    bool plus = false,
+  }) async {
     const double ratio = 3;
     final double rBase = (active ? 22 : 18) * ratio;
     final double r = rBase * 0.8; // daire %20 küçük
@@ -489,11 +525,12 @@ class _MapScreenState extends State<MapScreen> {
       ),
     );
     tp.layout();
-    tp.paint(canvas,
-        Offset(center.dx - tp.width / 2, center.dy - tp.height / 2));
+    tp.paint(
+      canvas,
+      Offset(center.dx - tp.width / 2, center.dy - tp.height / 2),
+    );
 
-    final img =
-        await recorder.endRecording().toImage(size.ceil(), size.ceil());
+    final img = await recorder.endRecording().toImage(size.ceil(), size.ceil());
     final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
     return BitmapDescriptor.bytes(
       bytes!.buffer.asUint8List(),
@@ -506,8 +543,10 @@ class _MapScreenState extends State<MapScreen> {
     _geocoding = true;
     try {
       final label = await LocationService.cityDistrict(
-          _center.latitude, _center.longitude,
-          districtFirst: true);
+        _center.latitude,
+        _center.longitude,
+        districtFirst: true,
+      );
       if (!mounted || label == null) return;
       setState(() => _locationLabel = label);
     } catch (_) {
@@ -539,7 +578,8 @@ class _MapScreenState extends State<MapScreen> {
             mapToolbarEnabled: false,
             // Google logosunu sistem çubuğunun üstüne taşı (kaldırılamaz).
             padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).padding.bottom + 6),
+              bottom: MediaQuery.of(context).padding.bottom + 6,
+            ),
             onMapCreated: (c) {
               _controller = c;
               _goToUser(); // konum önceden geldiyse ona git
@@ -589,8 +629,10 @@ class _MapScreenState extends State<MapScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 11,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(999),
@@ -599,18 +641,26 @@ class _MapScreenState extends State<MapScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.location_on_outlined,
-                        size: 16, color: AppColors.primary),
+                    const Icon(
+                      Icons.location_on_outlined,
+                      size: 16,
+                      color: AppColors.primary,
+                    ),
                     const SizedBox(width: 6),
-                    const Text('Konum · ',
-                        style:
-                            TextStyle(fontSize: 13, color: AppColors.muted)),
+                    const Text(
+                      'Konum · ',
+                      style: TextStyle(fontSize: 13, color: AppColors.muted),
+                    ),
                     Flexible(
-                      child: Text(_locationLabel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              fontSize: 13, fontWeight: FontWeight.w600)),
+                      child: Text(
+                        _locationLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -629,8 +679,11 @@ class _MapScreenState extends State<MapScreen> {
                   boxShadow: AppShadows.soft,
                 ),
                 child: const Center(
-                  child: AppSvgIcon(AppIcons.filter,
-                      size: 17, color: AppColors.primary),
+                  child: AppSvgIcon(
+                    AppIcons.filter,
+                    size: 17,
+                    color: AppColors.primary,
+                  ),
                 ),
               ),
             ),
@@ -738,81 +791,103 @@ class _MapScreenState extends State<MapScreen> {
           behavior: HitTestBehavior.opaque,
           onTap: () => _openDetail(p, loc),
           child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: const [
-            BoxShadow(
-                color: Color(0x33000000),
-                blurRadius: 24,
-                offset: Offset(0, 8)),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Row(
-          children: [
-            SizedBox(
-              width: 120,
-              height: 130,
-              child: p.thumb(ThumbSize.square).isNotEmpty
-                  ? heroImage(p.id > 0 ? 'map-${p.id}' : null,
-                      p.thumb(ThumbSize.square))
-                  : Container(
-                      color: AppColors.primarySoft,
-                      child: const Icon(Icons.restaurant_outlined,
-                          color: AppColors.primary, size: 30),
-                    ),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x33000000),
+                  blurRadius: 24,
+                  offset: Offset(0, 8),
+                ),
+              ],
             ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(p.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        const Icon(Icons.location_on_outlined,
-                            size: 13, color: AppColors.primary),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                              loc.isNotEmpty ? loc : 'Konum',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontSize: 12.5, color: AppColors.muted)),
+            clipBehavior: Clip.antiAlias,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 120,
+                  height: 130,
+                  child: p.thumb(ThumbSize.square).isNotEmpty
+                      ? heroImage(
+                          p.id > 0 ? 'map-${p.id}' : null,
+                          p.thumb(ThumbSize.square),
+                        )
+                      : Container(
+                          color: AppColors.primarySoft,
+                          child: const Icon(
+                            Icons.restaurant_outlined,
+                            color: AppColors.primary,
+                            size: 30,
+                          ),
                         ),
-                      ],
-                    ),
-                    if (km.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Text(km,
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          p.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.location_on_outlined,
+                              size: 13,
+                              color: AppColors.primary,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                loc.isNotEmpty ? loc : 'Konum',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  color: AppColors.muted,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (km.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            km,
+                            style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: AppColors.primary)),
-                    ],
-                  ],
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+                // Kartın tamamı tıklanabilir; ayrıca ok ikonu ipucu verir.
+                const Padding(
+                  padding: EdgeInsets.only(right: 12),
+                  child: Icon(
+                    Icons.chevron_right,
+                    size: 24,
+                    color: AppColors.muted,
+                  ),
+                ),
+              ],
             ),
-            // Kartın tamamı tıklanabilir; ayrıca ok ikonu ipucu verir.
-            const Padding(
-              padding: EdgeInsets.only(right: 12),
-              child: Icon(Icons.chevron_right,
-                  size: 24, color: AppColors.muted),
-            ),
-          ],
+          ),
         ),
-      ),
-      ),
       ),
     );
   }
@@ -820,11 +895,14 @@ class _MapScreenState extends State<MapScreen> {
   /// Seçili mekanın detay sayfasını açar (alt kartın tamamına dokununca).
   void _openDetail(ApiPlace p, String loc) {
     Navigator.push(
-        context,
-        detailRoute(
-            builder: (_) => DetailScreen(
-                place: p.toPlace(subtitle: loc.isNotEmpty ? loc : 'Konum'),
-                type: _type == _MapType.mekan ? null : _type.slug,
-                heroTag: p.id > 0 ? 'map-${p.id}' : null)));
+      context,
+      detailRoute(
+        builder: (_) => DetailScreen(
+          place: p.toPlace(subtitle: loc.isNotEmpty ? loc : 'Konum'),
+          type: _type == _MapType.mekan ? null : _type.slug,
+          heroTag: p.id > 0 ? 'map-${p.id}' : null,
+        ),
+      ),
+    );
   }
 }

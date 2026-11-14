@@ -7,7 +7,13 @@ import '../theme/app_theme.dart';
 
 /// Filtre bottom sheet sonucu: seçili filtre id'leri + seçili özellik id'leri
 /// + seçili bölge (ilçe id'si; null = tüm bölgeler).
-typedef FilterResult = ({Set<int> filters, Set<int> ozellikler, int? bolge});
+/// [acik] = "Şu an açık olanlar" seçili.
+typedef FilterResult = ({
+  Set<int> filters,
+  Set<int> ozellikler,
+  int? bolge,
+  bool acik,
+});
 
 /// Ortak filtre bottom sheet'i — kategori listeleme ve arama (Mekanlar/Yemekler)
 /// ekranlarında birebir aynı görünüm. Filtreler + (varsa) özellikler iki grup
@@ -25,11 +31,14 @@ Future<FilterResult?> showFilterSheet(
   Set<int> selectedOzellikler = const {},
   List<Ilce> bolgeler = const [],
   int? selectedBolge,
+  bool showAcik = false,
+  bool acik = false,
 }) {
   final temp = Set<int>.from(selected);
   final tempOz = Set<int>.from(selectedOzellikler);
   int? tempBolge = selectedBolge;
-  final hasFilters = filters.isNotEmpty || ozellikler.isNotEmpty;
+  var tempAcik = acik;
+  final hasFilters = filters.isNotEmpty || ozellikler.isNotEmpty || showAcik;
   final hasBolge = bolgeler.isNotEmpty;
   final showTabs = hasFilters && hasBolge;
   // Filtre yoksa doğrudan bölge listesi açılır.
@@ -66,7 +75,8 @@ Future<FilterResult?> showFilterSheet(
     builder: (sheetCtx) {
       return StatefulBuilder(
         builder: (ctx, setSheet) {
-          final filterCount = temp.length + tempOz.length;
+          final filterCount =
+              temp.length + tempOz.length + (tempAcik ? 1 : 0);
 
           Widget bolgeRow(Ilce? b) {
             final id = b?.id;
@@ -78,6 +88,18 @@ Future<FilterResult?> showFilterSheet(
           }
 
           final filterList = <Widget>[
+            // Elle eklenen ilk satır: çalışma saatlerine göre şu an açık.
+            if (showAcik)
+              _SwitchRow(
+                icon: const Icon(
+                  Icons.schedule_outlined,
+                  size: 20,
+                  color: AppColors.primary,
+                ),
+                label: 'Şu an açık olanlar',
+                selected: tempAcik,
+                onToggle: () => setSheet(() => tempAcik = !tempAcik),
+              ),
             if (hasOzellik) const _GroupHeader('Filtreler'),
             for (final f in ordered)
               FilterRow(
@@ -165,6 +187,7 @@ Future<FilterResult?> showFilterSheet(
                               temp.clear();
                               tempOz.clear();
                               tempBolge = null;
+                              tempAcik = false;
                             }),
                             child: const Text(
                               'Temizle',
@@ -221,6 +244,7 @@ Future<FilterResult?> showFilterSheet(
                             filters: temp,
                             ozellikler: tempOz,
                             bolge: tempBolge,
+                            acik: tempAcik,
                           )),
                           child: const Text(
                             'Uygula',
@@ -403,39 +427,11 @@ class FilterRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onToggle,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 11),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: AppColors.line)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.primarySoft,
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: Center(child: _icon()),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                filter.name,
-                style: const TextStyle(
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.ink,
-                ),
-              ),
-            ),
-            _CustomSwitch(value: selected),
-          ],
-        ),
-      ),
+    return _SwitchRow(
+      icon: _icon(),
+      label: filter.name,
+      selected: selected,
+      onToggle: onToggle,
     );
   }
 
@@ -453,6 +449,62 @@ class FilterRow extends StatelessWidget {
       _filterFallbackIcon(filter),
       size: 20,
       color: AppColors.primary,
+    );
+  }
+}
+
+/// İkon kutusu + ad + on/off anahtarı satırı (filtre satırları ve
+/// "Şu an açık olanlar" aynı görünümü kullanır).
+class _SwitchRow extends StatelessWidget {
+  final Widget icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onToggle;
+  const _SwitchRow({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      toggled: selected,
+      child: InkWell(
+        onTap: onToggle,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: AppColors.line)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.primarySoft,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Center(child: icon),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.ink,
+                  ),
+                ),
+              ),
+              _CustomSwitch(value: selected),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

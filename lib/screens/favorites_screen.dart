@@ -5,7 +5,7 @@ import '../data/models.dart';
 import '../navigation/main_nav.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
-import '../widgets/fav_heart.dart';
+import '../widgets/place_cards.dart';
 import '../widgets/tabbar.dart';
 import 'detail_screen.dart';
 
@@ -163,7 +163,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
             if (i < visible.length) {
               return Padding(
                 padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
-                child: _favoriteRow(visible[i]),
+                child: _favoriteTile(visible[i]),
               );
             }
             return const Padding(
@@ -288,65 +288,17 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     );
   }
 
-  Widget _favoriteRow(Place p) {
-    final location = p.distance.isNotEmpty ? p.distance : p.subtitle;
+  /// Kategori listesindeki kartın aynısı (ad + doğrulanmış rozeti + kalp,
+  /// açık/kapalı satırı, "İl · İlçe · km"). Kalp kartın içinde; kalpten
+  /// çıkarınca yukarıdaki ValueListenableBuilder satırı listeden düşürür.
+  Widget _favoriteTile(Place p) {
     final tag = p.id > 0 ? 'fav-${p.id}' : null;
-    return GestureDetector(
+    return ListTileCard(
+      key: p.id > 0 ? ValueKey('fav-tile-${p.id}') : null,
+      place: p,
+      heroTag: tag,
+      hideImage: p.tags.contains('otopark'),
       onTap: () => _openDetail(p, heroTag: tag),
-      child: Container(
-        height: 110,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: AppShadows.listTile,
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Row(
-          children: [
-            SizedBox(
-                width: 110,
-                height: 110,
-                child: heroImage(tag, p.thumb(ThumbSize.square))),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(p.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w600)),
-                    if (location.isNotEmpty) ...[
-                      const SizedBox(height: 5),
-                      Row(
-                        children: [
-                          const Icon(Icons.location_on_outlined,
-                              size: 13, color: AppColors.primary),
-                          const SizedBox(width: 5),
-                          Expanded(
-                            child: Text(location,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    fontSize: 12, color: AppColors.muted)),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(right: 14),
-              child: FavHeart(postId: p.id, circle: false, size: 22),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
