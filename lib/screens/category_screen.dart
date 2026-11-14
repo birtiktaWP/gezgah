@@ -92,6 +92,14 @@ class _CategoryScreenState extends State<CategoryScreen> {
   // istemcide süzülür.
   bool _acik = false;
 
+  // ERP "Reklam → Kategori Sabitleme" (`/reklam/kategori-sabit`,
+  // REKLAM_ALANLARI_MOBIL.md §4): görünen kategorinin en üstüne sabitlenen
+  // mekanlar. `sabit_restoran`'dan ([_pinned]) ayrı bir kaynaktır; ikisi de
+  // gösterilir. Aşağıdaki normal listede tekrar edilmez.
+  List<Place> _adPins = const [];
+  int _adSeq = 0;
+  ImpressionScope _adImpressions = ImpressionScope(kaynak: 'reklam_kategori');
+
   @override
   void initState() {
     super.initState();
@@ -232,6 +240,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
 
     // Type modu: kategori değil post type listesi (GET /yerler?type=).
     if (type != null) {
+      // Seçili alt kategori sekmesi varsa onun reklam sabitlemeleri.
+      _loadAdPins(_activeId);
       final seqAtStart = _reqSeq;
       try {
         // Tipe ait filtreler paralel çekilir (FILTRELER_TIP_BAZLI.md).
@@ -299,6 +309,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
       return;
     }
 
+    _loadAdPins(id); // paralel; kategoriye sabitlenen reklam mekanları
     try {
       final results = await Future.wait([
         HomeRepository.instance.kategoriDetay(id!, limit: 20),
@@ -380,6 +391,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
   /// Kategori modunda seçili sekmenin listesini (filtreler sunucuda
   /// uygulanarak) 1. sayfadan yükler; sekmeler yerinde kalır.
   Future<void> _loadCategoryTab(int id, int seq) async {
+    _loadAdPins(id); // paralel; sekmeye ait reklam sabitlemeleri
     try {
       final d = await HomeRepository.instance.kategoriDetay(
         id,
@@ -572,19 +584,50 @@ class _CategoryScreenState extends State<CategoryScreen> {
   }
 
   /// Seçili filtre/özelliklere göre görünecek mekanlar.
-  /// "Şu an açık" seçiliyse ayrıca yalnız açık olanlar.
+  /// "Şu an açık" seçiliyse ayrıca yalnız açık olanlar. Reklamla en üste
+  /// sabitlenen mekanlar burada tekrar gösterilmez.
   List<Place> get _visiblePlaces {
+    final pinIds = {for (final p in _visibleAdPins) p.id};
     final list = (_serverFiltered || !_hasActiveFilter)
         ? _places
         : _places.where(_matchesFilters).toList();
-    return _acik ? list.where(_acikMi).toList() : list;
+    return list
+        .where((p) => (!_acik || _acikMi(p)) && !pinIds.contains(p.id))
+        .toList();
   }
 
   Place? get _visiblePinned {
     final p = _pinned;
     if (p == null) return null;
     if (_acik && !_acikMi(p)) return null;
+    // Aynı mekan reklamla da sabitlendiyse bir kez (reklam kartı) gösterilir.
+    if (_visibleAdPins.any((a) => a.id == p.id)) return null;
     return _matchesFilters(p) ? p : null;
+  }
+
+  /// Reklam sabitlemeleri: "Şu an açık" seçiliyse yalnız açık olanlar.
+  List<Place> get _visibleAdPins =>
+      _acik ? _adPins.where(_acikMi).toList() : _adPins;
+
+  /// Görünen kategorinin reklam sabitlemelerini çeker ([id] null → temizler).
+  /// Hızlı sekme değişiminde eski yanıt yok sayılır. Hata/boş → gösterilmez.
+  Future<void> _loadAdPins(int? id) async {
+    final seq = ++_adSeq;
+    if (id == null || id <= 0) {
+      if (_adPins.isNotEmpty) setState(() => _adPins = const []);
+      return;
+    }
+    final r = await HomeRepository.instance.reklamKategoriSabit(id);
+    if (!mounted || seq != _adSeq) return;
+    final list = r ?? const <Place>[];
+    _applyLabels(list);
+    setState(() {
+      _adPins = list;
+      _adImpressions = ImpressionScope(
+        kaynak: 'reklam_kategori',
+        kaynakId: '$id',
+      );
+    });
   }
 
   /// "Şu an açık olanlar" satırı gösterilsin mi: listedeki mekanların çalışma
@@ -817,6 +860,24 @@ class _CategoryScreenState extends State<CategoryScreen> {
                       else ...[
                         _listHead(),
                         if (_hasActiveFilter) _selectedChips(),
+                        // ERP Reklam → Kategori Sabitleme (en üstte).
+                        for (final (i, p) in _visibleAdPins.indexed)
+                          TrackImpression(
+                            key: ValueKey('cat-ad-${p.id}'),
+                            scope: _adImpressions,
+                            placeId: p.id,
+                            position: i,
+                            featured: true,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(22, 0, 22, 14),
+                              child: ListTileCard(
+                                place: p,
+                                heroTag: 'cat-ad-${p.id}',
+                                onTap: () =>
+                                    _openDetail(p, heroTag: 'cat-ad-${p.id}'),
+                              ),
+                            ),
+                          ),
                         if (_visiblePinned != null)
                           TrackImpression(
                             scope: _impressions,
@@ -869,7 +930,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (_visiblePlaces.isEmpty && _visiblePinned == null)
+                  if (_visiblePlaces.isEmpty &&
+                      _visiblePinned == null &&
+                      _visibleAdPins.isEmpty)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(22, 30, 22, 30),
                       child: Center(

@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width="640" height="640" role="img" aria-label="Hareketli kedi">
+  <style>
+    .line { fill: none; stroke: #1E3256; stroke-width: 28; stroke-linecap: round; stroke-linejoin: round; }
+    .eye  { fill: #1E3256; transform-box: fill-box; transform-origin: center; animation: blink 5.2s infinite; }
+    .eyes { animation: look 11s ease-in-out infinite; }
+    .tongue { fill: #EE8FA0; }
+    @keyframes blink {
+      0%, 43%, 47%, 88%, 90.5%, 93%, 100% { transform: scaleY(1); }
+      45%, 89.2%, 91.8% { transform: scaleY(0.08); }
+    }
+    @keyframes look {
+      0%, 52%, 72%, 100% { transform: translateX(0); }
+      56%, 68% { transform: translateX(-9px); }
+    }
+    @media (prefers-reduced-motion: reduce) { .eye, .eyes { animation: none; } }
+  </style>
+
+  <!-- Kuyruk: sağa sola sallanır, ucu kıvrılır -->
+  <path class="line" d="M112 470 C112 400 112 300 112 245 C112 205 85 177 45 177">
+    <animate attributeName="d" dur="5s" repeatCount="indefinite"
+      calcMode="spline" keyTimes="0;0.22;0.45;0.72;1"
+      keySplines=".4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1"
+      values="M112 470 C112 400 112 300 112 245 C112 205 85 177 45 177;
+              M112 470 C112 400 117 310 123 250 C129 205 110 166 70 160;
+              M112 470 C112 400 112 300 112 245 C112 205 85 177 45 177;
+              M112 470 C112 400 108 300 100 250 C92 210 62 196 32 206;
+              M112 470 C112 400 112 300 112 245 C112 205 85 177 45 177"/>
+  </path>
+
+  <!-- Sırt: nefes alıp verir -->
+  <path class="line" d="M112 400 C112 300 220 237 338 237">
+    <animate attributeName="d" dur="3.6s" repeatCount="indefinite"
+      calcMode="spline" keyTimes="0;0.5;1" keySplines=".45 0 .55 1;.45 0 .55 1"
+      values="M112 400 C112 300 220 237 338 237;
+              M112 400 C109 292 216 229 338 236;
+              M112 400 C112 300 220 237 338 237"/>
+  </path>
+
+  <!-- Gövde altı ve arka bacak -->
+  <path class="line" d="M112 380 V490 A70 70 0 0 0 182 560 H348 A31.5 31.5 0 0 0 348 497 H285 V455 A55 55 0 0 0 230 400 H222"/>
+
+  <!-- Karın çizgisi + ön bacak: pati ağza kalkar ve yalanırken hafifçe oynar -->
+  <path class="line" d="M296 494 L441 395 L441 450 L441 528 A28 28 0 0 0 497 528 L497 400 L497 300">
+    <animate attributeName="d" dur="18s" repeatCount="indefinite" keyTimes="0;0.5722;0.6111;0.6389;0.6611;0.6833;0.7056;0.7278;0.75;0.7722;0.8;0.8389;1" values="M296 494 L441 395 L441 450 L441 528 A28 28 0 0 0 497 528 L497 400 L497 300;M296 494 L441 395 L441 450 L441 528 A28 28 0 0 0 497 528 L497 400 L497 300;M296 494 L450 410 L497 425 L583 351 A28 28 0 0 0 546 308 L474 372 L497 300;M296 494 L450 410 L497 427 L577 359 A28 28 0 0 0 540 316 L473 374 L497 300;M296 494 L450 410 L497 425 L583 351 A28 28 0 0 0 546 308 L474 372 L497 300;M296 494 L450 410 L497 427 L577 359 A28 28 0 0 0 540 316 L473 374 L497 300;M296 494 L450 410 L497 425 L583 351 A28 28 0 0 0 546 308 L474 372 L497 300;M296 494 L450 410 L497 427 L577 359 A28 28 0 0 0 540 316 L473 374 L497 300;M296 494 L450 410 L497 425 L583 351 A28 28 0 0 0 546 308 L474 372 L497 300;M296 494 L450 410 L497 427 L577 359 A28 28 0 0 0 540 316 L473 374 L497 300;M296 494 L450 410 L497 425 L583 351 A28 28 0 0 0 546 308 L474 372 L497 300;M296 494 L441 395 L441 450 L441 528 A28 28 0 0 0 497 528 L497 400 L497 300;M296 494 L441 395 L441 450 L441 528 A28 28 0 0 0 497 528 L497 400 L497 300" calcMode="spline" keySplines=".4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1"/>
+  </path>
+
+  <!-- Baş: eğilir, patiye uzanır, kulak seğirir, gözler kırpılır -->
+  <g>
+    <animateTransform attributeName="transform" type="rotate" dur="18s" repeatCount="indefinite" keyTimes="0;0.1111;0.1444;0.2444;0.2778;0.3333;0.3667;0.4556;0.4889;0.5833;0.6167;0.6389;0.6611;0.6833;0.7056;0.7278;0.75;0.7722;0.7944;0.8278;1" values="0 448 300;0 448 300;-4 448 300;-4 448 300;0 448 300;0 448 300;3 448 300;3 448 300;0 448 300;0 448 300;10 448 300;12 448 300;8 448 300;12 448 300;8 448 300;12 448 300;8 448 300;12 448 300;10 448 300;0 448 300;0 448 300" calcMode="spline" keySplines=".4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1"/>
+    <!-- Dil: yalnızca yalanırken görünür -->
+    <g opacity="0">
+      <animate attributeName="opacity" dur="18s" repeatCount="indefinite" keyTimes="0;0.6167;0.625;0.7861;0.7944;1" values="0;0;1;1;0;0"/>
+      <animateTransform attributeName="transform" type="translate" dur="0.8s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.5;1" keySplines=".4 0 .6 1;.4 0 .6 1" values="-4 -5;4 5;-4 -5"/>
+      <ellipse class="tongue" cx="529" cy="291.5" rx="20" ry="11" transform="rotate(50 529 291.5)"/>
+    </g>
+    <path class="line" d="M336 45 L415 110 L482 110 L560 45 L560 195 A112 112 0 0 1 336 195 Z">
+      <animate attributeName="d" dur="7s" repeatCount="indefinite"
+        keyTimes="0;0.30;0.32;0.34;0.36;0.38;0.74;0.76;0.78;1"
+        values="M336 45 L415 110 L482 110 L560 45 L560 195 A112 112 0 0 1 336 195 Z;
+                M336 45 L415 110 L482 110 L560 45 L560 195 A112 112 0 0 1 336 195 Z;
+                M336 45 L415 110 L482 110 L574 58 L560 195 A112 112 0 0 1 336 195 Z;
+                M336 45 L415 110 L482 110 L560 45 L560 195 A112 112 0 0 1 336 195 Z;
+                M336 45 L415 110 L482 110 L572 56 L560 195 A112 112 0 0 1 336 195 Z;
+                M336 45 L415 110 L482 110 L560 45 L560 195 A112 112 0 0 1 336 195 Z;
+                M336 45 L415 110 L482 110 L560 45 L560 195 A112 112 0 0 1 336 195 Z;
+                M322 58 L415 110 L482 110 L560 45 L560 195 A112 112 0 0 1 336 195 Z;
+                M336 45 L415 110 L482 110 L560 45 L560 195 A112 112 0 0 1 336 195 Z;
+                M336 45 L415 110 L482 110 L560 45 L560 195 A112 112 0 0 1 336 195 Z"/>
+    </path>
+    <!-- Yalanırken gözler keyifle kısılır -->
+    <g>
+      <animateTransform attributeName="transform" type="translate" dur="18s" repeatCount="indefinite" keyTimes="0;0.6056;0.6222;0.7889;0.8111;1" values="0 0;0 0;0 148.2;0 148.2;0 0;0 0" calcMode="spline" keySplines=".4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1"/>
+      <animateTransform attributeName="transform" type="scale" additive="sum" dur="18s" repeatCount="indefinite" keyTimes="0;0.6056;0.6222;0.7889;0.8111;1" values="1 1;1 1;1 0.22;1 0.22;1 1;1 1" calcMode="spline" keySplines=".4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1"/>
+      <g class="eyes">
+        <circle class="eye" cx="408" cy="190" r="20"/>
+        <circle class="eye" cx="490" cy="190" r="20"/>
+      </g>
+    </g>
+  </g>
+</svg>

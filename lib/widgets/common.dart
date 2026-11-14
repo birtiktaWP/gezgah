@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../data/home_config.dart';
 import '../theme/app_theme.dart';
+import 'kedy_animated.dart';
 
 /// Klavyeyi kapatır: yalnız odakta bir giriş alanı (TextField vb.) varsa
 /// onun odağını bırakır.
@@ -166,21 +167,24 @@ class GezgahWordmark extends StatelessWidget {
   }
 }
 
-/// Kedy asistanı kedi ikonu — HTML'deki orijinal SVG.
+/// Kedy asistanı kedi ikonu — hareketli kedi (`kedi-animasyon.svg`, bkz.
+/// [AnimatedKedy]). Eskiden durağan `assets/kedy.svg` çiziliyordu.
+/// [animate] false ise ilk kare durağan çizilir (ör. sohbetteki her mesajın
+/// avatarı; aynı anda onlarca kedi oynamasın).
 class KedyIcon extends StatelessWidget {
   final double size;
   final Color color;
-  const KedyIcon({super.key, this.size = 24, this.color = AppColors.primary});
+  final bool animate;
+  const KedyIcon({
+    super.key,
+    this.size = 24,
+    this.color = AppColors.primary,
+    this.animate = true,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return SvgPicture.asset(
-      'assets/kedy.svg',
-      width: size,
-      height: size,
-      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
-      semanticsLabel: 'Kedy',
-    );
+    return AnimatedKedy(size: size, color: color, animate: animate);
   }
 }
 

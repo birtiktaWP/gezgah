@@ -1826,6 +1826,89 @@ class HomeRepository {
       );
       final body = res.data;
       if (body is! Map || body['success'] != true) return null;
+      return _reklamSatirlari(body['data']);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// `/reklam/*` mekan alanlarının ortak `data[]` ayrıştırması
+  /// (REKLAM_ALANLARI_MOBIL.md): her satır `{sira, sure, mekan}`. `sira`ya
+  /// göre dizilir, aynı mekan bir kez alınır. Süresi geçmiş satır atlanır
+  /// (sunucu zaten göndermiyor).
+  List<PopulerMekan> _reklamSatirlari(dynamic data) {
+    if (data is! List) return const [];
+    final rows = data.whereType<Map<String, dynamic>>().toList()
+      ..sort(
+        (a, b) => ((a['sira'] as num?) ?? 1 << 30).compareTo(
+          (b['sira'] as num?) ?? 1 << 30,
+        ),
+      );
+    final seen = <int>{};
+    final out = <PopulerMekan>[];
+    for (final r in rows) {
+      final m = r['mekan'];
+      if (m is! Map<String, dynamic>) continue;
+      final p = _parsePlace(m);
+      if (p.id <= 0 || !seen.add(p.id)) continue;
+      final sure = r['sure'];
+      final kayit = PopulerMekan(
+        p,
+        bitis: sure is Map ? DateTime.tryParse('${sure['bitis'] ?? ''}') : null,
+      );
+      if (kayit.aktif) out.add(kayit);
+    }
+    return out;
+  }
+
+  /// ERP Reklam mekan alanı. Başarılı yanıtta liste (BOŞ olabilir → alan
+  /// gizlenir); ağ/sunucu hatasında `null`. Sunucu `no-store` gönderiyor:
+  /// sonuç saklanmaz, ekran her açılışta yeniden ister. Bilinen gerçek konum
+  /// varsa gönderilir (`mesafe_m`).
+  Future<List<ApiPlace>?> _reklamMekanlar(
+    String path, [
+    Map<String, dynamic> query = const {},
+  ]) async {
+    try {
+      final res = await _dio.get(
+        path,
+        queryParameters: {...query, ..._locQuery()},
+      );
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return null;
+      return _reklamSatirlari(body['data']).map((r) => r.place).toList();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// ERP "Arama Sayfası Mekanları" — arama sayfası boşken "Öne çıkanlar".
+  Future<List<ApiPlace>?> reklamAramaMekanlar() =>
+      _reklamMekanlar('/reklam/arama-mekanlar');
+
+  /// ERP "Arama Kutusu Önerileri" — arama kutusunun altındaki öneri satırları.
+  Future<List<ApiPlace>?> reklamAramaOnerileri() =>
+      _reklamMekanlar('/reklam/arama-onerileri');
+
+  /// ERP "Kategori Sabitleme" — [kategoriId] listesinin en üstüne sabitlenen
+  /// mekanlar. (`/kategoriler/{id}` → `sabit_restoran` ayrı bir kaynaktır.)
+  /// Liste kartı [Place]'i olarak (çalışma saati + mesafe dahil), sponsorlu
+  /// kart görünümüyle döner.
+  Future<List<Place>?> reklamKategoriSabit(int kategoriId) async {
+    final r = await _reklamMekanlar('/reklam/kategori-sabit', {
+      'kategori_id': kategoriId,
+    });
+    return r?.map((p) => _apiToPlace(p, sponsored: true)).toList();
+  }
+
+  /// ERP "Öne Çıkan Etkinlikler" (`/reklam/etkinlikler`). Sunucu pasif ve
+  /// tarihi geçmiş etkinlikleri göndermez. Başarılı yanıtta liste (boş
+  /// olabilir → bölüm gizlenir); hatada `null`.
+  Future<List<FeaturedEvent>?> reklamEtkinlikler() async {
+    try {
+      final res = await _dio.get('/reklam/etkinlikler');
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return null;
       final data = body['data'];
       if (data is! List) return const [];
       final rows = data.whereType<Map<String, dynamic>>().toList()
@@ -1835,19 +1918,30 @@ class HomeRepository {
           ),
         );
       final seen = <int>{};
-      final out = <PopulerMekan>[];
+      final out = <FeaturedEvent>[];
       for (final r in rows) {
-        final m = r['mekan'];
-        if (m is! Map<String, dynamic>) continue;
-        final p = _parsePlace(m);
-        if (p.id <= 0 || !seen.add(p.id)) continue;
-        final sure = r['sure'];
+        final e = r['etkinlik'];
+        if (e is! Map<String, dynamic>) continue;
+        final id = (e['id'] as num?)?.toInt() ?? 0;
+        if (id <= 0 || !seen.add(id)) continue;
+        final img = e['image'];
+        final mekan = e['mekan'];
+        final name = (e['name'] as String?)?.trim() ?? '';
         out.add(
-          PopulerMekan(
-            p,
-            bitis: sure is Map
-                ? DateTime.tryParse('${sure['bitis'] ?? ''}')
-                : null,
+          FeaturedEvent(
+            id: id,
+            name: name.isNotEmpty ? name : 'Etkinlik',
+            date: (e['date'] as String?)?.trim() ?? '',
+            time: (e['time'] as String?)?.trim() ?? '',
+            image: img is String && img.isNotEmpty
+                ? (img.startsWith('http') ? img : '$kApiHost$img')
+                : '',
+            description: (e['description'] as String?)?.trim() ?? '',
+            price: e['price']?.toString().trim() ?? '',
+            mekanId: mekan is Map ? (mekan['id'] as num?)?.toInt() : null,
+            mekanAd: mekan is Map
+                ? (mekan['name'] as String?)?.trim() ?? ''
+                : '',
           ),
         );
       }
@@ -2031,7 +2125,7 @@ class HomeRepository {
 
   /// [ApiPlace]'i liste kartı için [Place]'e çevirir. Koordinat yoksa mesafe
   /// hesaplanmasın diye lat/lng NaN bırakılır (alt yazıya İl·İlçe yazılır).
-  Place _apiToPlace(ApiPlace ap) => Place(
+  Place _apiToPlace(ApiPlace ap, {bool sponsored = false}) => Place(
     id: ap.id,
     name: ap.name,
     category: 'Mekan',
@@ -2043,6 +2137,7 @@ class HomeRepository {
     lat: ap.lat ?? double.nan,
     lng: ap.lng ?? double.nan,
     verified: ap.verified,
+    sponsored: sponsored,
     filterIds: ap.filterIds,
     ozellikIds: ap.ozellikIds,
     mesafeM: ap.mesafeM,
@@ -2440,8 +2535,10 @@ class HomeRepository {
     }
   }
 
-  /// Öne çıkan / sponsorlu etkinlikler.
+  /// ESKİ kaynak — öne çıkan / sponsorlu etkinlikler.
   /// `GET /home-page-settings/sponsorlu_etkinlikler` → çözülmüş `events`.
+  /// Ana sayfa artık ERP Reklam'ı kullanıyor ([reklamEtkinlikler],
+  /// REKLAM_ALANLARI_MOBIL.md); bu metot geri dönüş gerekirse diye duruyor.
   Future<List<FeaturedEvent>> sponsorluEtkinlikler() async {
     try {
       final res = await _dio.get('/home-page-settings/sponsorlu_etkinlikler');

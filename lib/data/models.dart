@@ -123,12 +123,20 @@ class HomeShortcut {
 
 /// Öne çıkan / sponsorlu etkinlik (home_page_settings → sponsorlu_etkinlikler
 /// içindeki çözülmüş `events`).
+///
+/// Kaynak artık ERP "Reklam → Öne Çıkan Etkinlikler" (`/reklam/etkinlikler`,
+/// REKLAM_ALANLARI_MOBIL.md §3); [description], [price] ve mekan alanları
+/// oradan gelir (eski kaynakta boş kalır).
 class FeaturedEvent {
   final int id;
   final String name;
   final String date; // "2025-10-14"
   final String time; // "22:23"
   final String image;
+  final String description;
+  final String price; // ham metin; boş = ücretsiz/yok
+  final int? mekanId; // etkinliğin mekanı (yoksa null)
+  final String mekanAd;
 
   const FeaturedEvent({
     required this.id,
@@ -136,7 +144,22 @@ class FeaturedEvent {
     this.date = '',
     this.time = '',
     this.image = '',
+    this.description = '',
+    this.price = '',
+    this.mekanId,
+    this.mekanAd = '',
   });
+
+  /// Etkinlik detay ekranı (`EventDetailScreen`) için karşılığı.
+  Etkinlik toEtkinlik() => Etkinlik(
+    id: id,
+    name: name,
+    description: description,
+    price: price,
+    date: date,
+    time: time,
+    image: image,
+  );
 
   factory FeaturedEvent.fromJson(Map<String, dynamic> j) => FeaturedEvent(
     id: (j['id'] as num?)?.toInt() ?? 0,
@@ -144,6 +167,10 @@ class FeaturedEvent {
     date: (j['date'] as String?)?.trim() ?? '',
     time: (j['time'] as String?)?.trim() ?? '',
     image: (j['image'] as String?)?.trim() ?? '',
+    description: (j['description'] as String?)?.trim() ?? '',
+    price: j['price']?.toString().trim() ?? '',
+    mekanId: (j['mekan_id'] as num?)?.toInt(),
+    mekanAd: (j['mekan_ad'] as String?)?.trim() ?? '',
   );
 
   Map<String, dynamic> toJson() => {
@@ -152,6 +179,10 @@ class FeaturedEvent {
     'date': date,
     'time': time,
     'image': image,
+    'description': description,
+    'price': price,
+    if (mekanId != null) 'mekan_id': mekanId,
+    'mekan_ad': mekanAd,
   };
 }
 

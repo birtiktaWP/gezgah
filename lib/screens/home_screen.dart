@@ -12,6 +12,7 @@ import '../widgets/place_cards.dart';
 import '../widgets/typewriter.dart';
 import 'category_screen.dart';
 import 'detail_screen.dart';
+import 'event_detail_screen.dart';
 import 'map_screen.dart';
 import 'routes_screen.dart';
 
@@ -594,7 +595,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Öne Çıkan Etkinlikler — sponsorlu restoranlarla aynı büyük kart tasarımı.
-  /// (home_page_settings → sponsorlu_etkinlikler)
+  /// (ERP Reklam → `/reklam/etkinlikler`; kayıt yoksa bölüm gizli)
   Widget _featuredEventsSection() {
     return FutureBuilder<List<FeaturedEvent>>(
       future: _eventsFuture,
@@ -663,7 +664,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final month = d != null ? months[d.month - 1] : '';
 
     return GestureDetector(
-      onTap: () {},
+      // Etkinlik detayı (REKLAM_ALANLARI_MOBIL.md §3). Eskiden dokununca
+      // hiçbir şey olmuyordu.
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => EventDetailScreen(etkinlik: e.toEtkinlik()),
+        ),
+      ),
       child: SizedBox(
         width: MediaQuery.of(context).size.width * 0.84,
         child: ClipRRect(
@@ -773,21 +781,32 @@ class _HomeScreenState extends State<HomeScreen> {
                         color: Colors.white,
                       ),
                     ),
-                    if (e.time.trim().isNotEmpty) ...[
+                    // Saat · mekan adı (ERP Reklam etkinliğinde mekan gelir).
+                    if (e.time.trim().isNotEmpty ||
+                        e.mekanAd.isNotEmpty) ...[
                       const SizedBox(height: 5),
                       Row(
                         children: [
-                          const Icon(
-                            Icons.access_time,
+                          Icon(
+                            e.time.trim().isNotEmpty
+                                ? Icons.access_time
+                                : Icons.storefront_outlined,
                             size: 13,
                             color: Colors.white,
                           ),
                           const SizedBox(width: 5),
-                          Text(
-                            e.time,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.white.withValues(alpha: 0.9),
+                          Expanded(
+                            child: Text(
+                              [
+                                e.time.trim(),
+                                e.mekanAd,
+                              ].where((s) => s.isNotEmpty).join(' · '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.white.withValues(alpha: 0.9),
+                              ),
                             ),
                           ),
                         ],

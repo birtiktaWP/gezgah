@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import '../data/api.dart';
 import '../data/auth_service.dart';
 import '../data/location_service.dart';
@@ -83,6 +84,11 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
 
   bool _sending = false; // Kedy yanıtı bekleniyor (yazıyor…)
   bool _loadingHistory = false;
+
+  // Yeni gelen Kedy yanıtı: liste en alta değil, bu yanıtın BAŞINA (avatar
+  // satırı) kaydırılır; uzun yanıtlar yukarıdan okunur.
+  _Message? _answer;
+  final GlobalKey _answerKey = GlobalKey();
   String? _pending; // açılışta otomatik gönderilecek mesaj (Kedy tavsiyesi)
 
   @override
@@ -147,6 +153,7 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
       _messages.add(_Message(value, true));
       _controller.clear();
       _sending = true;
+      _answer = null;
     });
     _scrollDown();
     try {
@@ -157,20 +164,18 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
         konum: await _konum(),
       );
       if (!mounted) return;
-      setState(
-        () => _messages.add(
-          _Message(
-            answer.text,
-            false,
-            kartlar: answer.kartlar,
-            oneriler: answer.oneriler,
-          ),
+      _addAnswer(
+        _Message(
+          answer.text,
+          false,
+          kartlar: answer.kartlar,
+          oneriler: answer.oneriler,
         ),
       );
     } on PlusRequiredException catch (e) {
       // Plus düştü/gerekli: mesajı göster ve paywall'a yönlendir.
       if (!mounted) return;
-      setState(() => _messages.add(_Message(e.message, false)));
+      _addAnswer(_Message(e.message, false));
       if (e.girisGerekli && !AuthService.instance.isLoggedIn) {
         await _openLogin();
       } else if (kPlusSatisAcik) {
@@ -180,21 +185,59 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
       // (sunucu henüz Plus istiyorsa: KEDY_HERKESE_ACIK.md).
     } on RateLimitException catch (e) {
       if (!mounted) return;
-      setState(() => _messages.add(_Message(e.message, false)));
+      _addAnswer(_Message(e.message, false));
     } on KedyException catch (e) {
       if (!mounted) return;
-      setState(() => _messages.add(_Message(e.message, false)));
+      _addAnswer(_Message(e.message, false));
     } catch (_) {
       if (!mounted) return;
-      setState(
-        () => _messages.add(
-          _Message('Bir sorun oluştu. Lütfen tekrar dene.', false),
-        ),
-      );
+      _addAnswer(_Message('Bir sorun oluştu. Lütfen tekrar dene.', false));
     } finally {
       if (mounted) setState(() => _sending = false);
-      _scrollDown();
+      // Yanıtın başı (avatar) görünsün; yanıt yoksa en alta.
+      if (_answer != null) {
+        _scrollToAnswer();
+      } else {
+        _scrollDown();
+      }
     }
+  }
+
+  void _addAnswer(_Message m) {
+    setState(() {
+      _messages.add(m);
+      _answer = m;
+    });
+  }
+
+  /// Son Kedy yanıtının ilk satırını (avatar) listenin üstüne getirir. Yanıt
+  /// ekrandan kısaysa liste sona dayanır (yanıtın tamamı zaten görünür).
+  void _scrollToAnswer() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      final ctx = _answerKey.currentContext;
+      if (ctx == null) {
+        _scrollDown();
+        return;
+      }
+      final ro = ctx.findRenderObject();
+      final viewport = ro == null ? null : RenderAbstractViewport.maybeOf(ro);
+      if (ro == null || viewport == null) {
+        _scrollDown();
+        return;
+      }
+      // Avatar başlık çizgisine yapışmasın: üstte 12 px boşluk.
+      final pos = _scroll.position;
+      final target = (viewport.getOffsetToReveal(ro, 0).offset - 12).clamp(
+        pos.minScrollExtent,
+        pos.maxScrollExtent,
+      );
+      _scroll.animateTo(
+        target,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+      );
+    });
   }
 
   // Sohbet boyunca bir kez çözülen konum (izin yoksa null; izin istenmez).
@@ -593,14 +636,20 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
     // biçimlenir), altında öneri kartları ve (son yanıtta) devam soruları.
     final isLast = identical(m, _messages.last);
     return Padding(
+      // Yeni yanıt: _scrollToAnswer bu satırın başına kaydırır.
+      key: identical(m, _answer) ? _answerKey : null,
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Her mesajın avatarı durağan (uzun sohbette onlarca kedi aynı
+          // anda oynamasın); hareketli kedi "yazıyor…" satırında.
           const SizedBox(
             width: 30,
             height: 30,
-            child: Center(child: KedyIcon(size: 22, color: Colors.white)),
+            child: Center(
+              child: KedyIcon(size: 22, color: Colors.white, animate: false),
+            ),
           ),
           const SizedBox(width: 9),
           Expanded(
@@ -741,7 +790,9 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
             color: _K.bg,
             borderRadius: BorderRadius.all(Radius.circular(999)),
           ),
-          padding: const EdgeInsets.fromLTRB(18, 10, 12, 10),
+          // Pati kutusu 44 px (dokunma alanı); çubuk yüksekliği eskisiyle aynı
+          // kalsın diye dikey boşluk 10 → 6, sağ 12 → 8.
+          padding: const EdgeInsets.fromLTRB(18, 6, 8, 6),
           child: Row(
             children: [
               const Icon(Icons.auto_awesome, color: Colors.white, size: 20),
@@ -762,12 +813,17 @@ class _KedyChatSheetState extends State<_KedyChatSheet> {
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
+              // Tüm kutu dokunulabilir (opaque). Eskiden yalnız 24 px'lik ikon
+              // çizgisi tutuyordu; kenara gelen dokunuş uygulama genelindeki
+              // "boşluğa dokununca klavyeyi kapat" dedektörüne düşüyor, klavye
+              // kapanıp mesaj gitmiyordu (iki kez basmak gerekiyordu).
               GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: _sending ? null : () => _send(_controller.text),
                 child: SizedBox(
-                  width: 36,
-                  height: 36,
+                  width: 44,
+                  height: 44,
                   child: _sending
                       ? const Padding(
                           padding: EdgeInsets.all(7),

@@ -24,7 +24,8 @@ class HomeStore {
   static const _kSponsored = 'home_c_sponsored_v2';
   static const _kNearby = 'home_c_nearby';
   static const _kNewest = 'home_c_newest';
-  static const _kEvents = 'home_c_events';
+  // v2: kaynak `/reklam/etkinlikler` oldu; eski kaynağın cache'i okunmasın.
+  static const _kEvents = 'home_c_events_v2';
 
   // Diskten önyüklenen anlık (senkron) cache — initialData için.
   List<Category> cachedCategories = const [];
@@ -110,13 +111,21 @@ class HomeStore {
     (v) => cachedNewest = v,
   );
 
-  Future<List<FeaturedEvent>> etkinlikler() => _evtF ??= _fetch(
-    _kEvents,
-    () => HomeRepository.instance.sponsorluEtkinlikler(),
-    (e) => e.toJson(),
-    () => cachedEvents,
-    (v) => cachedEvents = v,
-  );
+  /// Öne Çıkan Etkinlikler — ERP "Reklam → Öne Çıkan Etkinlikler"
+  /// (`/reklam/etkinlikler`, REKLAM_ALANLARI_MOBIL.md §3). Eskiden
+  /// `/home-page-settings/sponsorlu_etkinlikler`
+  /// (`HomeRepository.sponsorluEtkinlikler`) kullanılıyordu.
+  ///
+  /// [sponsorlu] ile aynı kural: sunucu BOŞ liste dönerse (aktif reklam yok)
+  /// boş döner → bölüm gizlenir. Yalnız ağ/sunucu hatasında son başarılı
+  /// liste gösterilir (tarihi geçenleri ekran eler).
+  Future<List<FeaturedEvent>> etkinlikler() => _evtF ??= () async {
+    final r = await HomeRepository.instance.reklamEtkinlikler();
+    if (r == null) return cachedEvents;
+    cachedEvents = r;
+    await _save(_kEvents, r, (e) => e.toJson());
+    return r;
+  }();
 
   // --- iç yardımcılar --------------------------------------------------------
 

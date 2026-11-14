@@ -187,6 +187,17 @@ class _SearchModalState extends State<_SearchModal>
     });
   }
 
+  // ERP Reklam alanları (REKLAM_ALANLARI_MOBIL.md), sorgu boşken gösterilir.
+  // Modal her açılışta yeniden çeker (sunucu no-store). Boşsa alan gizli.
+  List<ApiPlace> _adOneriler = const []; // "Arama Kutusu Önerileri" (satır)
+  List<ApiPlace> _adOneCikan = const []; // "Arama Sayfası Mekanları" (kart)
+  final ImpressionScope _adOneriScope = ImpressionScope(
+    kaynak: 'reklam_oneri',
+  );
+  final ImpressionScope _adAramaScope = ImpressionScope(
+    kaynak: 'reklam_arama',
+  );
+
   String? _userId; // arama geçmişi kaydı için (varsa gerçek, yoksa anonim)
   List<String> _popular = MockData.popularSearches; // API gelene kadar fallback
   List<String> _history = const [];
@@ -447,7 +458,21 @@ class _SearchModalState extends State<_SearchModal>
     }
   }
 
+  /// Reklam alanlarını paralel çeker; diğer başlangıç verisini bekletmez.
+  Future<void> _loadAds() async {
+    final r = await Future.wait([
+      HomeRepository.instance.reklamAramaOnerileri(),
+      HomeRepository.instance.reklamAramaMekanlar(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _adOneriler = r[0] ?? const [];
+      _adOneCikan = r[1] ?? const [];
+    });
+  }
+
   Future<void> _loadInitial() async {
+    _loadAds();
     final id = await UserService.instance.currentId();
     final pop = await HomeRepository.instance.populerAramalar(limit: 6);
     final hist = await SearchHistory.instance.list();
@@ -993,6 +1018,15 @@ class _SearchModalState extends State<_SearchModal>
                             ScrollViewKeyboardDismissBehavior.onDrag,
                         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                         children: [
+                          // ERP "Arama Kutusu Önerileri": son/popüler
+                          // aramaların üstünde mekan satırları.
+                          if (_adOneriler.isNotEmpty) ...[
+                            _sectionTitle('Önerilen Mekanlar'),
+                            const SizedBox(height: 10),
+                            for (final (i, p) in _adOneriler.indexed)
+                              _adOneriRow(p, i),
+                            const SizedBox(height: 18),
+                          ],
                           if (_history.isNotEmpty) ...[
                             _historyHeader(),
                             const SizedBox(height: 12),
@@ -1022,6 +1056,13 @@ class _SearchModalState extends State<_SearchModal>
                                 .toList(),
                           ),
                           const SizedBox(height: 26),
+                          // ERP "Arama Sayfası Mekanları": yatay kartlar.
+                          if (_adOneCikan.isNotEmpty) ...[
+                            _sectionTitle('Öne Çıkanlar'),
+                            const SizedBox(height: 12),
+                            _adOneCikanRow(),
+                            const SizedBox(height: 26),
+                          ],
                           _kedyHeader(),
                           const SizedBox(height: 12),
                           _kedyGrid(),
@@ -2297,6 +2338,143 @@ class _SearchModalState extends State<_SearchModal>
           ),
         );
       },
+    );
+  }
+
+  /// Reklam alanındaki mekanın detayını açar (modal açık kalır; aramayla
+  /// gelinmediği için arama geçmişine yazılmaz).
+  void _openAdPlace(ApiPlace p) {
+    dismissKeyboard();
+    final loc = [p.sehir, p.ilce].where((s) => s.trim().isNotEmpty).join(' · ');
+    widget.onOpenDetail?.call(
+      p.toPlace(subtitle: loc.isNotEmpty ? loc : 'Restoran'),
+    );
+  }
+
+  /// "Arama Kutusu Önerileri" satırı: küçük görsel, ad, ilçe · km ve
+  /// "Sponsorlu" etiketi (reklam olduğu belli olsun).
+  Widget _adOneriRow(ApiPlace p, int i) {
+    final meta = [
+      p.ilce.trim(),
+      _km(p.mesafeM),
+    ].where((s) => s.isNotEmpty).join(' · ');
+    final img = p.thumb(ThumbSize.square);
+    return TrackImpression(
+      key: ValueKey('ad-oneri-${p.id}'),
+      scope: _adOneriScope,
+      placeId: p.id,
+      position: i,
+      featured: true,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _openAdPlace(p),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: SizedBox(
+                  width: 42,
+                  height: 42,
+                  child: img.isNotEmpty
+                      ? NetImage(img)
+                      : const ColoredBox(
+                          color: AppColors.primarySoft,
+                          child: Icon(
+                            Icons.storefront_outlined,
+                            size: 20,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            p.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        if (p.verified) ...[
+                          const SizedBox(width: 4),
+                          const VerifiedTick(size: 12),
+                        ],
+                      ],
+                    ),
+                    if (meta.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        meta,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Sponsorlu',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.muted,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// "Arama Sayfası Mekanları": ana sayfadaki popüler kartlarla aynı
+  /// (`PopCard`, "Sponsorlu" etiketli) yatay liste.
+  Widget _adOneCikanRow() {
+    return SizedBox(
+      height: 190,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.zero,
+        itemCount: _adOneCikan.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (_, i) {
+          final p = _adOneCikan[i];
+          final sub = [
+            p.ilce.trim(),
+            _km(p.mesafeM),
+          ].where((s) => s.isNotEmpty).join(' · ');
+          return TrackImpression(
+            key: ValueKey('ad-arama-${p.id}'),
+            scope: _adAramaScope,
+            placeId: p.id,
+            position: i,
+            featured: true,
+            child: PopCard(
+              place: p.toPlace(subtitle: sub),
+              sponsored: true,
+              onTap: () => _openAdPlace(p),
+            ),
+          );
+        },
+      ),
     );
   }
 
