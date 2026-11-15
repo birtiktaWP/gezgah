@@ -1,22 +1,39 @@
 import 'package:flutter/material.dart';
 import '../data/api.dart';
 import '../data/models.dart';
+import '../screens/campaign_detail_screen.dart';
+import '../screens/detail_screen.dart';
 import '../theme/app_theme.dart';
 
 /// Bildirimler — alttan açılan panel. `GET /bildirimler`'den beslenir.
 /// Tarihe göre gruplanır; tek tek veya tümü okundu işaretlenebilir (yerel).
-void showNotifications(BuildContext context) {
+///
+/// Kampanya duyuruları (`kaynak: kampanya`, BILDIRIM_ACMA.md): işletme adı +
+/// indirim metni; dokununca kampanya detayı (kampanya bittiyse mekan
+/// detayı). [highlightId] + [highlightKaynak] verilirse (push'a dokunuldu)
+/// o kayıt en üstte ve vurgulu gösterilir.
+void showNotifications(
+  BuildContext context, {
+  int? highlightId,
+  String? highlightKaynak,
+}) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
+    useRootNavigator: true,
     backgroundColor: Colors.transparent,
     barrierColor: Colors.black.withValues(alpha: 0.45),
-    builder: (_) => const _NotificationsSheet(),
+    builder: (_) => _NotificationsSheet(
+      highlightId: highlightId,
+      highlightKaynak: highlightKaynak,
+    ),
   );
 }
 
 class _NotificationsSheet extends StatefulWidget {
-  const _NotificationsSheet();
+  final int? highlightId;
+  final String? highlightKaynak;
+  const _NotificationsSheet({this.highlightId, this.highlightKaynak});
 
   @override
   State<_NotificationsSheet> createState() => _NotificationsSheetState();
@@ -55,6 +72,52 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
   }
 
   bool get _hasUnread => _items.any((n) => n.unread);
+
+  /// Push'tan gelinen kayıt (kaynak + id birlikte eşleşir).
+  bool _isHighlight(AppNotification n) =>
+      widget.highlightId != null &&
+      n.id == widget.highlightId &&
+      (widget.highlightKaynak == null || n.kaynak == widget.highlightKaynak);
+
+  /// Kampanya duyurusuna dokununca: aktifse kampanya detayı, bittiyse mekan
+  /// detayı (BILDIRIM_ACMA.md §3). Panel kapanır, sayfa ana navigator'da
+  /// açılır.
+  void _openKampanya(AppNotification n) {
+    final nav = Navigator.of(context, rootNavigator: true);
+    final kid = n.kampanyaId ?? 0;
+    final mid = n.mekanId ?? 0;
+    Navigator.pop(context);
+    if (n.kampanyaAktif && kid > 0) {
+      nav.push(
+        MaterialPageRoute(
+          builder: (_) => CampaignDetailScreen(kampanyaId: kid),
+        ),
+      );
+    } else if (mid > 0) {
+      nav.push(
+        detailRoute(
+          builder: (_) => DetailScreen(
+            place: Place(
+              id: mid,
+              name: n.text,
+              category: '',
+              subtitle: '',
+              rating: 0,
+              distance: '',
+              price: '',
+              image: '',
+            ),
+          ),
+        ),
+      );
+    } else if (kid > 0) {
+      nav.push(
+        MaterialPageRoute(
+          builder: (_) => CampaignDetailScreen(kampanyaId: kid),
+        ),
+      );
+    }
+  }
 
   /// Tarihe göre grup etiketi (şimdiye göre).
   String _group(DateTime? d) {
@@ -159,16 +222,32 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
       );
     }
 
+    // Push'tan gelinen kayıt en üstte, gruplardan ayrı.
+    final hl = _items.where(_isHighlight).firstOrNull;
+
     // Grupları sırayla (Bugün, Bu Hafta, Daha Önce) göster.
     const order = ['Bugün', 'Bu Hafta', 'Daha Önce'];
     final groups = <String, List<AppNotification>>{};
     for (final n in _items) {
+      if (identical(n, hl)) continue;
       groups.putIfAbsent(_group(n.date), () => []).add(n);
     }
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
+        if (hl != null) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: AppColors.kampanyaSoft,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFFFD2B0)),
+            ),
+            child: _tile(hl),
+          ),
+        ],
         for (final key in order)
           if (groups[key] != null) ...[
             Padding(
@@ -186,10 +265,18 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
   }
 
   Widget _tile(AppNotification n) {
+    final k = n.isKampanya;
+    final bitti = k && !n.kampanyaAktif;
     return GestureDetector(
-      onTap: () => setState(() => n.unread = false),
+      onTap: () {
+        setState(() => n.unread = false);
+        if (k) _openKampanya(n);
+      },
       behavior: HitTestBehavior.opaque,
-      child: Container(
+      child: Opacity(
+        // Sona eren kampanya soluk (BILDIRIM_ACMA.md §3).
+        opacity: bitti ? 0.55 : 1,
+        child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -197,10 +284,13 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
             Container(
               width: 40,
               height: 40,
-              decoration: const BoxDecoration(
-                  color: AppColors.primarySoft, shape: BoxShape.circle),
-              child: const Icon(Icons.campaign_outlined,
-                  size: 20, color: AppColors.primary),
+              decoration: BoxDecoration(
+                  color: k ? AppColors.kampanyaSoft : AppColors.primarySoft,
+                  shape: BoxShape.circle),
+              child: Icon(
+                  k ? Icons.local_offer_rounded : Icons.campaign_outlined,
+                  size: 20,
+                  color: k ? AppColors.kampanya : AppColors.primary),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -214,6 +304,25 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
                           fontWeight:
                               n.unread ? FontWeight.w600 : FontWeight.w500,
                           color: AppColors.ink)),
+                  // Kampanya: indirim metni ("%20 indirim kampanyası
+                  // başladı.") + bittiyse "Sona erdi".
+                  if (n.body.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(n.body,
+                        style: TextStyle(
+                            fontSize: 13,
+                            height: 1.35,
+                            fontWeight: FontWeight.w600,
+                            color: k ? AppColors.kampanya : AppColors.muted)),
+                  ],
+                  if (bitti) ...[
+                    const SizedBox(height: 3),
+                    const Text('Sona erdi',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.muted)),
+                  ],
                   if (_relative(n.date).isNotEmpty) ...[
                     const SizedBox(height: 5),
                     Text(_relative(n.date),
@@ -231,8 +340,15 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
                 decoration: const BoxDecoration(
                     color: AppColors.primary, shape: BoxShape.circle),
               ),
+            if (k)
+              const Padding(
+                padding: EdgeInsets.only(top: 8, left: 4),
+                child: Icon(Icons.chevron_right,
+                    size: 20, color: AppColors.muted),
+              ),
           ],
         ),
+      ),
       ),
     );
   }

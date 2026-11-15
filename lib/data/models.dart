@@ -433,16 +433,37 @@ class NotificationItem {
 /// tarih parse edilir; okundu durumu yerelde tutulur.
 class AppNotification {
   final int id;
+
+  /// Kayıt türü: `post`, `log` ya da `kampanya` (BILDIRIM_ACMA.md §3). id'ler
+  /// kaynak başına ayrı sayılır; eşleştirmede ikisi birlikte kullanılır.
+  final String kaynak;
+
+  /// Ana metin (başlık). Kampanyada işletme adı.
   final String text;
+
+  /// İkinci satır (kampanyada "%20 indirim kampanyası başladı."). Yoksa ''.
+  final String body;
   final DateTime? date;
   bool unread;
+
+  // Kampanya duyurusu (`kaynak: kampanya`).
+  final int? mekanId;
+  final int? kampanyaId;
+  final bool kampanyaAktif;
 
   AppNotification({
     required this.id,
     required this.text,
+    this.kaynak = '',
+    this.body = '',
     this.date,
     this.unread = true,
+    this.mekanId,
+    this.kampanyaId,
+    this.kampanyaAktif = true,
   });
+
+  bool get isKampanya => kaynak == 'kampanya';
 }
 
 class Amenity {

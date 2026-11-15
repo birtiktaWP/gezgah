@@ -2665,18 +2665,34 @@ class HomeRepository {
     final seen = <String>{};
     final out = <AppNotification>[];
     for (final e in data.whereType<Map<String, dynamic>>()) {
-      final raw = (e['baslik'] as String?) ?? (e['mesaj'] as String?) ?? '';
-      final text = _stripHtml(raw);
+      final kaynak = (e['kaynak'] ?? '').toString().trim();
+      final id = (e['id'] as num?)?.toInt() ?? 0;
+      final baslik = _stripHtml((e['baslik'] as String?) ?? '');
+      final mesaj = _stripHtml((e['mesaj'] as String?) ?? '');
+      final kampanya = kaynak == 'kampanya';
+      // Kampanya: başlık = işletme adı, mesaj = indirim metni (ikisi de
+      // gösterilir). Diğerleri eskisi gibi tek metin.
+      final text = baslik.isNotEmpty ? baslik : mesaj;
+      final body = kampanya && baslik.isNotEmpty && mesaj != baslik
+          ? mesaj
+          : '';
       if (text.isEmpty) continue;
-      if (!seen.add(text)) continue; // aynı metni tekrar gösterme
+      // Aynı metni tekrar gösterme (log + post kayıtları). Kampanyada aynı
+      // işletmenin farklı kampanyaları olabilir → kaynak + id ile.
+      if (!seen.add(kampanya ? 'kampanya:$id' : text)) continue;
       // Cihaz token'ı varsa sunucu `okundu` döner; yoksa (null) yeni sayılır.
       final okundu = e['okundu'];
       out.add(
         AppNotification(
-          id: (e['id'] as num?)?.toInt() ?? 0,
+          id: id,
+          kaynak: kaynak,
           text: text,
+          body: body,
           date: DateTime.tryParse((e['tarih'] as String?)?.trim() ?? ''),
           unread: okundu is bool ? !okundu : true,
+          mekanId: (e['mekan_id'] as num?)?.toInt(),
+          kampanyaId: (e['kampanya_id'] as num?)?.toInt(),
+          kampanyaAktif: e['kampanya_aktif'] != false,
         ),
       );
     }

@@ -5,8 +5,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../navigation/main_nav.dart';
+import '../screens/campaign_detail_screen.dart';
 import '../screens/detail_screen.dart';
 import '../screens/routes_screen.dart';
+import '../widgets/notifications_modal.dart';
 import 'auth_service.dart';
 import 'models.dart';
 
@@ -157,12 +159,39 @@ class PushService {
         );
       case 'etkinlik':
         MainNav.instance.select(3); // Etkinlikler
+      case 'kampanya':
+        final kid = int.tryParse('${d['kampanya_id'] ?? d['id'] ?? ''}') ?? 0;
+        if (kid <= 0) return _openNotifications(nav, d);
+        nav.push(
+          MaterialPageRoute(
+            builder: (_) => CampaignDetailScreen(kampanyaId: kid),
+          ),
+        );
+      case 'bildirimler':
+        // Kampanya duyurusu (BILDIRIM_ACMA.md): Bildirimler paneli açılır,
+        // ilgili kayıt en üstte vurgulu; kayda dokununca kampanya detayı.
+        _openNotifications(nav, d);
       default:
         final url = (d['url'] ?? '').toString().trim();
         final uri = Uri.tryParse(url);
         if (uri != null && uri.hasScheme) {
           launchUrl(uri, mode: LaunchMode.externalApplication);
+          return;
         }
+        // Bilinmeyen tip: Bildirimler paneli (ileride eklenecek türler eski
+        // sürümlerde boşa düşmesin, BILDIRIM_ACMA.md §2).
+        _openNotifications(nav, d);
     }
+  }
+
+  void _openNotifications(NavigatorState nav, Map<String, dynamic> d) {
+    // Navigator'ın altındaki bağlam (Overlay) — modal bu navigator'da açılır.
+    final ctx = nav.overlay?.context;
+    if (ctx == null) return;
+    showNotifications(
+      ctx,
+      highlightId: int.tryParse('${d['bildirim_id'] ?? ''}'),
+      highlightKaynak: d['bildirim_id'] != null ? 'kampanya' : null,
+    );
   }
 }
